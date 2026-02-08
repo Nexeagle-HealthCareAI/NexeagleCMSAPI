@@ -29,14 +29,28 @@ namespace CMSAPI.Data.Repositories
 
             if (h == null) return null;
 
-            var users = h.HospitalUsers.Select(u => new HospitalUserInfo
-            {
-                Name = string.Empty,
-                Role = u.IsPrimary ? "Admin" : "User",
-                Contact = string.Empty,
-                Email = null,
-                Status = "Active"
-            }).ToList();
+            // Get user details with joins to Users, UserProfile, UserRoles, Roles, UserAuth, and UserStatus
+            var userIds = h.HospitalUsers.Select(hu => hu.UserID).ToList();
+            
+            var users = await (from hu in _db.HospitalUsers
+                               where hu.HospitalID == id
+                               join u in _db.Users on hu.UserID equals u.UserID
+                               join up in _db.UserProfiles on hu.UserID equals up.UserID
+                               join ua in _db.UserAuths on hu.UserID equals ua.UserID
+                               join us in _db.UserStatus on ua.UserStatusId equals us.UserStatusId
+                               join ur in _db.UserRoles on hu.UserID equals ur.UserID into userRoles
+                               from ur in userRoles.DefaultIfEmpty()
+                               join r in _db.Roles on ur.RoleID equals r.RoleID into roles
+                               from r in roles.DefaultIfEmpty()
+                               select new HospitalUserInfo
+                               {
+                                   Name = up.FullName ?? string.Empty,
+                                   Role = r != null ? r.RoleName : (hu.IsPrimary ? "Admin" : "User"),
+                                   Contact = u.MobileNumber ?? string.Empty,
+                                   Email = u.Email,
+                                   Status = us.StatusName ?? "Active"
+                               }).ToListAsync();
+
 
             // Aggregate doctors from DoctorDepartments
             var doctorIds = h.DoctorDepartments?.Select(d => d.DoctorID).Distinct().ToList() ?? new();
@@ -63,14 +77,19 @@ namespace CMSAPI.Data.Repositories
 
                 var appCountDaily = await _db.Appointments.CountAsync(a => a.DoctorID == doc.DoctorID && a.HospitalID == h.HospitalID);
 
+                // Get doctor name from UserProfile
+                var userProfile = await _db.UserProfiles.FirstOrDefaultAsync(up => up.UserID == doc.UserID);
+                var doctorName = userProfile?.FullName ?? string.Empty;
+
+
                 doctorInfos.Add(new DoctorInfo
                 {
-                    Name = string.Empty,
+                    Name = doctorName,
                     Departments = deps,
                     Speciality = specs.FirstOrDefault() ?? string.Empty,
-                    Degree = string.Empty,
-                    RegistrationNumber = string.Empty,
-                    RegisteredOn = DateTime.MinValue,
+                    Degree = doc.Qualification ?? string.Empty,
+                    RegistrationNumber = doc.LicenseNumber ?? string.Empty,
+                    RegisteredOn = doc.RegistrationYear.HasValue ? new DateTime(doc.RegistrationYear.Value, 1, 1) : DateTime.MinValue,
                     Appointments = new AppointmentCounts { Daily = appCountDaily, Weekly = appCountDaily * 7, Monthly = appCountDaily * 30, Yearly = appCountDaily * 365 },
                     UniquePatients = new AppointmentCounts { Daily = appCountDaily, Weekly = appCountDaily * 6, Monthly = appCountDaily * 25, Yearly = appCountDaily * 300 }
                 });
@@ -206,10 +225,13 @@ namespace CMSAPI.Data.Repositories
             return new PagedResult<HospitalListItem>
             {
                 Data = projected,
-                CurrentPage = page,
-                TotalPages = totalPages,
-                TotalItems = totalItems,
-                ItemsPerPage = limit
+                Pagination = new PaginationInfo
+                {
+                    CurrentPage = page,
+                    TotalPages = totalPages,
+                    TotalItems = totalItems,
+                    ItemsPerPage = limit
+                }
             };
         }
     }

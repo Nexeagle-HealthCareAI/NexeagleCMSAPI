@@ -23,7 +23,14 @@ public class DashboardController : ControllerBase
     [ProducesResponseType(typeof(CMSAPI.Application.Models.ErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetStats()
     {
-        var stats = await _service.GetDashboardAsync();
-        return Ok(stats);
+        try
+        {
+            var stats = await _service.GetDashboardAsync();
+            return Ok(stats);
+        }
+        catch(Exception ex)
+        {
+            throw;
+        }
     }
 }

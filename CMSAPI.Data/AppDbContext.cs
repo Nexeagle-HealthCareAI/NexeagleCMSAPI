@@ -25,6 +25,9 @@ public class AppDbContext : DbContext
     public DbSet<HospitalProfileStatus> HospitalProfileStatuses { get; set; } = null!;
     public DbSet<Appointment> Appointments { get; set; } = null!;
     public DbSet<StatusMaster> StatusMaster { get; set; } = null!;
+    public DbSet<UserRole> UserRoles { get; set; } = null!;
+    public DbSet<Role> Roles { get; set; } = null!;
+    public DbSet<User> Users { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -323,6 +326,45 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Hospital)
                   .WithMany(h => h.HospitalUsers)
                   .HasForeignKey(e => e.HospitalID);
+        });
+
+        modelBuilder.Entity<UserRole>(entity =>
+        {
+            entity.ToTable("UserRoles");
+            entity.HasKey(e => new { e.UserID, e.RoleID });
+        });
+
+        modelBuilder.Entity<Role>(entity =>
+        {
+            entity.ToTable("Roles");
+            entity.HasKey(e => e.RoleID);
+
+            entity.Property(e => e.RoleID)
+                  .HasDefaultValueSql("newid()");
+
+            entity.Property(e => e.RoleName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(255).IsRequired(false);
+            entity.Property(e => e.IsSystemDefined).HasDefaultValue(false).IsRequired();
+            entity.Property(e => e.IsActive).HasDefaultValue(true).IsRequired();
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+
+            entity.HasIndex(e => new { e.HospitalID, e.RoleName })
+                  .IsUnique()
+                  .HasDatabaseName("UQ_Roles");
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.ToTable("Users");
+            entity.HasKey(e => e.UserID);
+
+            entity.Property(e => e.MobileNumber).HasMaxLength(15).IsRequired();
+            entity.Property(e => e.Email).HasMaxLength(150).IsRequired(false);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+
+            entity.HasIndex(e => e.MobileNumber)
+                  .IsUnique()
+                  .HasDatabaseName("UQ_Users_Mobile");
         });
 
         base.OnModelCreating(modelBuilder);

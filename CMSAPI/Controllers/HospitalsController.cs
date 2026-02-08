@@ -22,7 +22,7 @@ public class HospitalsController : ControllerBase
     public async Task<IActionResult> GetHospitals([FromQuery] int page = 1, [FromQuery] int limit = 10, [FromQuery] string? search = null, [FromQuery] string? sortBy = null, [FromQuery] string? sortDir = null)
     {
         var result = await _service.GetHospitalsAsync(page, limit, search, sortBy, sortDir);
-        return Ok(new { data = result.Data, pagination = new { currentPage = result.CurrentPage, totalPages = result.TotalPages, totalItems = result.TotalItems, itemsPerPage = result.ItemsPerPage } });
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]

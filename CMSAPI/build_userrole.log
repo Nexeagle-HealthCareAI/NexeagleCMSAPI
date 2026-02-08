@@ -1,0 +1,12 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  CMSAPI.Domain -> C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Domain\bin\Debug\net10.0\CMSAPI.Domain.dll
+  CMSAPI.Application -> C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Application\bin\Debug\net10.0\CMSAPI.Application.dll
+  CMSAPI.Data -> C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\bin\Debug\net10.0\CMSAPI.Data.dll
+  CMSAPI -> C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI\bin\Debug\net10.0\CMSAPI.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:04.40
