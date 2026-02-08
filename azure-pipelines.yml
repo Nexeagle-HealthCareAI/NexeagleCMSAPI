@@ -4,7 +4,7 @@ trigger:
       - main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: ubuntu-latest
 
 variables:
   # Azure Configuration
@@ -13,113 +13,50 @@ variables:
 
   # Build Configuration
   buildConfiguration: 'Release'
-  dotnetVersion: '10.0.x'
+  dotnetVersion: '8.0.x'
 
   # Project Paths (relative to repo root)
   solutionPath: 'CMSAPI.sln'
   apiProjectPath: 'CMSAPI/CMSAPI.csproj'
 
 stages:
-  - stage: Build
-    displayName: 'Build Stage'
-    jobs:
-      - job: BuildJob
-        displayName: 'Build and Publish'
-steps:
-          # Optional: Debug repository structure
-          - task: PowerShell@2
-            displayName: 'Debug: Show Repository Structure'
-            inputs:
-              targetType: 'inline'
-              script: |
-                Write-Host "=== Repository Root Files ==="
-                Get-ChildItem -Force | Select-Object Name, Length
-                Write-Host "`n=== Solution Files ==="
-                Get-ChildItem -Filter "*.sln*" -Recurse -Depth 1 | Select-Object FullName
-                Write-Host "`n=== Project Files ==="
-                Get-ChildItem -Filter "*.csproj" -Recurse -Depth 2 | Select-Object FullName
-              pwsh: true
+- stage: Build
+  displayName: 'Build Stage'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build and Publish'
+    steps:
+    - checkout: self
 
-          # Install .NET SDK
-  - task: UseDotNet@2
-            displayName: 'Install .NET SDK $(dotnetVersion)'
-    inputs:
-              packageType: 'sdk'
-              version: '$(dotnetVersion)'
-              installationPath: $(Agent.ToolsDirectory)/dotnet
+    # Optional: Debug repository structure (PowerShell on Ubuntu)
+    - task: PowerShell@2
+      displayName: 'Debug: Show Repository Structure'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          Write-Host "=== Repository Root Files ==="
+          Get-ChildItem -Force | Select-Object Name, Length
+          Write-Host "`n=== Solution Files ==="
+          Get-ChildItem -Recurse -Filter "*.sln*" | Select-Object FullName
+          Write-Host "`n=== Project Files ==="
+          Get-ChildItem -Recurse -Filter "*.csproj" | Select-Object FullName
 
-          # Restore NuGet packages
-          - task: DotNetCoreCLI@2
-            displayName: 'Restore NuGet Packages'
-            inputs:
-              command: 'restore'
-              projects: '$(solutionPath)'
-              feedsToUse: 'select'
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK $(dotnetVersion)'
+      inputs:
+        packageType: 'sdk'
+        version: '$(dotnetVersion)'
 
-          # Build solution
-          - task: DotNetCoreCLI@2
-            displayName: 'Build Solution'
-            inputs:
-              command: 'build'
-              projects: '$(solutionPath)'
-              arguments: '--configuration $(buildConfiguration) --no-restore'
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore NuGet Packages'
+      inputs:
+        command: 'restore'
+        projects: '$(solutionPath)'
 
-          # Run tests (optional, set continueOnError: false to fail build on test failure)
-          - task: DotNetCoreCLI@2
-            displayName: 'Run Unit Tests'
-            inputs:
-              command: 'test'
-              projects: '**/CMSAPI.Tests.csproj'
-              arguments: '--configuration $(buildConfiguration) --no-build --no-restore --logger trx'
-            continueOnError: true
-
-          # Publish API project only
-          - task: DotNetCoreCLI@2
-            displayName: 'Publish API Project'
-            inputs:
-              command: 'publish'
-              publishWebProjects: false
-              projects: '$(apiProjectPath)'
-              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-build --no-restore'
-              zipAfterPublish: false
-              modifyOutputPath: false
-
-          # Archive published files
-  - task: ArchiveFiles@2
-            displayName: 'Archive Published Files'
-    inputs:
-              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/publish'
-      includeRootFolder: false
-              archiveType: 'zip'
-              archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
-      replaceExistingArchive: true
-
-          # Publish build artifact
-          - task: PublishBuildArtifacts@1
-            displayName: 'Publish Build Artifacts'
-            inputs:
-              PathtoPublish: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
-              ArtifactName: 'drop'
-              publishLocation: 'Container'
-
-  - stage: Deploy
-    displayName: 'Deploy to Azure'
-    dependsOn: Build
-    condition: succeeded()
-    jobs:
-      - deployment: DeployWeb
-        displayName: 'Deploy to App Service'
-        environment: 'development'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                # Deploy to Azure App Service
-  - task: AzureWebApp@1
-                  displayName: 'Deploy to Azure App Service'
-    inputs:
-                    azureSubscription: '$(azureServiceConnection)'
-                    appType: 'webAppLinux'
-                    appName: '$(webAppName)'
-                    package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
-                    deploymentMethod: 'auto'
+    - task: DotNetCoreCLI@2
+      displayName: 'Build Solution'
+      inputs:
+        command: 'build'
+        projects: '$(solutionPath)'
+        arguments: '--configuration $(bui
