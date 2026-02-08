@@ -1,0 +1,58 @@
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Visual Studio Code
+.vscode/
+
+# Visual Studio 2015+
+.vs/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# NuGet Packages
+*.nupkg
+# The packages folder can be ignored because of Package Restore
+**/[Pp]ackages/*
+# except build/, which is used as an input for some packaging targets
+!**/[Pp]ackages/build/
+# If the NuGet.config specifies a different folder than packages, modify the ignore rules here.
+
+# Azure Functions
+.funcignore
+
+# Other
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.stackdump
+*.apk
+*.aab
+*.keystore
+
+# Generated files
+[Ww]wwroot/lib/
+[Ww]wwroot/css/
+[Ww]wwroot/js/

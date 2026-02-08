@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="CMSAPI.Application/CMSAPI.Application.csproj" />
+  <Project Path="CMSAPI.Data/CMSAPI.Data.csproj" />
+  <Project Path="CMSAPI.Domain/CMSAPI.Domain.csproj" />
+  <Project Path="CMSAPI/CMSAPI.csproj" />
+</Solution>

@@ -1,0 +1,40 @@
+  Determining projects to restore...
+  Restored C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj (in 375 ms).
+  Restored C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Domain\CMSAPI.Domain.csproj (in 375 ms).
+  Restored C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI\CMSAPI.csproj (in 375 ms).
+  Restored C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Application\CMSAPI.Application.csproj (in 375 ms).
+  CMSAPI.Domain -> C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Domain\bin\Debug\net10.0\CMSAPI.Domain.dll
+  CMSAPI.Application -> C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Application\bin\Debug\net10.0\CMSAPI.Application.dll
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(86,22): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(88,24): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(89,32): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(90,33): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(91,25): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(92,27): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(93,24): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(94,25): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(95,98): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(96,32): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(97,26): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(100,25): error CS0103: The name 'users' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(101,27): error CS0103: The name 'doctorInfos' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+
+Build FAILED.
+
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(86,22): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(88,24): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(89,32): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(90,33): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(91,25): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(92,27): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(93,24): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(94,25): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(95,98): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(96,32): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(97,26): error CS0103: The name 'h' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(100,25): error CS0103: The name 'users' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\Repositories\HospitalRepository.cs(101,27): error CS0103: The name 'doctorInfos' does not exist in the current context [C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\CMSAPI\CMSAPI.Data\CMSAPI.Data.csproj]
+    0 Warning(s)
+    13 Error(s)
+
+Time Elapsed 00:00:04.27
