@@ -101,9 +101,9 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CMSAPI V1");
     c.InjectJavascript("/js/custom.js");
     c.DocumentTitle = "CMSAPI Dashboard";
-    c.RoutePrefix = "swagger"; // Standard access
 });
 
 app.UseStaticFiles();
@@ -134,9 +134,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapControllers();
-app.MapHealthChecks("/health");
+// Health Check (Public)
+app.MapHealthChecks("/health")
+   .AllowAnonymous()
+   .WithName("Health")
+   .WithTags("Health");
 
 // Redirect root to Swagger
-app.MapGet("/", () => Results.Redirect("/swagger"));
+app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 
 app.Run();
