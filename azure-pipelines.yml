@@ -59,4 +59,63 @@ stages:
       inputs:
         command: 'build'
         projects: '$(solutionPath)'
-        arguments: '--configuration $(bui
+        arguments: '--configuration $(buildConfiguration) --no-restore'
+
+    # Optional tests (set continueOnError:false if you want the build to fail)
+    - task: DotNetCoreCLI@2
+      displayName: 'Run Unit Tests'
+      inputs:
+        command: 'test'
+        projects: '**/CMSAPI.Tests.csproj'
+        arguments: '--configuration $(buildConfiguration) --no-build --no-restore --logger trx'
+      continueOnError: true
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish API Project'
+      inputs:
+        command: 'publish'
+        publishWebProjects: false
+        projects: '$(apiProjectPath)'
+        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-build --no-restore'
+        zipAfterPublish: false
+
+    - task: ArchiveFiles@2
+      displayName: 'Archive Published Files'
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/publish'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/cmsapi.zip'
+        replaceExistingArchive: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Build Artifact'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/cmsapi.zip'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+
+- stage: Deploy
+  displayName: 'Deploy to Azure'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: DeployWeb
+    displayName: 'Deploy to App Service'
+    environment: 'development'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: drop
+
+          # IMPORTANT: Use 'webApp' unless you are 100% sure the App Service is Linux
+          - task: AzureWebApp@1
+            displayName: 'Deploy to Azure App Service'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appType: 'webApp'
+              appName: '$(webAppName)'
+              package: '$(Pipeline.Workspace)/drop/cmsapi.zip'
+              deploymentMethod: 'auto'
