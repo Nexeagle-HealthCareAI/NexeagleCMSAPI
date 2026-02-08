@@ -156,6 +156,9 @@ app.MapHealthChecks("/health")
    .WithName("Health")
    .WithTags("Health");
 
+// Test Endpoint
+app.MapGet("/test", () => "API is running!").AllowAnonymous();
+
 // Redirect root to Swagger
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 
