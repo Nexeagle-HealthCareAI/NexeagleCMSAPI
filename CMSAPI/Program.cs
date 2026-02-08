@@ -96,8 +96,14 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.InjectJavascript("/js/custom.js");
+        c.DocumentTitle = "CMSAPI Dashboard";
+    });
 }
+
+app.UseStaticFiles();
 
 app.UseExceptionHandler(exceptionHandlerApp =>
 {
