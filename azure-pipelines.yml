@@ -33,7 +33,6 @@ stages:
       inputs:
         packageType: 'sdk'
         version: '$(dotnetVersion)'
-        includePreviewVersions: true
 
     - script: dotnet --info
       displayName: 'Show .NET Info'

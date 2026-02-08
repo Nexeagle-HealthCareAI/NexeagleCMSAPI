@@ -8,6 +8,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.HttpOverrides;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,46 +23,52 @@ if (!builder.Environment.IsDevelopment())
 // register projects
 builder.Services.AddControllers();
 
+// Configure Forwarded Headers (Important for App Service)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
+
 // JWT Authentication
 builder.Services.Configure<CMSAPI.Application.Models.TokenSettings>(builder.Configuration.GetSection("TokenSettings"));
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-var tokenSettings = builder.Configuration.GetSection("TokenSettings");
-var key = tokenSettings.GetValue<string>("Key");
+// Safe JWT Key Logic
+var issuer = tokenSettings.GetValue<string>("Issuer");
+var audience = tokenSettings.GetValue<string>("Audience");
 
-// Enforce strong key in Production
-// WARNING: Security check disabled temporarily. Restore for production!
-// if (!builder.Environment.IsDevelopment())
-// {
-//     if (string.IsNullOrEmpty(key) || key.Length < 32 || key.StartsWith("DevSuperSecret"))
-//     {
-//         throw new InvalidOperationException("Critical Security Error: JWT Key is missing or too weak for Production. Set 'TokenSettings:Key' in App Service Configuration.");
-//     }
-// }
+// Fallback for Development if key is missing
+if (string.IsNullOrEmpty(key) && builder.Environment.IsDevelopment())
+{
+    key = "DevSuperSecretKey_ChangeInProduction_1234567890"; // 32+ chars
+}
 
-    var issuer = tokenSettings.GetValue<string>("Issuer");
-    var audience = tokenSettings.GetValue<string>("Audience");
-    builder.Services.AddAuthentication(options =>
+if (string.IsNullOrEmpty(key))
+{
+    throw new InvalidOperationException("TokenSettings:Key is missing. Set 'TokenSettings__Key' in App Service Configuration.");
+}
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    // Require HTTPS in non-development
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        // Require HTTPS in non-development
-        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-        options.SaveToken = true;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = !string.IsNullOrEmpty(issuer),
-            ValidIssuer = issuer,
-            ValidateAudience = !string.IsNullOrEmpty(audience),
-            ValidAudience = audience,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
-        };
-    });
+        ValidateIssuer = !string.IsNullOrEmpty(issuer),
+        ValidIssuer = issuer,
+        ValidateAudience = !string.IsNullOrEmpty(audience),
+        ValidAudience = audience,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
+    };
+});
 
 // Register EF Core AppDbContext using the configured connection string.
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -113,7 +120,11 @@ builder.Logging.AddDebug();
 
 try
 {
+try 
+{
     var app = builder.Build();
+
+    app.UseForwardedHeaders();
 
     // Configure the HTTP request pipeline.
     if (!app.Environment.IsDevelopment())
