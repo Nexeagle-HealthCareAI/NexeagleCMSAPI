@@ -10,11 +10,11 @@ variables:
   # Azure Configuration
   azureServiceConnection: 'svc-conn-nexeagle-dev'
   webAppName: 'cms-api-dev'
-  
+
   # Build Configuration
   buildConfiguration: 'Release'
   dotnetVersion: '10.0.x'
-  
+
   # Project Paths (relative to repo root)
   solutionPath: 'CMSAPI.sln'
   apiProjectPath: 'CMSAPI/CMSAPI.csproj'
@@ -25,7 +25,7 @@ stages:
     jobs:
       - job: BuildJob
         displayName: 'Build and Publish'
-        steps:
+steps:
           # Optional: Debug repository structure
           - task: PowerShell@2
             displayName: 'Debug: Show Repository Structure'
@@ -41,9 +41,9 @@ stages:
               pwsh: true
 
           # Install .NET SDK
-          - task: UseDotNet@2
+  - task: UseDotNet@2
             displayName: 'Install .NET SDK $(dotnetVersion)'
-            inputs:
+    inputs:
               packageType: 'sdk'
               version: '$(dotnetVersion)'
               installationPath: $(Agent.ToolsDirectory)/dotnet
@@ -85,14 +85,14 @@ stages:
               modifyOutputPath: false
 
           # Archive published files
-          - task: ArchiveFiles@2
+  - task: ArchiveFiles@2
             displayName: 'Archive Published Files'
-            inputs:
+    inputs:
               rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/publish'
-              includeRootFolder: false
+      includeRootFolder: false
               archiveType: 'zip'
               archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
-              replaceExistingArchive: true
+      replaceExistingArchive: true
 
           # Publish build artifact
           - task: PublishBuildArtifacts@1
@@ -115,9 +115,9 @@ stages:
             deploy:
               steps:
                 # Deploy to Azure App Service
-                - task: AzureWebApp@1
+  - task: AzureWebApp@1
                   displayName: 'Deploy to Azure App Service'
-                  inputs:
+    inputs:
                     azureSubscription: '$(azureServiceConnection)'
                     appType: 'webAppLinux'
                     appName: '$(webAppName)'
