@@ -17,10 +17,13 @@ public class HospitalsControllerTests
         var paged = new PagedResult<HospitalListItem>
         {
             Data = new List<HospitalListItem> { new HospitalListItem { Id = Guid.NewGuid(), Name = "Test", ContactNumber = "123" } },
-            CurrentPage = 1,
-            TotalPages = 1,
-            TotalItems = 1,
-            ItemsPerPage = 10
+            Pagination = new PaginationInfo
+            {
+                CurrentPage = 1,
+                TotalPages = 1,
+                TotalItems = 1,
+                ItemsPerPage = 10
+            }
         };
         mockService.Setup(s => s.GetHospitalsAsync(1, 10, null, null, null)).ReturnsAsync(paged);
 
