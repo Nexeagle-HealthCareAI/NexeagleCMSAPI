@@ -133,7 +133,6 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapControllers();
 // Health Check (Public)
 app.MapHealthChecks("/health")
    .AllowAnonymous()
