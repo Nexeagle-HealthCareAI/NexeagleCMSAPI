@@ -22,8 +22,20 @@ public class HealthController : ControllerBase
     {
         var report = await _healthCheckService.CheckHealthAsync();
         
+        var response = new
+        {
+            Status = report.Status.ToString(),
+            TotalDuration = report.TotalDuration.ToString(),
+            Checks = report.Entries.Select(e => new 
+            {
+                Component = e.Key,
+                Status = e.Value.Status.ToString(),
+                Description = e.Value.Description ?? "No description"
+            })
+        };
+
         return report.Status == HealthStatus.Healthy 
-            ? Ok(report) 
-            : StatusCode(StatusCodes.Status503ServiceUnavailable, report);
+            ? Ok(response) 
+            : StatusCode(StatusCodes.Status503ServiceUnavailable, response);
     }
 }

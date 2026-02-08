@@ -26,14 +26,24 @@ builder.Services.Configure<CMSAPI.Application.Models.TokenSettings>(builder.Conf
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 var tokenSettings = builder.Configuration.GetSection("TokenSettings");
-var key = tokenSettings.GetValue<string>("Key") ?? "DevSuperSecretKey_ChangeInProduction_1234567890";
-var issuer = tokenSettings.GetValue<string>("Issuer");
-var audience = tokenSettings.GetValue<string>("Audience");
-builder.Services.AddAuthentication(options =>
+var key = tokenSettings.GetValue<string>("Key");
+
+// Enforce strong key in Production
+if (!builder.Environment.IsDevelopment())
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
+    if (string.IsNullOrEmpty(key) || key.Length < 32 || key.StartsWith("DevSuperSecret"))
+    {
+        throw new InvalidOperationException("Critical Security Error: JWT Key is missing or too weak for Production. Set 'TokenSettings:Key' in App Service Configuration.");
+    }
+}
+
+    var issuer = tokenSettings.GetValue<string>("Issuer");
+    var audience = tokenSettings.GetValue<string>("Audience");
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
     .AddJwtBearer(options =>
     {
         // Require HTTPS in non-development
@@ -97,6 +107,12 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+if (!app.Environment.IsDevelopment())
+{
+    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseHsts();
+}
+
 // Enable Swagger in all environments
 app.UseSwagger();
 app.UseSwaggerUI(c =>
