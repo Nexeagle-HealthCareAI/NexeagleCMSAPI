@@ -8,7 +8,7 @@ pool:
 
 variables:
   # Azure Configuration
-  azureServiceConnection: 'svc-conn-nexeagle-dev'
+  azureServiceConnection: 'nexeagleintra-dev'
   webAppName: 'cms-api-dev'
 
   # Build Configuration
