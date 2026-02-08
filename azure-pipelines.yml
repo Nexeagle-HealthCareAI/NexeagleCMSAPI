@@ -11,7 +11,7 @@ variables:
   dotnetVersion: "8.0.x"
 
   # Azure target
-  azureServiceConnection: "svc-conn-nexeagle-dev"
+  azureServiceConnection: "nexeagleintra-dev"
   webAppName: "cms-api-dev"
 
 steps:
