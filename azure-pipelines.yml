@@ -13,7 +13,7 @@ variables:
   
   # Build Configuration
   buildConfiguration: 'Release'
-  dotnetVersion: '10.x'
+  dotnetVersion: '8.x'
   
   # Project Paths (relative to repo root)
   solutionPath: 'CMSAPI.sln'
