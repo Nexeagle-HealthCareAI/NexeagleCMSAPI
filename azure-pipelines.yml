@@ -13,7 +13,7 @@ variables:
 
   # Build Configuration
   buildConfiguration: 'Release'
-  dotnetVersion: '8.0.x'
+  dotnetVersion: '10.x'
 
   # Project Paths (relative to repo root)
   solutionPath: 'CMSAPI.sln'
@@ -47,6 +47,7 @@ stages:
       inputs:
         packageType: 'sdk'
         version: '$(dotnetVersion)'
+        includePreviewVersions: true
 
     - task: DotNetCoreCLI@2
       displayName: 'Restore NuGet Packages'
