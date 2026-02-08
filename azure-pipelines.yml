@@ -4,17 +4,17 @@ trigger:
       - main
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: 'ubuntu-latest'
 
 variables:
   # Azure Configuration
-  azureServiceConnection: 'nexeagleintra-dev'
+  azureServiceConnection: 'svc-conn-nexeagle-dev'
   webAppName: 'cms-api-dev'
-
+  
   # Build Configuration
   buildConfiguration: 'Release'
   dotnetVersion: '10.x'
-
+  
   # Project Paths (relative to repo root)
   solutionPath: 'CMSAPI.sln'
   apiProjectPath: 'CMSAPI/CMSAPI.csproj'
@@ -28,26 +28,15 @@ stages:
     steps:
     - checkout: self
 
-    # Optional: Debug repository structure (PowerShell on Ubuntu)
-    - task: PowerShell@2
-      displayName: 'Debug: Show Repository Structure'
-      inputs:
-        targetType: 'inline'
-        pwsh: true
-        script: |
-          Write-Host "=== Repository Root Files ==="
-          Get-ChildItem -Force | Select-Object Name, Length
-          Write-Host "`n=== Solution Files ==="
-          Get-ChildItem -Recurse -Filter "*.sln*" | Select-Object FullName
-          Write-Host "`n=== Project Files ==="
-          Get-ChildItem -Recurse -Filter "*.csproj" | Select-Object FullName
-
     - task: UseDotNet@2
-      displayName: 'Install .NET SDK $(dotnetVersion)'
+      displayName: 'Install .NET SDK'
       inputs:
         packageType: 'sdk'
         version: '$(dotnetVersion)'
         includePreviewVersions: true
+
+    - script: dotnet --info
+      displayName: 'Show .NET Info'
 
     - task: DotNetCoreCLI@2
       displayName: 'Restore NuGet Packages'
@@ -62,14 +51,19 @@ stages:
         projects: '$(solutionPath)'
         arguments: '--configuration $(buildConfiguration) --no-restore'
 
-    # Optional tests (set continueOnError:false if you want the build to fail)
     - task: DotNetCoreCLI@2
       displayName: 'Run Unit Tests'
       inputs:
         command: 'test'
-        projects: '**/CMSAPI.Tests.csproj'
-        arguments: '--configuration $(buildConfiguration) --no-build --no-restore --logger trx'
-      continueOnError: true
+        projects: '**/*Tests/*.csproj'
+        arguments: '--configuration $(buildConfiguration) --no-build --no-restore --collect:"XPlat Code Coverage"'
+        publishTestResults: true
+      continueOnError: false
+
+    - task: PublishCodeCoverageResults@2
+      displayName: 'Publish Code Coverage'
+      inputs:
+        summaryFileLocation: '$(Build.SourcesDirectory)/**/coverage.cobertura.xml'
 
     - task: DotNetCoreCLI@2
       displayName: 'Publish API Project'
@@ -111,7 +105,6 @@ stages:
           - download: current
             artifact: drop
 
-          # IMPORTANT: Use 'webApp' unless you are 100% sure the App Service is Linux
           - task: AzureWebApp@1
             displayName: 'Deploy to Azure App Service'
             inputs:

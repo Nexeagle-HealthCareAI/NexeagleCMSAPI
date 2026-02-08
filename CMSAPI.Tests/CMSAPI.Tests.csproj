@@ -11,11 +11,15 @@
     <PackageReference Include="xunit" Version="2.8.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.0" />
     <PackageReference Include="Moq" Version="4.20.70" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.0" />
+
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\CMSAPI\CMSAPI.csproj" />
+    <ProjectReference Include="..\CMSAPI.Data\CMSAPI.Data.csproj" />
+    <ProjectReference Include="..\CMSAPI.Application\CMSAPI.Application.csproj" />
   </ItemGroup>
 
 </Project>
