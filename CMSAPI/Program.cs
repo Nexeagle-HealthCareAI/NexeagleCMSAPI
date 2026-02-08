@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Logging;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -105,61 +106,80 @@ builder.Services.AddHealthChecks()
 
 builder.Services.AddAuthorization();
 
-var app = builder.Build();
+// Configure Logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
 
-// Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
+try
 {
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
-}
+    var app = builder.Build();
 
-// Enable Swagger in all environments
-app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CMSAPI V1");
-    c.InjectJavascript("/js/custom.js");
-    c.DocumentTitle = "CMSAPI Dashboard";
-});
-
-app.UseStaticFiles();
-
-app.UseExceptionHandler(exceptionHandlerApp =>
-{
-    exceptionHandlerApp.Run(async context =>
+    // Configure the HTTP request pipeline.
+    if (!app.Environment.IsDevelopment())
     {
-        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-        context.Response.ContentType = "application/json";
-        var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
-        var response = new CMSAPI.Application.Models.ErrorResponse 
-        { 
-            Code = "ServerError", 
-            Message = "An unexpected error occurred.", 
-            Details = builder.Environment.IsDevelopment() ? exception?.ToString() : null 
-        };
-        await context.Response.WriteAsJsonAsync(response);
+        // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+        app.UseHsts();
+    }
+
+    // Enable Swagger in all environments
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "CMSAPI V1");
+        c.InjectJavascript("/js/custom.js");
+        c.DocumentTitle = "CMSAPI Dashboard";
     });
-});
 
-// Ensure authentication middleware runs before authorization
-app.UseAuthentication();
+    app.UseStaticFiles();
 
-app.UseHttpsRedirection();
+    app.UseExceptionHandler(exceptionHandlerApp =>
+    {
+        exceptionHandlerApp.Run(async context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            context.Response.ContentType = "application/json";
+            var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+            
+            // Log the exception
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogError(exception, "Unhandled Exception in Middleware");
 
-app.UseAuthorization();
+            var response = new CMSAPI.Application.Models.ErrorResponse 
+            { 
+                Code = "ServerError", 
+                Message = "An unexpected error occurred.", 
+                Details = builder.Environment.IsDevelopment() ? exception?.ToString() : null 
+            };
+            await context.Response.WriteAsJsonAsync(response);
+        });
+    });
 
-app.MapControllers();
-// Health Check (Public)
-app.MapHealthChecks("/health")
-   .AllowAnonymous()
-   .WithName("Health")
-   .WithTags("Health");
+    // Ensure authentication middleware runs before authorization
+    app.UseAuthentication();
 
-// Test Endpoint
-app.MapGet("/test", () => "API is running!").AllowAnonymous();
+    app.UseHttpsRedirection();
 
-// Redirect root to Swagger
-app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
+    app.UseAuthorization();
 
-app.Run();
+    app.MapControllers();
+    // Health Check (Public)
+    app.MapHealthChecks("/health")
+       .AllowAnonymous()
+       .WithName("Health")
+       .WithTags("Health");
+
+    // Test Endpoint
+    app.MapGet("/test", () => "API is running!").AllowAnonymous();
+
+    // Redirect root to Swagger
+    app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
+
+    app.Run();
+}
+catch (Exception ex)
+{
+    Console.WriteLine("CRITICAL: Application Startup Failure!");
+    Console.WriteLine(ex.ToString());
+    throw;
+}
