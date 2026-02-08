@@ -34,6 +34,8 @@ builder.Services.Configure<CMSAPI.Application.Models.TokenSettings>(builder.Conf
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 // Safe JWT Key Logic
+var tokenSettings = builder.Configuration.GetSection("TokenSettings");
+var key = tokenSettings.GetValue<string>("Key");
 var issuer = tokenSettings.GetValue<string>("Issuer");
 var audience = tokenSettings.GetValue<string>("Audience");
 
@@ -119,8 +121,6 @@ builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
 try
-{
-try 
 {
     var app = builder.Build();
 
