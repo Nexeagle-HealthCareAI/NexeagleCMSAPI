@@ -7,7 +7,7 @@
             timeDisplay.style.color = 'white';
             timeDisplay.style.fontWeight = 'bold';
             timeDisplay.style.fontSize = '14px';
-            
+
             // Insert after the logo
             topBar.appendChild(timeDisplay);
 

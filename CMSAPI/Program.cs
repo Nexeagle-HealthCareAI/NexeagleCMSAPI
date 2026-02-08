@@ -88,20 +88,23 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// Health Checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>();
+
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Enable Swagger in all environments
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.InjectJavascript("/js/custom.js");
-        c.DocumentTitle = "CMSAPI Dashboard";
-    });
-}
+    c.InjectJavascript("/js/custom.js");
+    c.DocumentTitle = "CMSAPI Dashboard";
+    c.RoutePrefix = "swagger"; // Standard access
+});
 
 app.UseStaticFiles();
 
@@ -130,5 +133,6 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 app.Run();
