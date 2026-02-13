@@ -13,11 +13,11 @@ using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load appsettings.Token.json for non-Development environments
-if (!builder.Environment.IsDevelopment())
-{
-    builder.Configuration.AddJsonFile("appsettings.Token.json", optional: true, reloadOnChange: true);
-}
+// Load configuration like EasyHMSAPI
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
 
 // Add services to the container.
 // register projects
