@@ -1,68 +1,76 @@
-using Microsoft.EntityFrameworkCore;
 using CMSAPI.Data;
-using CMSAPI.Application.Interfaces;
-using CMSAPI.Application.Services;
-using CMSAPI.Data.Repositories;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.OpenApi.Models;
-using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.HttpOverrides;
-
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load configuration like EasyHMSAPI
+// =============================
+// CONFIGURATION
+// =============================
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
-
-// Logging setup (console + Azure)
+// =============================
+// LOGGING
+// =============================
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
-// Application Insights (optional, add your connection string if needed)
-// builder.Services.AddApplicationInsightsTelemetry(options =>
-// {
-//     options.ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
-// });
-
-// Add services
+// =============================
+// SERVICES
+// =============================
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
 
-// Swagger
+// =============================
+// SWAGGER
+// =============================
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "CMSAPI", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "CMSAPI",
+        Version = "v1"
+    });
+
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
-        Description = "Please enter JWT with Bearer into field",
+        Description = "Enter JWT with Bearer prefix",
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
         BearerFormat = "JWT",
         Scheme = "bearer"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
             },
             Array.Empty<string>()
         }
     });
 });
 
+// =============================
 // CORS
+// =============================
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCors", policy =>
@@ -73,16 +81,20 @@ builder.Services.AddCors(options =>
     });
 });
 
-// JWT Auth
+// =============================
+// JWT AUTHENTICATION
+// =============================
 var jwtIssuer = builder.Configuration["TokenSettings:Issuer"]
-                ?? throw new InvalidOperationException("TokenSettings:Issuer missing.");
+    ?? throw new InvalidOperationException("TokenSettings:Issuer missing.");
+
 var jwtAudience = builder.Configuration["TokenSettings:Audience"]
-                ?? throw new InvalidOperationException("TokenSettings:Audience missing.");
+    ?? throw new InvalidOperationException("TokenSettings:Audience missing.");
+
 var jwtSecret = builder.Configuration["TokenSettings:Key"]
-                ?? throw new InvalidOperationException("TokenSettings:Key missing.");
+    ?? throw new InvalidOperationException("TokenSettings:Key missing.");
 
 if (jwtSecret.Length < 32)
-    throw new InvalidOperationException("TokenSettings:Key too short; use at least 32 chars.");
+    throw new InvalidOperationException("TokenSettings:Key must be at least 32 characters.");
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -96,65 +108,117 @@ builder.Services
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtSecret)
+            ),
             ClockSkew = TimeSpan.Zero
         };
     });
 
-// EF Core
+// =============================
+// DATABASE
+// =============================
 var sqlConn =
     builder.Configuration.GetConnectionString("DefaultConnection")
     ?? builder.Configuration["ConnectionStrings:DefaultConnection"]
-    ?? throw new InvalidOperationException("DefaultConnection missing.");
+    ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection missing.");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(
-        sqlConn,
-        sql =>
-        {
-            sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null);
-            sql.CommandTimeout(60);
-        }
-    ));
+    options.UseSqlServer(sqlConn, sql =>
+    {
+        sql.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null);
 
-// Health Checks
+        sql.CommandTimeout(60);
+    })
+);
+
+// =============================
+// HEALTH CHECKS
+// =============================
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>();
 
+// =============================
+// AUTHORIZATION
+// =============================
 builder.Services.AddAuthorization();
 
+
+// =============================
+// BUILD APP
+// =============================
 try
 {
     var app = builder.Build();
 
-    // Always enable Swagger, regardless of environment
-    app.UseSwagger();
+    // =============================
+    // CRITICAL FIX FOR AZURE
+    // =============================
+    app.UseForwardedHeaders(new ForwardedHeadersOptions
+    {
+        ForwardedHeaders =
+            ForwardedHeaders.XForwardedFor |
+            ForwardedHeaders.XForwardedProto
+    });
+
+    // =============================
+    // STATIC FILES
+    // =============================
     app.UseStaticFiles();
+
+    // =============================
+    // SWAGGER
+    // =============================
+    app.UseSwagger();
+
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "CMSAPI v1");
-        // Removed c.InjectJavascript("/js/custom.js"); as js folder is no longer needed
+        c.RoutePrefix = "swagger";
     });
 
+    // =============================
+    // HTTPS REDIRECTION (AFTER ForwardedHeaders)
+    // =============================
     app.UseHttpsRedirection();
+
+    // =============================
+    // ROUTING
+    // =============================
     app.UseRouting();
+
+    // =============================
+    // CORS
+    // =============================
     app.UseCors("FrontendCors");
+
+    // =============================
+    // AUTH
+    // =============================
     app.UseAuthentication();
     app.UseAuthorization();
+
+    // =============================
+    // ENDPOINTS
+    // =============================
     app.MapControllers();
 
-    // Health Check (Public)
     app.MapHealthChecks("/health")
-       .AllowAnonymous()
-       .WithName("Health")
-       .WithTags("Health");
+        .AllowAnonymous();
 
-    // Simple redirect for root
-    app.MapGet("/", context => {
+    // Root redirect to Swagger
+    app.MapGet("/", context =>
+    {
         context.Response.Redirect("/swagger/index.html");
         return Task.CompletedTask;
     });
 
+    // =============================
+    // RUN
+    // =============================
     app.Run();
 }
 catch (Exception ex)
