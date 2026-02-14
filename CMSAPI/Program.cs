@@ -133,6 +133,7 @@ try
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "CMSAPI v1");
+        // Removed c.InjectJavascript("/js/custom.js"); as js folder is no longer needed
     });
 
     app.UseHttpsRedirection();
