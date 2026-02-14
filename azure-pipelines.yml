@@ -1,6 +1,17 @@
 # ============================================
-#   Build & Deploy CMS API (.NET 8) — DEV ONLY
+#   Build & Deploy CMS API (.NET 8)
+#   - DEV deploy always (on main)
+#   - PROD deploy optional (toggle deployProd=true)
+#   ============================================
+#   NOTE (recommended):
+#   Add manual approval on Environment "production" in Azure DevOps:
+#   Pipelines → Environments → production → Approvals and checks
 # ============================================
+
+parameters:
+- name: deployProd
+  type: boolean
+  default: false   # set true at Run time to enable PROD stage
 
 trigger:
   branches:
@@ -27,18 +38,24 @@ variables:
   devAppName: 'cms-api-dev'
   devServiceConnection: 'nexeagle-dev-intra'
 
+  # PROD App Service (EDIT THESE)
+  prodAppName: 'cms-api-prod'                 # <-- change to your PROD app service name
+  prodServiceConnection: 'nexeagle-prod-intra' # <-- change to your PROD service connection
+
+# ========================
+# STAGES
+# ========================
+stages:
+
 # ========================
 # STAGE 1 — BUILD
 # ========================
-stages:
 - stage: Build
   displayName: Build & Package CMS API
-
   jobs:
   - job: BuildJob
-
+    displayName: Build
     steps:
-
     - checkout: self
 
     - task: UseDotNet@2
@@ -76,33 +93,53 @@ stages:
 # ========================
 - stage: Deploy_Dev
   displayName: Deploy to Azure App Service (DEV)
-
   dependsOn: Build
-
   condition: succeeded()
-
   jobs:
   - deployment: DeployDev
-
+    displayName: Deploy DEV
     environment: 'development'
-
     strategy:
       runOnce:
         deploy:
-
           steps:
-
           - download: current
             artifact: $(artifactName)
 
           - task: AzureWebApp@1
-            displayName: 'Deploy ZIP to Azure App Service'
-
+            displayName: 'Deploy ZIP to DEV App Service'
             inputs:
               azureSubscription: $(devServiceConnection)
-
-              appType: webApp   # Windows App Service
-
+              appType: webApp         # Windows App Service
               appName: $(devAppName)
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
+# ========================
+# STAGE 3 — DEPLOY PROD (optional toggle)
+# ========================
+- stage: Deploy_Prod
+  displayName: Deploy to Azure App Service (PROD)
+  dependsOn: Deploy_Dev
+  condition: >
+    and(
+      succeeded(),
+      eq('${{ parameters.deployProd }}', 'true')
+    )
+  jobs:
+  - deployment: DeployProd
+    displayName: Deploy PROD
+    environment: 'production'   # put approvals/checks here in Environments
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: $(artifactName)
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy ZIP to PROD App Service'
+            inputs:
+              azureSubscription: $(prodServiceConnection)
+              appType: webApp         # Windows App Service
+              appName: $(prodAppName)
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
