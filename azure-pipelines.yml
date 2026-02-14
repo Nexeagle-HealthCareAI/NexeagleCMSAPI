@@ -84,7 +84,7 @@ stages:
   jobs:
   - deployment: DeployDev
 
-    environment: 'dev'
+    environment: 'development'
 
     strategy:
       runOnce:
