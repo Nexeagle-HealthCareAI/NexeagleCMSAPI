@@ -135,14 +135,13 @@ try
 
     // Enable Swagger in all environments
     app.UseSwagger();
+    app.UseStaticFiles();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "CMSAPI V1");
         c.InjectJavascript("/js/custom.js");
         c.DocumentTitle = "CMSAPI Dashboard";
     });
-
-    app.UseStaticFiles();
 
     app.UseExceptionHandler(exceptionHandlerApp =>
     {
