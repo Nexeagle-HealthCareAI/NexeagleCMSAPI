@@ -31,6 +31,8 @@ public class HospitalUserInfo
     public string Contact { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string Status { get; set; } = "Active";
+    public DateTime? LastLoginTime { get; set; }
+    public string LoginMethod { get; set; } = string.Empty;
 }
 
 public class DoctorInfo

@@ -48,7 +48,9 @@ namespace CMSAPI.Data.Repositories
                                    Role = r != null ? r.RoleName : (hu.IsPrimary ? "Admin" : "User"),
                                    Contact = u.MobileNumber ?? string.Empty,
                                    Email = u.Email,
-                                   Status = us.StatusName ?? "Active"
+                                   Status = us.StatusName ?? "Active",
+                                   LastLoginTime = ua.LastLoginTime,
+                                   LoginMethod = ua.LoginMethod ?? string.Empty
                                }).ToListAsync();
 
 
