@@ -1,4 +1,13 @@
+# ============================================
+#   Build & Deploy CMS API (.NET 8) — DEV ONLY
+# ============================================
+
 trigger:
+  branches:
+    include:
+      - main
+
+pr:
   branches:
     include:
       - main
@@ -6,78 +15,94 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
 
+# ========================
+# VARIABLES
+# ========================
 variables:
-  azureServiceConnection: 'nexeagle-dev-intra'
-  webAppName: 'cms-api-dev'
-  buildConfiguration: 'Release'
-  dotnetVersion: '8.x'
-  solutionPath: 'CMSAPI.sln'
-  apiProjectPath: 'CMSAPI/CMSAPI.csproj'
+  apiProject: 'CMSAPI/CMSAPI.csproj'
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
+  artifactName: 'api-drop'
 
+  # DEV App Service
+  devAppName: 'cms-api-dev'
+  devServiceConnection: 'nexeagle-dev-intra'
+
+# ========================
+# STAGE 1 — BUILD
+# ========================
 stages:
-
-# BUILD STAGE
 - stage: Build
+  displayName: Build & Package CMS API
+
   jobs:
   - job: BuildJob
+
     steps:
 
     - checkout: self
 
     - task: UseDotNet@2
+      displayName: 'Use .NET 8 SDK'
       inputs:
-        packageType: sdk
-        version: $(dotnetVersion)
+        version: '8.x'
 
     - task: DotNetCoreCLI@2
-      displayName: Restore
+      displayName: 'Restore'
       inputs:
         command: restore
-        projects: $(solutionPath)
+        projects: $(apiProject)
 
     - task: DotNetCoreCLI@2
-      displayName: Build
+      displayName: 'Build'
       inputs:
         command: build
-        projects: $(solutionPath)
-        arguments: --configuration $(buildConfiguration) --no-restore
+        projects: $(apiProject)
+        arguments: '--configuration Release --no-restore'
 
     - task: DotNetCoreCLI@2
-      displayName: Publish
+      displayName: 'Publish (ZIP)'
       inputs:
         command: publish
+        projects: $(apiProject)
+        arguments: '--configuration Release --no-build --no-restore --output $(publishDir)'
         publishWebProjects: false
-        projects: $(apiProjectPath)
-        arguments: --configuration $(buildConfiguration) --output $(publishDir) --no-build --no-restore
-        modifyOutputPath: false
+        zipAfterPublish: true
 
-    - task: PublishBuildArtifacts@1
-      displayName: Publish Artifact
-      inputs:
-        PathtoPublish: $(publishDir)
-        ArtifactName: drop
+    - publish: $(publishDir)
+      artifact: $(artifactName)
 
+# ========================
+# STAGE 2 — DEPLOY DEV
+# ========================
+- stage: Deploy_Dev
+  displayName: Deploy to Azure App Service (DEV)
 
-# DEPLOY STAGE
-- stage: Deploy
   dependsOn: Build
+
+  condition: succeeded()
+
   jobs:
-  - deployment: DeployWeb
-    environment: development
+  - deployment: DeployDev
+
+    environment: 'dev'
+
     strategy:
       runOnce:
         deploy:
+
           steps:
 
           - download: current
-            artifact: drop
+            artifact: $(artifactName)
 
           - task: AzureWebApp@1
-            displayName: Deploy to Azure
+            displayName: 'Deploy ZIP to Azure App Service'
+
             inputs:
-              azureSubscription: $(azureServiceConnection)
-              appType: webApp
-              appName: $(webAppName)
-              package: $(Pipeline.Workspace)/drop
-              deploymentMethod: runFromPackage
+              azureSubscription: $(devServiceConnection)
+
+              appType: webApp   # Windows App Service
+
+              appName: $(devAppName)
+
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
