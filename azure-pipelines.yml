@@ -7,114 +7,64 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  # Azure Configuration
   azureServiceConnection: 'nexeagle-dev-intra'
   webAppName: 'cms-api-dev'
-  
-  # Build Configuration
   buildConfiguration: 'Release'
   dotnetVersion: '8.x'
-  
-  # Project Paths
   solutionPath: 'CMSAPI.sln'
   apiProjectPath: 'CMSAPI/CMSAPI.csproj'
-  
-  # Output paths
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
-  zipPath: '$(Build.ArtifactStagingDirectory)/cmsapi.zip'
 
 stages:
 
-# =========================
 # BUILD STAGE
-# =========================
 - stage: Build
-  displayName: 'Build Stage'
   jobs:
   - job: BuildJob
-    displayName: 'Build and Publish'
     steps:
 
     - checkout: self
 
-    # Install .NET 8 SDK
     - task: UseDotNet@2
-      displayName: 'Install .NET SDK'
       inputs:
-        packageType: 'sdk'
-        version: '$(dotnetVersion)'
+        packageType: sdk
+        version: $(dotnetVersion)
 
-    - script: dotnet --info
-      displayName: 'Show .NET Info'
-
-    # Restore
     - task: DotNetCoreCLI@2
-      displayName: 'Restore NuGet Packages'
+      displayName: Restore
       inputs:
-        command: 'restore'
-        projects: '$(solutionPath)'
+        command: restore
+        projects: $(solutionPath)
 
-    # Build
     - task: DotNetCoreCLI@2
-      displayName: 'Build Solution'
+      displayName: Build
       inputs:
-        command: 'build'
-        projects: '$(solutionPath)'
-        arguments: '--configuration $(buildConfiguration) --no-restore'
+        command: build
+        projects: $(solutionPath)
+        arguments: --configuration $(buildConfiguration) --no-restore
 
-    # Run tests (optional but recommended)
     - task: DotNetCoreCLI@2
-      displayName: 'Run Unit Tests'
+      displayName: Publish
       inputs:
-        command: 'test'
-        projects: '**/*Tests/*.csproj'
-        arguments: '--configuration $(buildConfiguration) --no-build --no-restore'
-        publishTestResults: true
-      continueOnError: false
-
-    # Publish API (CRITICAL FIX INCLUDED)
-    - task: DotNetCoreCLI@2
-      displayName: 'Publish API Project'
-      inputs:
-        command: 'publish'
+        command: publish
         publishWebProjects: false
-        projects: '$(apiProjectPath)'
-        arguments: '--configuration $(buildConfiguration) --output $(publishDir) --no-build --no-restore'
-        zipAfterPublish: false
+        projects: $(apiProjectPath)
+        arguments: --configuration $(buildConfiguration) --output $(publishDir) --no-build --no-restore
         modifyOutputPath: false
 
-    # Archive published files (CRITICAL: includeRootFolder=false)
-    - task: ArchiveFiles@2
-      displayName: 'Create Deployment ZIP'
-      inputs:
-        rootFolderOrFile: '$(publishDir)'
-        includeRootFolder: false
-        archiveType: 'zip'
-        archiveFile: '$(zipPath)'
-        replaceExistingArchive: true
-
-    # Publish artifact
     - task: PublishBuildArtifacts@1
-      displayName: 'Publish Artifact'
+      displayName: Publish Artifact
       inputs:
-        PathtoPublish: '$(zipPath)'
-        ArtifactName: 'drop'
-        publishLocation: 'Container'
+        PathtoPublish: $(publishDir)
+        ArtifactName: drop
 
 
-# =========================
 # DEPLOY STAGE
-# =========================
 - stage: Deploy
-  displayName: 'Deploy to Azure'
   dependsOn: Build
-  condition: succeeded()
-
   jobs:
   - deployment: DeployWeb
-    displayName: 'Deploy to Azure App Service'
-    environment: 'development'
-
+    environment: development
     strategy:
       runOnce:
         deploy:
@@ -123,11 +73,11 @@ stages:
           - download: current
             artifact: drop
 
-          # Deploy to Azure App Service
           - task: AzureWebApp@1
-            displayName: 'Deploy to Azure App Service'
+            displayName: Deploy to Azure
             inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              appType: 'webApp'
-              appName: '$(webAppName)'
-              package:
+              azureSubscription: $(azureServiceConnection)
+              appType: webApp
+              appName: $(webAppName)
+              package: $(Pipeline.Workspace)/drop
+              deploymentMethod: runFromPackage
