@@ -1,4 +1,8 @@
+using CMSAPI.Application.Interfaces;
+using CMSAPI.Application.Models;
+using CMSAPI.Application.Services;
 using CMSAPI.Data;
+using CMSAPI.Data.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +33,20 @@ builder.Logging.AddDebug();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
+
+// Configure TokenSettings
+builder.Services.Configure<TokenSettings>(
+    builder.Configuration.GetSection("TokenSettings")
+);
+
+// Register Application Services
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IHospitalService, HospitalService>();
+
+// Register Data Repositories
+builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
+builder.Services.AddScoped<IHospitalRepository, HospitalRepository>();
 
 // =============================
 // SWAGGER
