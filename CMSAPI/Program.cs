@@ -102,8 +102,10 @@ builder.Services
     });
 
 // EF Core
-var sqlConn = builder.Configuration.GetConnectionString("DefaultConnection")
-             ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection missing.");
+var sqlConn =
+    builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? builder.Configuration["ConnectionStrings:DefaultConnection"]
+    ?? throw new InvalidOperationException("DefaultConnection missing.");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(
