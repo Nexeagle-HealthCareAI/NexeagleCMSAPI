@@ -100,7 +100,7 @@ namespace CMSAPI.Data.Repositories
             var hospitalStats = new HospitalStats();
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-            // Fetch raw data roughly needed (optimize in real scenario)
+            // Fetch raw data from appointments table
             var appointments = await _db.Appointments
                 .Where(a => a.HospitalID == id)
                 .Select(a => new { a.ApptDate, a.PatientID })
@@ -112,7 +112,7 @@ namespace CMSAPI.Data.Repositories
                 var d = today.AddDays(-i);
                 var dayAppts = appointments.Where(a => a.ApptDate == d).ToList();
                 var label = d.DayOfWeek.ToString().Substring(0, 3);
-                
+
                 hospitalStats.Appointments.Daily.Add(new StatPoint { Label = label, Value = dayAppts.Count });
                 hospitalStats.UniquePatients.Daily.Add(new StatPoint { Label = label, Value = dayAppts.Select(x => x.PatientID).Distinct().Count() });
             }
@@ -136,7 +136,7 @@ namespace CMSAPI.Data.Repositories
                 var monthDate = currentMonth.AddMonths(-i);
                 var monthStart = new DateOnly(monthDate.Year, monthDate.Month, 1);
                 var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-                
+
                 var monthAppts = appointments.Where(a => a.ApptDate >= monthStart && a.ApptDate <= monthEnd).ToList();
                 var label = monthDate.ToString("MMM");
 
@@ -150,7 +150,7 @@ namespace CMSAPI.Data.Repositories
             {
                 var y = currentYear - i;
                 var yearAppts = appointments.Where(a => a.ApptDate.Year == y).ToList();
-                
+
                 hospitalStats.Appointments.Yearly.Add(new StatPoint { Label = y.ToString(), Value = yearAppts.Count });
                 hospitalStats.UniquePatients.Yearly.Add(new StatPoint { Label = y.ToString(), Value = yearAppts.Select(x => x.PatientID).Distinct().Count() });
             }
