@@ -77,42 +77,33 @@ namespace CMSAPI.Data.Repositories
                     .Select(ds => ds.Specialization!.Name)
                     .ToListAsync();
 
-                // Calculate actual stats from appointments
-                var doctorAppts = await _db.Appointments
+                // Get doctor's appointments with dates
+                var doctorAppointments = await _db.Appointments
                     .Where(a => a.DoctorID == doc.DoctorID && a.HospitalID == h.HospitalID)
                     .Select(a => new { a.ApptDate, a.PatientID })
                     .ToListAsync();
 
                 var todayDate = DateOnly.FromDateTime(DateTime.UtcNow);
-                var oneWeekAgo = todayDate.AddDays(-7);
-                var oneMonthAgo = todayDate.AddDays(-30);
-                var oneYearAgo = todayDate.AddDays(-365);
 
-                var dailyAppts = doctorAppts.Where(a => a.ApptDate == todayDate).ToList();
-                var weeklyAppts = doctorAppts.Where(a => a.ApptDate >= oneWeekAgo).ToList();
-                var monthlyAppts = doctorAppts.Where(a => a.ApptDate >= oneMonthAgo).ToList();
-                var yearlyAppts = doctorAppts.Where(a => a.ApptDate >= oneYearAgo).ToList();
+                // Daily: Today's appointments
+                var dailyAppts = doctorAppointments.Where(a => a.ApptDate == todayDate).ToList();
 
-                var appointmentsCount = new AppointmentCounts
-                {
-                    Daily = dailyAppts.Count,
-                    Weekly = weeklyAppts.Count,
-                    Monthly = monthlyAppts.Count,
-                    Yearly = yearlyAppts.Count
-                };
+                // Weekly: Current calendar week (Monday to Sunday)
+                var docWeekStart = todayDate.AddDays(-(int)todayDate.DayOfWeek);
+                var docWeekEnd = docWeekStart.AddDays(6);
+                var weeklyAppts = doctorAppointments.Where(a => a.ApptDate >= docWeekStart && a.ApptDate <= docWeekEnd).ToList();
 
-                var uniquePatientsCount = new AppointmentCounts
-                {
-                    Daily = dailyAppts.Select(a => a.PatientID).Distinct().Count(),
-                    Weekly = weeklyAppts.Select(a => a.PatientID).Distinct().Count(),
-                    Monthly = monthlyAppts.Select(a => a.PatientID).Distinct().Count(),
-                    Yearly = yearlyAppts.Select(a => a.PatientID).Distinct().Count()
-                };
+                // Monthly: Current calendar month
+                var docMonthStart = new DateOnly(todayDate.Year, todayDate.Month, 1);
+                var docMonthEnd = docMonthStart.AddMonths(1).AddDays(-1);
+                var monthlyAppts = doctorAppointments.Where(a => a.ApptDate >= docMonthStart && a.ApptDate <= docMonthEnd).ToList();
+
+                // Yearly: Current calendar year
+                var yearlyAppts = doctorAppointments.Where(a => a.ApptDate.Year == todayDate.Year).ToList();
 
                 // Get doctor name from UserProfile
                 var userProfile = await _db.UserProfiles.FirstOrDefaultAsync(up => up.UserID == doc.UserID);
                 var doctorName = userProfile?.FullName ?? string.Empty;
-
 
                 doctorInfos.Add(new DoctorInfo
                 {
@@ -122,15 +113,27 @@ namespace CMSAPI.Data.Repositories
                     Degree = doc.Qualification ?? string.Empty,
                     RegistrationNumber = doc.LicenseNumber ?? string.Empty,
                     RegisteredOn = doc.RegistrationYear.HasValue ? new DateTime(doc.RegistrationYear.Value, 1, 1) : DateTime.MinValue,
-                    Appointments = appointmentsCount,
-                    UniquePatients = uniquePatientsCount
+                    Appointments = new AppointmentCounts 
+                    { 
+                        Daily = dailyAppts.Count, 
+                        Weekly = weeklyAppts.Count, 
+                        Monthly = monthlyAppts.Count, 
+                        Yearly = yearlyAppts.Count 
+                    },
+                    UniquePatients = new AppointmentCounts 
+                    { 
+                        Daily = dailyAppts.Select(x => x.PatientID).Distinct().Count(),
+                        Weekly = weeklyAppts.Select(x => x.PatientID).Distinct().Count(),
+                        Monthly = monthlyAppts.Select(x => x.PatientID).Distinct().Count(),
+                        Yearly = yearlyAppts.Select(x => x.PatientID).Distinct().Count()
+                    }
                 });
             }
 
             var hospitalStats = new HospitalStats();
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-            // Fetch raw data roughly needed (optimize in real scenario)
+            // Fetch raw data from appointments table
             var appointments = await _db.Appointments
                 .Where(a => a.HospitalID == id)
                 .Select(a => new { a.ApptDate, a.PatientID })
@@ -142,45 +145,45 @@ namespace CMSAPI.Data.Repositories
                 var d = today.AddDays(-i);
                 var dayAppts = appointments.Where(a => a.ApptDate == d).ToList();
                 var label = d.DayOfWeek.ToString().Substring(0, 3);
-                
+
                 hospitalStats.Appointments.Daily.Add(new StatPoint { Label = label, Value = dayAppts.Count });
                 hospitalStats.UniquePatients.Daily.Add(new StatPoint { Label = label, Value = dayAppts.Select(x => x.PatientID).Distinct().Count() });
             }
 
-            // Weekly (Last 4 weeks)
-            for (int i = 3; i >= 0; i--)
+            // Weekly (Current week + next 3 weeks)
+            var weekStart = today.AddDays(-(int)today.DayOfWeek);
+            for (int i = 0; i < 4; i++)
             {
-                var start = today.AddDays(-(i * 7) - 6);
-                var end = today.AddDays(-(i * 7));
+                var start = weekStart.AddDays(i * 7);
+                var end = start.AddDays(6);
                 var weekAppts = appointments.Where(a => a.ApptDate >= start && a.ApptDate <= end).ToList();
-                var label = $"Week {4-i}";
+                var label = $"Week {i+1}";
 
                 hospitalStats.Appointments.Weekly.Add(new StatPoint { Label = label, Value = weekAppts.Count });
                 hospitalStats.UniquePatients.Weekly.Add(new StatPoint { Label = label, Value = weekAppts.Select(x => x.PatientID).Distinct().Count() });
             }
 
-            // Monthly (Last 12 months)
-            var currentMonth = today;
-            for (int i = 11; i >= 0; i--)
+            // Monthly (Current month + next 11 months)
+            var monthStart = new DateOnly(today.Year, today.Month, 1);
+            for (int i = 0; i < 12; i++)
             {
-                var monthDate = currentMonth.AddMonths(-i);
-                var monthStart = new DateOnly(monthDate.Year, monthDate.Month, 1);
-                var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-                
-                var monthAppts = appointments.Where(a => a.ApptDate >= monthStart && a.ApptDate <= monthEnd).ToList();
-                var label = monthDate.ToString("MMM");
+                var currentMonthStart = monthStart.AddMonths(i);
+                var currentMonthEnd = currentMonthStart.AddMonths(1).AddDays(-1);
+
+                var monthAppts = appointments.Where(a => a.ApptDate >= currentMonthStart && a.ApptDate <= currentMonthEnd).ToList();
+                var label = currentMonthStart.ToString("MMM");
 
                 hospitalStats.Appointments.Monthly.Add(new StatPoint { Label = label, Value = monthAppts.Count });
                 hospitalStats.UniquePatients.Monthly.Add(new StatPoint { Label = label, Value = monthAppts.Select(x => x.PatientID).Distinct().Count() });
             }
 
-            // Yearly (Last 5 years)
+            // Yearly (Current year + next 4 years)
             var currentYear = today.Year;
-            for (int i = 4; i >= 0; i--)
+            for (int i = 0; i < 5; i++)
             {
-                var y = currentYear - i;
+                var y = currentYear + i;
                 var yearAppts = appointments.Where(a => a.ApptDate.Year == y).ToList();
-                
+
                 hospitalStats.Appointments.Yearly.Add(new StatPoint { Label = y.ToString(), Value = yearAppts.Count });
                 hospitalStats.UniquePatients.Yearly.Add(new StatPoint { Label = y.ToString(), Value = yearAppts.Select(x => x.PatientID).Distinct().Count() });
             }
