@@ -77,7 +77,37 @@ namespace CMSAPI.Data.Repositories
                     .Select(ds => ds.Specialization!.Name)
                     .ToListAsync();
 
-                var appCountDaily = await _db.Appointments.CountAsync(a => a.DoctorID == doc.DoctorID && a.HospitalID == h.HospitalID);
+                // Calculate actual stats from appointments
+                var doctorAppts = await _db.Appointments
+                    .Where(a => a.DoctorID == doc.DoctorID && a.HospitalID == h.HospitalID)
+                    .Select(a => new { a.ApptDate, a.PatientID })
+                    .ToListAsync();
+
+                var todayDate = DateOnly.FromDateTime(DateTime.UtcNow);
+                var oneWeekAgo = todayDate.AddDays(-7);
+                var oneMonthAgo = todayDate.AddDays(-30);
+                var oneYearAgo = todayDate.AddDays(-365);
+
+                var dailyAppts = doctorAppts.Where(a => a.ApptDate == todayDate).ToList();
+                var weeklyAppts = doctorAppts.Where(a => a.ApptDate >= oneWeekAgo).ToList();
+                var monthlyAppts = doctorAppts.Where(a => a.ApptDate >= oneMonthAgo).ToList();
+                var yearlyAppts = doctorAppts.Where(a => a.ApptDate >= oneYearAgo).ToList();
+
+                var appointmentsCount = new AppointmentCounts
+                {
+                    Daily = dailyAppts.Count,
+                    Weekly = weeklyAppts.Count,
+                    Monthly = monthlyAppts.Count,
+                    Yearly = yearlyAppts.Count
+                };
+
+                var uniquePatientsCount = new AppointmentCounts
+                {
+                    Daily = dailyAppts.Select(a => a.PatientID).Distinct().Count(),
+                    Weekly = weeklyAppts.Select(a => a.PatientID).Distinct().Count(),
+                    Monthly = monthlyAppts.Select(a => a.PatientID).Distinct().Count(),
+                    Yearly = yearlyAppts.Select(a => a.PatientID).Distinct().Count()
+                };
 
                 // Get doctor name from UserProfile
                 var userProfile = await _db.UserProfiles.FirstOrDefaultAsync(up => up.UserID == doc.UserID);
@@ -92,8 +122,8 @@ namespace CMSAPI.Data.Repositories
                     Degree = doc.Qualification ?? string.Empty,
                     RegistrationNumber = doc.LicenseNumber ?? string.Empty,
                     RegisteredOn = doc.RegistrationYear.HasValue ? new DateTime(doc.RegistrationYear.Value, 1, 1) : DateTime.MinValue,
-                    Appointments = new AppointmentCounts { Daily = appCountDaily, Weekly = appCountDaily * 7, Monthly = appCountDaily * 30, Yearly = appCountDaily * 365 },
-                    UniquePatients = new AppointmentCounts { Daily = appCountDaily, Weekly = appCountDaily * 6, Monthly = appCountDaily * 25, Yearly = appCountDaily * 300 }
+                    Appointments = appointmentsCount,
+                    UniquePatients = uniquePatientsCount
                 });
             }
 

@@ -28,6 +28,8 @@ public class AppDbContext : DbContext
     public DbSet<UserRole> UserRoles { get; set; } = null!;
     public DbSet<Role> Roles { get; set; } = null!;
     public DbSet<User> Users { get; set; } = null!;
+    public DbSet<SupportSession> SupportSessions { get; set; } = null!;
+    public DbSet<SupportMessage> SupportMessages { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -365,6 +367,29 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.MobileNumber)
                   .IsUnique()
                   .HasDatabaseName("UQ_Users_Mobile");
+        });
+
+        modelBuilder.Entity<SupportSession>(entity =>
+        {
+            entity.ToTable("SupportSessions");
+            entity.HasKey(e => e.SessionId);
+            entity.Property(e => e.SessionId).HasDefaultValueSql("newid()");
+            entity.Property(e => e.GuestId).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(20).HasDefaultValue("Active");
+            entity.Property(e => e.StartedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+        });
+
+        modelBuilder.Entity<SupportMessage>(entity =>
+        {
+            entity.ToTable("SupportMessages");
+            entity.HasKey(e => e.MessageId);
+            entity.Property(e => e.MessageId).HasDefaultValueSql("newid()");
+            entity.Property(e => e.SenderType).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.SentAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+
+            entity.HasOne(e => e.Session)
+                  .WithMany(s => s.Messages)
+                  .HasForeignKey(e => e.SessionId);
         });
 
         base.OnModelCreating(modelBuilder);

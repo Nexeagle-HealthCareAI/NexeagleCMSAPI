@@ -35,6 +35,7 @@ builder.Logging.AddDebug();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 
 // Configure TokenSettings
 builder.Services.Configure<TokenSettings>(
@@ -95,9 +96,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCors", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins("http://localhost:5173", "https://nexeagle.com", "https://cms.nexeagle.com") // Specific origins for SignalR
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials(); // Required for SignalR
     });
 });
 
@@ -225,6 +227,7 @@ try
     // ENDPOINTS
     // =============================
     app.MapControllers();
+    app.MapHub<CMSAPI.Hubs.ChatHub>("/chathub");
 
     app.MapHealthChecks("/health")
         .AllowAnonymous();
