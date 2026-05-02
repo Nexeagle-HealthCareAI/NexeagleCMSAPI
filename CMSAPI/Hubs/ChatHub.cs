@@ -37,6 +37,9 @@ public class ChatHub : Hub
         // Notify agents about a new/active session
         await Clients.Group("Agents").SendAsync("NewSession", session);
         
+        // Explicitly send the SessionId to the guest (fixes issue where new sessions without history lose the ID)
+        await Clients.Caller.SendAsync("SessionJoined", session.SessionId);
+        
         // Send history to guest
         await Clients.Caller.SendAsync("LoadHistory", session.Messages.OrderBy(m => m.SentAt).ToList());
     }
