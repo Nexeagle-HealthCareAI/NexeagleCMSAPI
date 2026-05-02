@@ -14,7 +14,7 @@ public class ChatHub : Hub
         _context = context;
     }
 
-    public async Task JoinSession(string guestId)
+    public async Task JoinSession(string guestId, string? name = null, string? email = null)
     {
         var session = await _context.SupportSessions
             .Include(s => s.Messages)
@@ -25,11 +25,20 @@ public class ChatHub : Hub
             session = new SupportSession
             {
                 GuestId = guestId,
+                GuestName = name,
+                GuestEmail = email,
                 Status = "Active",
                 StartedAt = DateTime.UtcNow
             };
             _context.SupportSessions.Add(session);
             await _context.SaveChangesAsync();
+        }
+        else if (!string.IsNullOrEmpty(name) || !string.IsNullOrEmpty(email))
+        {
+            bool updated = false;
+            if (!string.IsNullOrEmpty(name) && session.GuestName != name) { session.GuestName = name; updated = true; }
+            if (!string.IsNullOrEmpty(email) && session.GuestEmail != email) { session.GuestEmail = email; updated = true; }
+            if (updated) await _context.SaveChangesAsync();
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, session.SessionId.ToString());
