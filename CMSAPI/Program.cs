@@ -96,7 +96,12 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCors", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "https://nexeagle.com", "https://cms.nexeagle.com") // Specific origins for SignalR
+        policy.WithOrigins(
+                "http://localhost:5173", 
+                "http://localhost:5174", 
+                "http://localhost:5175", 
+                "https://nexeagle.com", 
+                "https://cms.nexeagle.com") // Specific origins for SignalR
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials(); // Required for SignalR
