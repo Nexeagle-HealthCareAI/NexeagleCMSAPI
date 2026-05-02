@@ -24,5 +24,6 @@ public class SupportMessage
     public DateTime SentAt { get; set; } = DateTime.UtcNow;
 
     [ForeignKey("SessionId")]
+    [System.Text.Json.Serialization.JsonIgnore]
     public SupportSession Session { get; set; } = null!;
 }
