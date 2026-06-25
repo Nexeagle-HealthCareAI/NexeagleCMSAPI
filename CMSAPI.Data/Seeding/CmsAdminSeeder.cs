@@ -14,21 +14,24 @@ public class CmsAdminSeeder
 {
     private readonly CmsDbContext _db;
     private readonly IPasswordHasher _hasher;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration _config;
 
-    public CmsAdminSeeder(CmsDbContext db, IPasswordHasher hasher)
+    public CmsAdminSeeder(CmsDbContext db, IPasswordHasher hasher, Microsoft.Extensions.Configuration.IConfiguration config)
     {
         _db = db;
         _hasher = hasher;
+        _config = config;
     }
 
     public async Task SeedAsync()
     {
-        var email = Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_EMAIL")?.Trim();
-        var password = Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_PASSWORD");
+        var email = _config["CmsSeed:AdminEmail"] ?? Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_EMAIL")?.Trim() ?? "info@nexeagle.com";
+        var password = _config["CmsSeed:AdminPassword"] ?? Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_PASSWORD") ?? "Admin@123";
+        var phone = _config["CmsSeed:AdminPhone"] ?? Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_PHONE")?.Trim() ?? "8074906808";
 
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
-            Console.WriteLine("[CmsAdminSeeder] CMS_SEED_ADMIN_EMAIL/PASSWORD not set — skipping admin seed.");
+            Console.WriteLine("[CmsAdminSeeder] Email or Password missing — skipping admin seed.");
             return;
         }
 
@@ -53,6 +56,7 @@ public class CmsAdminSeeder
                 Email = email,
                 FullName = "CMS Administrator",
                 PasswordHash = _hasher.Hash(password),
+                PhoneNumber = phone,
                 IsActive = true,
                 MustChangePassword = true,
                 CreatedAt = DateTime.UtcNow
