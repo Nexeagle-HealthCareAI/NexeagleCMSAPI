@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
+using CMSAPI.Authorization;
 
 using Microsoft.AspNetCore.Authorization;
 
@@ -18,6 +19,7 @@ public class HospitalsController : ControllerBase
         _service = service;
     }
 
+    [HasPermission("onboarded-hospitals.view")]
     [HttpGet]
     public async Task<IActionResult> GetHospitals([FromQuery] int page = 1, [FromQuery] int limit = 10, [FromQuery] string? search = null, [FromQuery] string? sortBy = null, [FromQuery] string? sortDir = null)
     {
@@ -25,6 +27,7 @@ public class HospitalsController : ControllerBase
         return Ok(result);
     }
 
+    [HasPermission("hospital-details.view")]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetHospitalById([FromRoute] Guid id)
     {

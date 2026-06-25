@@ -1,0 +1,267 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# CMS API — CI/CD Pipeline
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# STAGES:
+#   Stage 1 — Build        restore + build
+#   Stage 2 — Docker       build & push image to GHCR
+#   Stage 3 — Deploy Dev   pull image → run on Dev VM  (develop, port 5002)
+#   Stage 4 — Deploy Prod  pull image → run on Prod VM (main, port 5002)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# SECRETS:
+#   GHCR_TOKEN              GitHub PAT (write:packages + repo)
+#   DEV_SSH_HOST            151.185.45.77
+#   DEV_SSH_USER            root
+#   DEV_SSH_PASSWORD        Dev VM root password
+#   DEV_DB_CONNECTION       SQL Server connection string for Dev
+#   PROD_SSH_HOST           151.185.45.67
+#   PROD_SSH_USER           root
+#   PROD_SSH_KEY_B64        base64-encoded SSH private key for Prod App VM
+#   PROD_DB_CONNECTION      SQL Server connection string for Prod
+#   JWT_SECRET              >= 32 chars — signs/validates JWTs
+#   JWT_ISSUER              Token issuer (e.g. cms-api)
+#   JWT_AUDIENCE            Token audience (e.g. cms-client)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: CMS API — CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: cms-api-cicd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/cms-api
+  DOTNET_VERSION: '8.0'
+  API_PROJECT: 'CMSAPI/CMSAPI.csproj'
+  DOCKERFILE: 'Dockerfile'
+
+# ═══════════════════════════════════════════════════════════════════════════════
+jobs:
+  build:
+    name: "Stage 1 — Build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-cms-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-cms-${{ runner.os }}-
+
+      - name: Restore & Build
+        run: |
+          dotnet restore ${{ env.API_PROJECT }}
+          dotnet build   ${{ env.API_PROJECT }} --configuration Release --no-restore
+
+# ═══════════════════════════════════════════════════════════════════════════════
+  docker:
+    name: "Stage 2 — Docker Build & Push"
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,suffix=,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+# ═══════════════════════════════════════════════════════════════════════════════
+  deploy-dev:
+    name: "Stage 3 — Deploy → Dev"
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/develop'
+    environment: development
+
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -y && sudo apt-get install -y sshpass
+
+      - name: Deploy to Dev VM
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          DB_CONN:     ${{ secrets.DEV_DB_CONNECTION }}
+          JWT_SECRET:  ${{ secrets.JWT_SECRET }}
+          JWT_ISSUER:  ${{ secrets.JWT_ISSUER }}
+          JWT_AUD:     ${{ secrets.JWT_AUDIENCE }}
+          CMS_DB_CONN:     ${{ secrets.DEV_CMS_DB_CONNECTION }}
+          CMS_ADMIN_EMAIL: ${{ secrets.CMS_SEED_ADMIN_EMAIL }}
+          CMS_ADMIN_PW:    ${{ secrets.CMS_SEED_ADMIN_PASSWORD }}
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          port: 22
+          command_timeout: 10m
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW
+          script: |
+            set -e
+            : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
+            : "${JWT_SECRET:?JWT_SECRET is empty}"
+
+            mkdir -p /opt/cms
+            ENVFILE=/opt/cms/dev.env
+            {
+              printf 'ASPNETCORE_ENVIRONMENT=%s\n'             'Development'
+              printf 'ASPNETCORE_URLS=%s\n'                    'http://+:5002'
+              printf 'ConnectionStrings__DefaultConnection=%s\n' "$DB_CONN"
+              printf 'TokenSettings__Key=%s\n'                 "$JWT_SECRET"
+              printf 'TokenSettings__Issuer=%s\n'              "$JWT_ISSUER"
+              printf 'TokenSettings__Audience=%s\n'            "$JWT_AUD"
+              printf 'Cors__AllowedOrigins=%s\n'               'http://151.185.45.77:83,http://151.185.45.77:8080'
+              printf 'ConnectionStrings__CmsConnection=%s\n'   "${CMS_DB_CONN:-}"
+              printf 'CMS_SEED_ADMIN_EMAIL=%s\n'               "${CMS_ADMIN_EMAIL:-}"
+              printf 'CMS_SEED_ADMIN_PASSWORD=%s\n'            "${CMS_ADMIN_PW:-}"
+            } > "$ENVFILE"
+
+            IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+            docker pull "$IMAGE_LC"
+            docker rm -f cms-api-dev 2>/dev/null || true
+            docker run -d --name cms-api-dev --restart unless-stopped \
+              --network host --env-file "$ENVFILE" "$IMAGE_LC"
+            docker image prune -f || true
+
+      - name: Health check
+        run: |
+          sleep 10
+          for i in 1 2 3 4 5; do
+            S=$(curl -s -o /dev/null -w '%{http_code}' \
+                http://${{ secrets.DEV_SSH_HOST }}:5002/health 2>/dev/null || echo 000)
+            echo "Attempt $i — HTTP $S"
+            [ "$S" = "200" ] && echo "✅ CMS API Dev is up" && exit 0
+            sleep 10
+          done
+          echo "⚠️ Health check inconclusive — check: docker logs cms-api-dev"
+          exit 0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+  deploy-prod:
+    name: "Stage 4 — Deploy → Prod"
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - name: Prepare SSH key
+        run: |
+          echo "${{ secrets.PROD_SSH_KEY_B64 }}" | base64 -d > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+
+      - name: Write prod.env
+        env:
+          DB_CONN:    ${{ secrets.PROD_DB_CONNECTION }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
+          JWT_AUD:    ${{ secrets.JWT_AUDIENCE }}
+          CMS_DB_CONN:     ${{ secrets.PROD_CMS_DB_CONNECTION }}
+          CMS_ADMIN_EMAIL: ${{ secrets.CMS_SEED_ADMIN_EMAIL }}
+          CMS_ADMIN_PW:    ${{ secrets.CMS_SEED_ADMIN_PASSWORD }}
+        run: |
+          : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
+          : "${JWT_SECRET:?JWT_SECRET is empty}"
+          ENVFILE=/tmp/cms-prod.env
+          {
+            printf 'ASPNETCORE_ENVIRONMENT=%s\n'               'Production'
+            printf 'ASPNETCORE_URLS=%s\n'                      'http://+:5002'
+            printf 'ConnectionStrings__DefaultConnection=%s\n' "$DB_CONN"
+            printf 'TokenSettings__Key=%s\n'                   "$JWT_SECRET"
+            printf 'TokenSettings__Issuer=%s\n'                "$JWT_ISSUER"
+            printf 'TokenSettings__Audience=%s\n'              "$JWT_AUD"
+            printf 'Cors__AllowedOrigins=%s\n'                 'http://151.185.45.67:83,http://151.185.45.67:8080'
+            printf 'ConnectionStrings__CmsConnection=%s\n'     "${CMS_DB_CONN:-}"
+            printf 'CMS_SEED_ADMIN_EMAIL=%s\n'                 "${CMS_ADMIN_EMAIL:-}"
+            printf 'CMS_SEED_ADMIN_PASSWORD=%s\n'              "${CMS_ADMIN_PW:-}"
+          } > "$ENVFILE"
+
+      - name: Copy prod.env to Prod VM
+        run: |
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} 'mkdir -p /opt/cms-prod'
+          scp -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              /tmp/cms-prod.env \
+              ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:/opt/cms-prod/prod.env
+
+      - name: Pull & restart container
+        env:
+          IMAGE: "${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}"
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} \
+              "echo '$GHCR_TOKEN' | docker login ghcr.io -u '$ACTOR' --password-stdin && \
+               docker pull '$IMAGE_LC' && docker rm -f cms-api-prod 2>/dev/null; \
+               docker run -d --name cms-api-prod --restart unless-stopped \
+               --network host --env-file /opt/cms-prod/prod.env '$IMAGE_LC' && \
+               docker image prune -f"
+
+      - name: Health check
+        run: |
+          sleep 15
+          for i in 1 2 3 4 5; do
+            S=$(curl -s -o /dev/null -w '%{http_code}' \
+                http://${{ secrets.PROD_SSH_HOST }}:5002/health 2>/dev/null || echo 000)
+            echo "Attempt $i — HTTP $S"
+            [ "$S" = "200" ] && echo "✅ CMS API Prod is up" && exit 0
+            sleep 10
+          done
+          echo "⚠️ Health check inconclusive — check: docker logs cms-api-prod"
+          exit 0
+
+      - name: Write summary
+        if: always()
+        run: |
+          echo "## 🚀 CMS API — Prod" >> $GITHUB_STEP_SUMMARY
+          [ "${{ job.status }}" = "success" ] \
+            && echo "**Status:** ✅ Deployed" >> $GITHUB_STEP_SUMMARY \
+            || echo "**Status:** ❌ Failed" >> $GITHUB_STEP_SUMMARY
+          echo "| VM | \`${{ secrets.PROD_SSH_HOST }}:5002\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Swagger | http://${{ secrets.PROD_SSH_HOST }}:5002/swagger |" >> $GITHUB_STEP_SUMMARY

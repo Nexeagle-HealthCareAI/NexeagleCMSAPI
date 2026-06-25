@@ -3,18 +3,27 @@ using CMSAPI.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Models;
 using CMSAPI.Application.Interfaces;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Moq;
 using System.Threading.Tasks;
 
 public class AuthControllerTests
 {
     private readonly Mock<IAuthService> _mockAuthService;
+    private readonly Mock<IWebHostEnvironment> _mockEnv;
     private readonly AuthController _controller;
 
     public AuthControllerTests()
     {
         _mockAuthService = new Mock<IAuthService>();
-        _controller = new AuthController(_mockAuthService.Object);
+        _mockEnv = new Mock<IWebHostEnvironment>();
+        _mockEnv.Setup(e => e.EnvironmentName).Returns("Development");
+        _controller = new AuthController(_mockAuthService.Object, _mockEnv.Object);
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
     }
 
     [Fact]
@@ -28,7 +37,7 @@ public class AuthControllerTests
             User = new AuthUser { Email = "admin@cms.com", Role = "admin" } 
         };
 
-        _mockAuthService.Setup(s => s.LoginAsync(req)).ReturnsAsync(expectedResponse);
+        _mockAuthService.Setup(s => s.LoginAsync(req, It.IsAny<string?>())).ReturnsAsync(expectedResponse);
 
         // Act
         var result = await _controller.Login(req);
@@ -44,7 +53,7 @@ public class AuthControllerTests
     {
         // Arrange
         var req = new LoginRequest { Email = "bad@cms.com", Password = "nope" };
-        _mockAuthService.Setup(s => s.LoginAsync(req)).ReturnsAsync((LoginResponse?)null);
+        _mockAuthService.Setup(s => s.LoginAsync(req, It.IsAny<string?>())).ReturnsAsync((LoginResponse?)null);
 
         // Act
         var result = await _controller.Login(req);

@@ -1,57 +1,99 @@
 using Xunit;
 using Moq;
-using Microsoft.Extensions.Options;
-using CMSAPI.Application.Services;
+using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
+using CMSAPI.Application.Services;
+using CMSAPI.Domain.Entities;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace CMSAPI.Tests;
 
 public class AuthServiceTests
 {
-    private readonly Mock<IOptions<TokenSettings>> _mockOptions;
+    private readonly Mock<ICmsAuthRepository> _repo = new();
+    private readonly Mock<IPasswordHasher> _hasher = new();
+    private readonly Mock<ITokenService> _tokens = new();
+    private readonly Mock<ILogger<AuthService>> _logger = new();
     private readonly AuthService _authService;
 
     public AuthServiceTests()
     {
-        _mockOptions = new Mock<IOptions<TokenSettings>>();
-        var settings = new TokenSettings
-        {
-            Key = "TestSecretKey_12345678901234567890",
-            Issuer = "TestIssuer",
-            Audience = "TestAudience",
-            ExpiresInMinutes = 60
-        };
-        _mockOptions.Setup(o => o.Value).Returns(settings);
-        _authService = new AuthService(_mockOptions.Object);
+        _tokens.Setup(t => t.AccessTokenLifetimeSeconds).Returns(900);
+        _tokens.Setup(t => t.CreateAccessToken(It.IsAny<CmsUser>(), It.IsAny<IReadOnlyCollection<string>>()))
+               .Returns("access-token");
+        _tokens.Setup(t => t.CreateRefreshToken())
+               .Returns(("raw-refresh", "hashed-refresh", DateTime.UtcNow.AddDays(7)));
+        _authService = new AuthService(_repo.Object, _hasher.Object, _tokens.Object, _logger.Object);
     }
 
-    [Fact]
-    public async Task LoginAsync_WithValidCredentials_ReturnsTokenAndUser()
+    private CmsUser ActiveUser() => new()
     {
-        // Arrange
-        var request = new LoginRequest { Email = "admin@cms.com", Password = "password123" };
+        UserId = Guid.NewGuid(),
+        Email = "alice@cms.com",
+        FullName = "Alice",
+        PasswordHash = "stored-hash",
+        IsActive = true
+    };
 
-        // Act
-        var result = await _authService.LoginAsync(request);
+    [Fact]
+    public async Task LoginAsync_WithValidCredentials_ReturnsTokensAndPermissions()
+    {
+        var user = ActiveUser();
+        _repo.Setup(r => r.GetUserByEmailAsync("alice@cms.com")).ReturnsAsync(user);
+        _hasher.Setup(h => h.Verify("pw", "stored-hash")).Returns(true);
+        _repo.Setup(r => r.GetEffectivePermissionsAsync(user.UserId))
+             .ReturnsAsync(new List<string> { "dashboard.view" });
+        _repo.Setup(r => r.GetUserRoleNamesAsync(user.UserId))
+             .ReturnsAsync(new List<string> { "Administrator" });
 
-        // Assert
+        var result = await _authService.LoginAsync(new LoginRequest { Email = "alice@cms.com", Password = "pw" }, "1.2.3.4");
+
         Assert.NotNull(result);
-        Assert.NotNull(result.Token);
-        Assert.Equal("admin@cms.com", result.User.Email);
-        Assert.Equal("admin", result.User.Role);
+        Assert.Equal("access-token", result!.Token);
+        Assert.Equal("raw-refresh", result.RefreshToken);
+        Assert.Equal("alice@cms.com", result.User.Email);
+        Assert.Contains("dashboard.view", result.Permissions);
+        _repo.Verify(r => r.AddRefreshTokenAsync(It.IsAny<CmsRefreshToken>()), Times.Once);
+        _repo.Verify(r => r.SaveChangesAsync(), Times.AtLeastOnce);
     }
 
     [Fact]
-    public async Task LoginAsync_WithInvalidCredentials_ReturnsNull()
+    public async Task LoginAsync_WithUnknownUser_ReturnsNull()
     {
-        // Arrange
-        var request = new LoginRequest { Email = "wrong@cms.com", Password = "wrongpassword" };
+        _repo.Setup(r => r.GetUserByEmailAsync(It.IsAny<string>())).ReturnsAsync((CmsUser?)null);
 
-        // Act
-        var result = await _authService.LoginAsync(request);
+        var result = await _authService.LoginAsync(new LoginRequest { Email = "ghost@cms.com", Password = "pw" }, null);
 
-        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WithWrongPassword_IncrementsFailuresAndReturnsNull()
+    {
+        var user = ActiveUser();
+        _repo.Setup(r => r.GetUserByEmailAsync(user.Email)).ReturnsAsync(user);
+        _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(false);
+
+        var result = await _authService.LoginAsync(new LoginRequest { Email = user.Email, Password = "bad" }, null);
+
+        Assert.Null(result);
+        Assert.Equal(1, user.FailedLoginAttempts);
+        _repo.Verify(r => r.SaveChangesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WithInactiveUser_ReturnsNull()
+    {
+        var user = ActiveUser();
+        user.IsActive = false;
+        _repo.Setup(r => r.GetUserByEmailAsync(user.Email)).ReturnsAsync(user);
+        _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(true);
+
+        var result = await _authService.LoginAsync(new LoginRequest { Email = user.Email, Password = "pw" }, null);
+
         Assert.Null(result);
     }
 }

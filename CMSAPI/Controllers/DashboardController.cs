@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
+using CMSAPI.Authorization;
 
 using Microsoft.AspNetCore.Authorization;
 
@@ -17,20 +18,14 @@ public class DashboardController : ControllerBase
         _service = service;
     }
 
+    [HasPermission("dashboard.view")]
     [HttpGet("stats")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CMSAPI.Application.Models.ErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(CMSAPI.Application.Models.ErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetStats()
     {
-        try
-        {
-            var stats = await _service.GetDashboardAsync();
-            return Ok(stats);
-        }
-        catch(Exception ex)
-        {
-            throw;
-        }
+        var stats = await _service.GetDashboardAsync();
+        return Ok(stats);
     }
 }
