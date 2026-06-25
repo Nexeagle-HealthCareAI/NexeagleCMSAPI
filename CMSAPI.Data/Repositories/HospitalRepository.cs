@@ -54,36 +54,56 @@ namespace CMSAPI.Data.Repositories
                                }).ToListAsync();
 
 
-            // Aggregate doctors from DoctorDepartments
+            // Aggregate doctors from DoctorDepartments.
+            // Load all related data in 4 batch queries instead of 3 queries per doctor (N+1 fix).
             var doctorIds = h.DoctorDepartments?.Select(d => d.DoctorID).Distinct().ToList() ?? new();
 
             var doctors = await _db.Doctors
                 .Where(d => doctorIds.Contains(d.DoctorID))
                 .ToListAsync();
 
+            var allDoctorDepts = await _db.DoctorDepartments
+                .Where(dd => doctorIds.Contains(dd.DoctorID) && dd.HospitalID == h.HospitalID)
+                .Include(dd => dd.Department)
+                .ToListAsync();
+
+            var allDoctorSpecs = await _db.DoctorSpecializations
+                .Include(ds => ds.Specialization)
+                .Where(ds => doctorIds.Contains(ds.DoctorID)
+                             && ds.Specialization != null
+                             && ds.Specialization.HospitalID == h.HospitalID)
+                .ToListAsync();
+
+            var allDoctorAppointments = await _db.Appointments
+                .Where(a => doctorIds.Contains(a.DoctorID) && a.HospitalID == h.HospitalID)
+                .Select(a => new { a.DoctorID, a.ApptDate, a.PatientID })
+                .ToListAsync();
+
+            var doctorUserIds = doctors.Select(d => d.UserID).ToList();
+            var allDoctorProfiles = await _db.UserProfiles
+                .Where(up => doctorUserIds.Contains(up.UserID))
+                .ToDictionaryAsync(up => up.UserID);
+
             var doctorInfos = new List<DoctorInfo>();
+            var todayDate = DateOnly.FromDateTime(DateTime.UtcNow);
 
             foreach (var doc in doctors)
             {
-                var deps = await _db.DoctorDepartments
-                    .Where(dd => dd.DoctorID == doc.DoctorID && dd.HospitalID == h.HospitalID)
-                    .Include(dd => dd.Department)
-                    .Select(dd => dd.Department!.Name)
-                    .ToListAsync();
+                var deps = allDoctorDepts
+                    .Where(dd => dd.DoctorID == doc.DoctorID)
+                    .Select(dd => dd.Department?.Name ?? string.Empty)
+                    .Where(n => n.Length > 0)
+                    .ToList();
 
-                var specs = await _db.DoctorSpecializations
-                    .Include(ds => ds.Specialization)
-                    .Where(ds => ds.DoctorID == doc.DoctorID && ds.Specialization != null && ds.Specialization.HospitalID == h.HospitalID)
-                    .Select(ds => ds.Specialization!.Name)
-                    .ToListAsync();
+                var specs = allDoctorSpecs
+                    .Where(ds => ds.DoctorID == doc.DoctorID)
+                    .Select(ds => ds.Specialization?.Name ?? string.Empty)
+                    .Where(n => n.Length > 0)
+                    .ToList();
 
-                // Get doctor's appointments with dates
-                var doctorAppointments = await _db.Appointments
-                    .Where(a => a.DoctorID == doc.DoctorID && a.HospitalID == h.HospitalID)
-                    .Select(a => new { a.ApptDate, a.PatientID })
-                    .ToListAsync();
-
-                var todayDate = DateOnly.FromDateTime(DateTime.UtcNow);
+                var doctorAppointments = allDoctorAppointments
+                    .Where(a => a.DoctorID == doc.DoctorID)
+                    .ToList();
 
                 // Daily: Today's appointments
                 var dailyAppts = doctorAppointments.Where(a => a.ApptDate == todayDate).ToList();
@@ -101,8 +121,8 @@ namespace CMSAPI.Data.Repositories
                 // Yearly: Current calendar year
                 var yearlyAppts = doctorAppointments.Where(a => a.ApptDate.Year == todayDate.Year).ToList();
 
-                // Get doctor name from UserProfile
-                var userProfile = await _db.UserProfiles.FirstOrDefaultAsync(up => up.UserID == doc.UserID);
+                // Get doctor name from pre-loaded UserProfile dictionary.
+                allDoctorProfiles.TryGetValue(doc.UserID, out var userProfile);
                 var doctorName = userProfile?.FullName ?? string.Empty;
 
                 doctorInfos.Add(new DoctorInfo

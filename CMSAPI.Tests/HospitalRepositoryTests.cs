@@ -191,13 +191,13 @@ namespace CMSAPI.Tests
 
             // Appointments
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var patient1 = Guid.NewGuid();
-            var patient2 = Guid.NewGuid();
+            var patient1 = Guid.NewGuid().ToString();
+            var patient2 = Guid.NewGuid().ToString();
 
-            var appt1 = new Appointment { AppointmentID = Guid.NewGuid(), HospitalID = hospitalId, DoctorID = doctorId, ApptDate = today, PatientID = patient1 };
-            var appt2 = new Appointment { AppointmentID = Guid.NewGuid(), HospitalID = hospitalId, DoctorID = doctorId, ApptDate = today, PatientID = patient1 }; // Same patient, today
-            var appt3 = new Appointment { AppointmentID = Guid.NewGuid(), HospitalID = hospitalId, DoctorID = doctorId, ApptDate = today.AddDays(-2), PatientID = patient2 }; // Different patient, this week
-            var appt4 = new Appointment { AppointmentID = Guid.NewGuid(), HospitalID = hospitalId, DoctorID = doctorId, ApptDate = today.AddDays(-20), PatientID = patient1 }; // Same patient 1, this month, not this week
+            var appt1 = new Appointment { ApptId = Guid.NewGuid(), HospitalID = hospitalId, DoctorID = doctorId, ApptDate = today, PatientID = patient1 };
+            var appt2 = new Appointment { ApptId = Guid.NewGuid(), HospitalID = hospitalId, DoctorID = doctorId, ApptDate = today, PatientID = patient1 }; // Same patient, today
+            var appt3 = new Appointment { ApptId = Guid.NewGuid(), HospitalID = hospitalId, DoctorID = doctorId, ApptDate = today.AddDays(-2), PatientID = patient2 }; // Different patient, this week
+            var appt4 = new Appointment { ApptId = Guid.NewGuid(), HospitalID = hospitalId, DoctorID = doctorId, ApptDate = today.AddDays(-20), PatientID = patient1 }; // Same patient 1, this month, not this week
 
             context.Hospitals.Add(hospital);
             context.Users.Add(doctorUser);

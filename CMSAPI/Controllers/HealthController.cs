@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Threading.Tasks;
+using CMSAPI.Authorization;
 
 namespace CMSAPI.Controllers;
 
+// Detailed health report for the in-app Application Health page (gated).
+// The anonymous liveness probe used by deploy lives at the root "/health" endpoint.
 [ApiController]
 [Route("api/health")]
 public class HealthController : ControllerBase
@@ -15,6 +18,7 @@ public class HealthController : ControllerBase
         _healthCheckService = healthCheckService;
     }
 
+    [HasPermission("application-health.view")]
     [HttpGet]
     [ProducesResponseType(typeof(HealthReport), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(HealthReport), StatusCodes.Status503ServiceUnavailable)]
