@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace CMSAPI.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [Authorize] // Assuming CMS admin auth is required
     public class SubscriptionPlansController : ControllerBase
     {
