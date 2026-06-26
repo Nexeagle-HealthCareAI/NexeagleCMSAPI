@@ -44,5 +44,15 @@ namespace CMSAPI.Data.Repositories
             await _db.SaveChangesAsync();
             return partner;
         }
+
+        public async Task<bool> DeletePartnerAsync(Guid partnerId)
+        {
+            var partner = await _db.CmsPartners.FindAsync(partnerId);
+            if (partner == null) return false;
+            
+            _db.CmsPartners.Remove(partner);
+            await _db.SaveChangesAsync();
+            return true;
+        }
     }
 }

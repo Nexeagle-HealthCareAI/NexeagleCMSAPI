@@ -9,6 +9,7 @@ namespace CMSAPI.Application.Interfaces
     {
         Task<IEnumerable<PartnerDto>> GetAllPartnersAsync();
         Task<PartnerDto> CreatePartnerAsync(CreatePartnerRequest request, Guid? createdByUserId);
+        Task<bool> DeletePartnerAsync(Guid partnerId);
         Task<PartnerDashboardDto?> GetDashboardStatsByTokenAsync(string token);
     }
     

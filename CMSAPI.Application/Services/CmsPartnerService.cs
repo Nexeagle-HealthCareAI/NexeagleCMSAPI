@@ -51,6 +51,11 @@ namespace CMSAPI.Application.Services
             return MapToDto(partner);
         }
 
+        public async Task<bool> DeletePartnerAsync(Guid partnerId)
+        {
+            return await _partnerRepo.DeletePartnerAsync(partnerId);
+        }
+
         public async Task<PartnerDashboardDto?> GetDashboardStatsByTokenAsync(string token)
         {
             var partner = await _partnerRepo.GetPartnerByTokenAsync(token);
