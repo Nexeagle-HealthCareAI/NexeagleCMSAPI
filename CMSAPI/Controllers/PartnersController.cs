@@ -43,6 +43,17 @@ namespace CMSAPI.Controllers
             return Ok(new { success = true, data = partner, message = "Partner created successfully." });
         }
 
+        [HttpDelete("{id}")]
+        [Authorize]
+        public async Task<IActionResult> DeletePartner(Guid id)
+        {
+            var success = await _partnerService.DeletePartnerAsync(id);
+            if (!success)
+                return NotFound(new { success = false, message = "Partner not found." });
+
+            return Ok(new { success = true, message = "Partner deleted successfully." });
+        }
+
         // Public endpoint, secured by the unguessable token
         [HttpGet("dashboard/{token}")]
         [AllowAnonymous]

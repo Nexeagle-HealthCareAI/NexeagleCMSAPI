@@ -1,0 +1,67 @@
+using CMSAPI.Data;
+using CMSAPI.Data.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace CMSAPI.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize] // Assuming CMS admin auth is required
+    public class SubscriptionPlansController : ControllerBase
+    {
+        private readonly CmsDbContext _db;
+
+        public SubscriptionPlansController(CmsDbContext db)
+        {
+            _db = db;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetPlans()
+        {
+            var plans = await _db.SubscriptionPlans.OrderByDescending(p => p.CreatedAt).ToListAsync();
+            return Ok(plans);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> CreatePlan([FromBody] SubscriptionPlan request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Name) || request.BasePrice < 0 || request.DiscountPrice < 0)
+                return BadRequest("Invalid plan data.");
+
+            var plan = new SubscriptionPlan
+            {
+                PlanId = Guid.NewGuid(),
+                Name = request.Name,
+                BasePrice = request.BasePrice,
+                DiscountPrice = request.DiscountPrice,
+                BillingCycle = request.BillingCycle,
+                IsActive = request.IsActive,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _db.SubscriptionPlans.Add(plan);
+            await _db.SaveChangesAsync();
+
+            return Ok(plan);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdatePlan(Guid id, [FromBody] SubscriptionPlan request)
+        {
+            var plan = await _db.SubscriptionPlans.FindAsync(id);
+            if (plan == null) return NotFound("Plan not found.");
+
+            plan.Name = request.Name;
+            plan.BasePrice = request.BasePrice;
+            plan.DiscountPrice = request.DiscountPrice;
+            plan.BillingCycle = request.BillingCycle;
+            plan.IsActive = request.IsActive;
+
+            await _db.SaveChangesAsync();
+            return Ok(plan);
+        }
+    }
+}

@@ -34,7 +34,6 @@ namespace CMSAPI.Data.Repositories
         public async Task<CmsPartner?> GetPartnerByTokenAsync(string token)
         {
             return await _db.CmsPartners
-                .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.DashboardToken == token);
         }
 
@@ -43,6 +42,23 @@ namespace CMSAPI.Data.Repositories
             _db.CmsPartners.Add(partner);
             await _db.SaveChangesAsync();
             return partner;
+        }
+
+        public async Task<CmsPartner> UpdatePartnerAsync(CmsPartner partner)
+        {
+            _db.CmsPartners.Update(partner);
+            await _db.SaveChangesAsync();
+            return partner;
+        }
+
+        public async Task<bool> DeletePartnerAsync(Guid partnerId)
+        {
+            var partner = await _db.CmsPartners.FindAsync(partnerId);
+            if (partner == null) return false;
+            
+            _db.CmsPartners.Remove(partner);
+            await _db.SaveChangesAsync();
+            return true;
         }
     }
 }

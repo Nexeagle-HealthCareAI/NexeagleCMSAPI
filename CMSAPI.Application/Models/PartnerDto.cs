@@ -25,5 +25,6 @@ namespace CMSAPI.Application.Models
         public string DashboardToken { get; set; } = null!;
         
         public DateTime CreatedAt { get; set; }
+        public DateTime? LastLoginAt { get; set; }
     }
 }
