@@ -19,6 +19,8 @@ namespace CMSAPI.Application.Models
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
         
+        public string PartnerCode { get; set; } = null!;
+        
         // Return this token only when creating or when explicitly fetching for sharing
         public string DashboardToken { get; set; } = null!;
         

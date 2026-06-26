@@ -32,6 +32,8 @@ public class CmsDbContext : DbContext
             e.Property(x => x.Name).HasMaxLength(150).IsRequired();
             e.Property(x => x.HighestQualification).HasMaxLength(100).IsRequired();
             e.Property(x => x.CurrentProfession).HasMaxLength(100).IsRequired();
+            e.Property(x => x.PartnerCode).HasMaxLength(6).IsRequired();
+            e.HasIndex(x => x.PartnerCode).IsUnique();
             e.Property(x => x.DashboardToken).HasMaxLength(64).IsRequired();
             e.HasIndex(x => x.DashboardToken).IsUnique();
         });

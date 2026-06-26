@@ -41,6 +41,7 @@ namespace CMSAPI.Application.Services
                 Pincode = request.Pincode,
                 Email = request.Email,
                 PhoneNumber = request.PhoneNumber,
+                PartnerCode = GeneratePartnerCode(),
                 DashboardToken = GenerateSecureToken(),
                 CreatedByUserId = createdByUserId,
                 CreatedAt = DateTime.UtcNow
@@ -82,9 +83,24 @@ namespace CMSAPI.Application.Services
                 Pincode = entity.Pincode,
                 Email = entity.Email,
                 PhoneNumber = entity.PhoneNumber,
+                PartnerCode = entity.PartnerCode,
                 DashboardToken = entity.DashboardToken,
                 CreatedAt = entity.CreatedAt
             };
+        }
+
+        private static string GeneratePartnerCode()
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            using var rng = RandomNumberGenerator.Create();
+            var result = new char[6];
+            var buffer = new byte[6];
+            rng.GetBytes(buffer);
+            for (int i = 0; i < 6; i++)
+            {
+                result[i] = chars[buffer[i] % chars.Length];
+            }
+            return new string(result);
         }
 
         private static string GenerateSecureToken()

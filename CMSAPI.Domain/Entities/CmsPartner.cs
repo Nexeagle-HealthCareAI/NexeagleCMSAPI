@@ -19,6 +19,7 @@ namespace CMSAPI.Domain.Entities
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
         
+        public string PartnerCode { get; set; } = null!;
         public string DashboardToken { get; set; } = null!;
         
         public Guid? CreatedByUserId { get; set; }
