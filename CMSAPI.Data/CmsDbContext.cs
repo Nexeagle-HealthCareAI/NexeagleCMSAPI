@@ -1,4 +1,5 @@
 using CMSAPI.Domain.Entities;
+using CMSAPI.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace CMSAPI.Data;
