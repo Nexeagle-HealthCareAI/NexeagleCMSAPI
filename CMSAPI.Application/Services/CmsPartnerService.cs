@@ -61,6 +61,10 @@ namespace CMSAPI.Application.Services
             var partner = await _partnerRepo.GetPartnerByTokenAsync(token);
             if (partner == null) return null;
 
+            // Update LastLoginAt since the partner is accessing their dashboard
+            partner.LastLoginAt = DateTime.UtcNow;
+            await _partnerRepo.UpdatePartnerAsync(partner);
+
             // In the future, we would query HospitalRepository for hospitals onboarded by this partner
             int totalOnboarded = 0; 
 
@@ -90,7 +94,8 @@ namespace CMSAPI.Application.Services
                 PhoneNumber = entity.PhoneNumber,
                 PartnerCode = entity.PartnerCode,
                 DashboardToken = entity.DashboardToken,
-                CreatedAt = entity.CreatedAt
+                CreatedAt = entity.CreatedAt,
+                LastLoginAt = entity.LastLoginAt
             };
         }
 

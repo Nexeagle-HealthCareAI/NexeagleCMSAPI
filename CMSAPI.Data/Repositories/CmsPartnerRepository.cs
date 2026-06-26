@@ -34,13 +34,19 @@ namespace CMSAPI.Data.Repositories
         public async Task<CmsPartner?> GetPartnerByTokenAsync(string token)
         {
             return await _db.CmsPartners
-                .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.DashboardToken == token);
         }
 
         public async Task<CmsPartner> CreatePartnerAsync(CmsPartner partner)
         {
             _db.CmsPartners.Add(partner);
+            await _db.SaveChangesAsync();
+            return partner;
+        }
+
+        public async Task<CmsPartner> UpdatePartnerAsync(CmsPartner partner)
+        {
+            _db.CmsPartners.Update(partner);
             await _db.SaveChangesAsync();
             return partner;
         }

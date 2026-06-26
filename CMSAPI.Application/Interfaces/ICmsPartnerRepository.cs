@@ -11,6 +11,7 @@ namespace CMSAPI.Application.Interfaces
         Task<CmsPartner?> GetPartnerByIdAsync(Guid partnerId);
         Task<CmsPartner?> GetPartnerByTokenAsync(string token);
         Task<CmsPartner> CreatePartnerAsync(CmsPartner partner);
+        Task<CmsPartner> UpdatePartnerAsync(CmsPartner partner);
         Task<bool> DeletePartnerAsync(Guid partnerId);
     }
 }
