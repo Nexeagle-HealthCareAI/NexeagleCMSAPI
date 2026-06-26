@@ -79,8 +79,10 @@ builder.Services.AddScoped<IHospitalRepository, HospitalRepository>();
 
 // CMS identity / RBAC (CMSDatabase)
 builder.Services.AddScoped<ICmsAuthRepository, CmsAuthRepository>();
+builder.Services.AddScoped<ICmsPartnerRepository, CmsPartnerRepository>();
 builder.Services.AddScoped<ICmsAdminRepository, CmsAdminRepository>();
 builder.Services.AddScoped<ICmsAdminService, CmsAdminService>();
+builder.Services.AddScoped<ICmsPartnerService, CmsPartnerService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddScoped<CmsAdminSeeder>();

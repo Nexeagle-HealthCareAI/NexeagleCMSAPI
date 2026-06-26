@@ -20,9 +20,22 @@ public class CmsDbContext : DbContext
     public DbSet<CmsUserPermission> CmsUserPermissions => Set<CmsUserPermission>();
     public DbSet<CmsRefreshToken> CmsRefreshTokens => Set<CmsRefreshToken>();
     public DbSet<CmsOtp> CmsOtps => Set<CmsOtp>();
+    public DbSet<CmsPartner> CmsPartners => Set<CmsPartner>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<CmsPartner>(e =>
+        {
+            e.ToTable("CmsPartners");
+            e.HasKey(x => x.PartnerId);
+            e.Property(x => x.PartnerId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            e.Property(x => x.HighestQualification).HasMaxLength(100).IsRequired();
+            e.Property(x => x.CurrentProfession).HasMaxLength(100).IsRequired();
+            e.Property(x => x.DashboardToken).HasMaxLength(64).IsRequired();
+            e.HasIndex(x => x.DashboardToken).IsUnique();
+        });
+
         b.Entity<CmsUser>(e =>
         {
             e.ToTable("CmsUsers");
