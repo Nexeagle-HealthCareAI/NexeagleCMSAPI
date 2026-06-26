@@ -21,7 +21,7 @@ public class CmsDbContext : DbContext
     public DbSet<CmsRefreshToken> CmsRefreshTokens => Set<CmsRefreshToken>();
     public DbSet<CmsOtp> CmsOtps => Set<CmsOtp>();
     public DbSet<CmsPartner> CmsPartners => Set<CmsPartner>();
-
+    public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CmsPartner>(e =>
@@ -122,6 +122,14 @@ public class CmsDbContext : DbContext
             e.Property(x => x.Purpose).HasMaxLength(20).IsRequired().HasDefaultValue("login");
             e.Property(x => x.CreatedByIp).HasMaxLength(64);
             e.HasIndex(x => x.UserId);
+        });
+
+        b.Entity<SubscriptionPlan>(e =>
+        {
+            e.ToTable("SubscriptionPlans");
+            e.HasKey(x => x.PlanId);
+            e.Property(x => x.PlanId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
         });
     }
 }

@@ -30,6 +30,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users { get; set; } = null!;
     public DbSet<SupportSession> SupportSessions { get; set; } = null!;
     public DbSet<SupportMessage> SupportMessages { get; set; } = null!;
+    public DbSet<HospitalSubscription> HospitalSubscriptions { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -390,6 +391,25 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Session)
                   .WithMany(s => s.Messages)
                   .HasForeignKey(e => e.SessionId);
+        });
+
+        modelBuilder.Entity<HospitalSubscription>(entity =>
+        {
+            entity.ToTable("HospitalSubscriptions");
+            entity.HasKey(e => e.HospitalSubscriptionId);
+            entity.Property(e => e.HospitalSubscriptionId).HasDefaultValueSql("newid()");
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.TrialStartDate).HasColumnType("datetime2(3)").IsRequired(false);
+            entity.Property(e => e.TrialEndDate).HasColumnType("datetime2(3)").IsRequired(false);
+            entity.Property(e => e.SubscriptionStartDate).HasColumnType("datetime2(3)").IsRequired(false);
+            entity.Property(e => e.SubscriptionEndDate).HasColumnType("datetime2(3)").IsRequired(false);
+            entity.Property(e => e.NextBillingDate).HasColumnType("datetime2(3)").IsRequired(false);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+
+            entity.HasOne(e => e.Hospital)
+                  .WithMany()
+                  .HasForeignKey(e => e.HospitalId);
         });
 
         base.OnModelCreating(modelBuilder);
