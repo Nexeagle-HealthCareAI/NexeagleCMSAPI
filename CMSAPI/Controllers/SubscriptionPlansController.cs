@@ -38,6 +38,7 @@ namespace CMSAPI.Controllers
                 BasePrice = request.BasePrice,
                 DiscountPrice = request.DiscountPrice,
                 BillingCycle = request.BillingCycle,
+                ApplicationName = request.ApplicationName ?? "1Rad",
                 IsActive = request.IsActive,
                 CreatedAt = DateTime.UtcNow
             };
@@ -58,10 +59,22 @@ namespace CMSAPI.Controllers
             plan.BasePrice = request.BasePrice;
             plan.DiscountPrice = request.DiscountPrice;
             plan.BillingCycle = request.BillingCycle;
+            plan.ApplicationName = request.ApplicationName ?? plan.ApplicationName;
             plan.IsActive = request.IsActive;
 
             await _db.SaveChangesAsync();
             return Ok(plan);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeletePlan(Guid id)
+        {
+            var plan = await _db.SubscriptionPlans.FindAsync(id);
+            if (plan == null) return NotFound("Plan not found.");
+
+            _db.SubscriptionPlans.Remove(plan);
+            await _db.SaveChangesAsync();
+            return Ok(new { message = "Plan deleted successfully." });
         }
     }
 }

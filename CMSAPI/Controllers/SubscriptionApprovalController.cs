@@ -41,9 +41,9 @@ namespace CMSAPI.Controllers
                 })
                 .ToListAsync();
 
-            // We also need plan names from CmsDb
+            // We also need plan names and application names from CmsDb
             var planIds = pending.Where(p => p.PlanId.HasValue).Select(p => p.PlanId!.Value).Distinct().ToList();
-            var plans = await _cmsDb.SubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => p.Name);
+            var plans = await _cmsDb.SubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => new { p.Name, p.ApplicationName });
 
             var result = pending.Select(p => new
             {
@@ -51,7 +51,8 @@ namespace CMSAPI.Controllers
                 p.HospitalId,
                 p.HospitalName,
                 p.PlanId,
-                PlanName = p.PlanId.HasValue && plans.ContainsKey(p.PlanId.Value) ? plans[p.PlanId.Value] : "Unknown",
+                PlanName = p.PlanId.HasValue && plans.ContainsKey(p.PlanId.Value) ? plans[p.PlanId.Value].Name : "Unknown",
+                ApplicationName = p.PlanId.HasValue && plans.ContainsKey(p.PlanId.Value) ? plans[p.PlanId.Value].ApplicationName : "EasyHMS",
                 p.Status,
                 p.TrialStartDate,
                 p.TrialEndDate,
