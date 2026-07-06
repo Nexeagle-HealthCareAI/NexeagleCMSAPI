@@ -12,16 +12,36 @@ namespace CMSAPI.Controllers
     public class SubscriptionPlansController : ControllerBase
     {
         private readonly CmsDbContext _db;
+        private readonly IConfiguration _configuration;
 
-        public SubscriptionPlansController(CmsDbContext db)
+        public SubscriptionPlansController(CmsDbContext db, IConfiguration configuration)
         {
             _db = db;
+            _configuration = configuration;
         }
 
         [HttpGet]
         public async Task<IActionResult> GetPlans()
         {
             var plans = await _db.SubscriptionPlans.OrderByDescending(p => p.CreatedAt).ToListAsync();
+            return Ok(plans);
+        }
+
+        // Server-to-server only: easyHMSAPI proxies its (authenticated, hospital-user-facing)
+        // plan list through this, so browsers never need a CMS credential and CMSAPI itself stays
+        // fully behind [Authorize]. Protected by a shared key header instead of a user JWT.
+        [HttpGet("service")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetPlansForService([FromHeader(Name = "X-Service-Key")] string? serviceKey)
+        {
+            var expectedKey = _configuration["ServiceAuth:EasyHmsServiceKey"];
+            if (string.IsNullOrEmpty(expectedKey) || serviceKey != expectedKey)
+                return Unauthorized();
+
+            var plans = await _db.SubscriptionPlans
+                .Where(p => p.ApplicationName == "EasyHMS" && p.IsActive)
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
             return Ok(plans);
         }
 
