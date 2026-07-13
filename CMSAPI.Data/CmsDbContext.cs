@@ -23,6 +23,7 @@ public class CmsDbContext : DbContext
     public DbSet<CmsOtp> CmsOtps => Set<CmsOtp>();
     public DbSet<CmsPartner> CmsPartners => Set<CmsPartner>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
+    public DbSet<SubscriptionAuditLog> SubscriptionAuditLogs => Set<SubscriptionAuditLog>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CmsPartner>(e =>
@@ -131,6 +132,19 @@ public class CmsDbContext : DbContext
             e.HasKey(x => x.PlanId);
             e.Property(x => x.PlanId).ValueGeneratedNever();
             e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        });
+
+        b.Entity<SubscriptionAuditLog>(e =>
+        {
+            e.ToTable("SubscriptionAuditLogs");
+            e.HasKey(x => x.AuditId);
+            e.Property(x => x.AuditId).ValueGeneratedNever();
+            e.Property(x => x.Platform).HasMaxLength(50).IsRequired();
+            e.Property(x => x.Action).HasMaxLength(50).IsRequired();
+            e.Property(x => x.ActorEmail).HasMaxLength(256);
+            e.Property(x => x.OldValue).HasMaxLength(1000);
+            e.Property(x => x.NewValue).HasMaxLength(1000);
+            e.HasIndex(x => new { x.Platform, x.HospitalId });
         });
     }
 }

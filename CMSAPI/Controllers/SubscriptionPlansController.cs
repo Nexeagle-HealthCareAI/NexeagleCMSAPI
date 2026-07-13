@@ -19,9 +19,18 @@ namespace CMSAPI.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetPlans()
+        public async Task<IActionResult> GetPlans([FromQuery] string? application = null)
         {
-            var plans = await _db.SubscriptionPlans.OrderByDescending(p => p.CreatedAt).ToListAsync();
+            var query = _db.SubscriptionPlans.AsQueryable();
+
+            // Optional platform filter: EasyHMS | 1Rad (case-insensitive). "All"/blank = no filter.
+            if (!string.IsNullOrWhiteSpace(application) &&
+                !string.Equals(application, "All", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(p => p.ApplicationName == application);
+            }
+
+            var plans = await query.OrderByDescending(p => p.CreatedAt).ToListAsync();
             return Ok(plans);
         }
 

@@ -1,0 +1,13 @@
+# Build outputs — excluding these keeps the Docker build context small and, more
+# importantly, prevents host-side intermediate artifacts from poisoning the
+# in-container incremental build (which can silently ship a stale assembly).
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+
+# VCS / CI / local tooling
+.git/
+.github/
+.dockerignore
+**/.DS_Store
