@@ -40,7 +40,11 @@ builder.Logging.AddDebug();
 // =============================
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
-builder.Services.AddControllers();
+// Register controllers, explicitly adding this assembly as an application part so
+// controller discovery does not rely solely on DependencyContext scanning of the
+// entry assembly. Deterministic and robust across publish/runtime environments.
+builder.Services.AddControllers()
+    .AddApplicationPart(typeof(CMSAPI.Controllers.PlanCalculatorController).Assembly);
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 64 * 1024; // 64 KB – prevent oversized payloads

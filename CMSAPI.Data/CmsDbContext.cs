@@ -24,6 +24,7 @@ public class CmsDbContext : DbContext
     public DbSet<CmsPartner> CmsPartners => Set<CmsPartner>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<SubscriptionAuditLog> SubscriptionAuditLogs => Set<SubscriptionAuditLog>();
+    public DbSet<ModuleCharge> ModuleCharges => Set<ModuleCharge>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CmsPartner>(e =>
@@ -132,6 +133,16 @@ public class CmsDbContext : DbContext
             e.HasKey(x => x.PlanId);
             e.Property(x => x.PlanId).ValueGeneratedNever();
             e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        });
+
+        b.Entity<ModuleCharge>(e =>
+        {
+            e.ToTable("ModuleCharges");
+            e.HasKey(x => x.ModuleChargeId);
+            e.Property(x => x.ModuleChargeId).ValueGeneratedNever();
+            e.Property(x => x.ApplicationName).HasMaxLength(50).IsRequired();
+            e.Property(x => x.ModuleKey).HasMaxLength(20).IsRequired();
+            e.HasIndex(x => new { x.ApplicationName, x.ModuleKey }).IsUnique();
         });
 
         b.Entity<SubscriptionAuditLog>(e =>
