@@ -190,6 +190,7 @@ namespace CMSAPI.Controllers
             sub.SubscriptionEndDate = billingCycle.ToLowerInvariant() switch
             {
                 "yearly" => DateTime.UtcNow.AddYears(1),
+                "half-yearly" => DateTime.UtcNow.AddMonths(6),
                 "quarterly" => DateTime.UtcNow.AddMonths(3),
                 _ => DateTime.UtcNow.AddMonths(1) // Monthly, and any unrecognized legacy value
             };
