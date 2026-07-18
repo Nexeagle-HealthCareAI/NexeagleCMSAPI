@@ -123,7 +123,11 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> RequestOtp([FromBody] OtpRequest req)
     {
         var result = await _authService.RequestOtpAsync(req, ClientIp, _env.IsDevelopment());
-        // Always 200 – never reveal whether an account exists (anti-enumeration).
+        // Deliberately not anti-enumeration-safe: this is the internal CMS admin tool, where a
+        // clear "not registered" is more useful than the generic-response pattern used for
+        // consumer-facing flows. See RequestOtpCoreAsync for the full reasoning.
+        if (result == null)
+            return NotFound(new { message = "This email or phone number is not registered.", code = "AUTH_ACCOUNT_NOT_FOUND" });
         return Ok(result);
     }
 
@@ -151,7 +155,9 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest req)
     {
         var result = await _authService.RequestForgotPasswordOtpAsync(req, ClientIp, _env.IsDevelopment());
-        // Always 200 – never reveal whether an account exists (anti-enumeration).
+        // See RequestOtp above for why this reveals account-not-found rather than staying generic.
+        if (result == null)
+            return NotFound(new { message = "This email or phone number is not registered.", code = "AUTH_ACCOUNT_NOT_FOUND" });
         return Ok(result);
     }
 

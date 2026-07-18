@@ -128,23 +128,23 @@ public class AuthService : IAuthService
 
     // ── OTP ──────────────────────────────────────────────────────────────────
 
-    public Task<OtpRequestResponse> RequestOtpAsync(OtpRequest request, string? ipAddress, bool isDevelopment) =>
+    public Task<OtpRequestResponse?> RequestOtpAsync(OtpRequest request, string? ipAddress, bool isDevelopment) =>
         RequestOtpCoreAsync((request.Identifier ?? string.Empty).Trim(), "login", ipAddress, isDevelopment);
 
-    public Task<OtpRequestResponse> RequestForgotPasswordOtpAsync(ForgotPasswordRequest request, string? ipAddress, bool isDevelopment) =>
+    public Task<OtpRequestResponse?> RequestForgotPasswordOtpAsync(ForgotPasswordRequest request, string? ipAddress, bool isDevelopment) =>
         RequestOtpCoreAsync((request.Identifier ?? string.Empty).Trim(), "password_reset", ipAddress, isDevelopment);
 
-    private async Task<OtpRequestResponse> RequestOtpCoreAsync(string identifier, string purpose, string? ipAddress, bool isDevelopment)
+    // Returns null when no active account matches -- the controller turns that into a 404 so the
+    // login screen can tell the user their email/phone isn't registered. Deliberately *not*
+    // anti-enumeration-safe: this is the internal CMS admin tool (a small, known set of NexEagle
+    // staff accounts), where a clear "not registered" beats the silent-generic-response pattern
+    // used for consumer-facing signup/login flows.
+    private async Task<OtpRequestResponse?> RequestOtpCoreAsync(string identifier, string purpose, string? ipAddress, bool isDevelopment)
     {
-        // Always return a generic success to prevent user-enumeration attacks.
-        var generic = new OtpRequestResponse
-        {
-            Message = "If an account with that identifier exists, an OTP has been sent.",
-            DeliveryMethod = identifier.Contains('@') ? "email" : "sms"
-        };
+        var deliveryMethod = identifier.Contains('@') ? "email" : "sms";
 
         var user = await _repo.GetUserByEmailOrPhoneAsync(identifier);
-        if (user == null || !user.IsActive) return generic;
+        if (user == null || !user.IsActive) return null;
 
         var rawCode = GenerateOtpCode();
         var otp = new CmsOtp
@@ -153,12 +153,16 @@ public class AuthService : IAuthService
             UserId = user.UserId,
             CodeHash = HashOtp(rawCode),
             DeliveryTarget = identifier,
-            DeliveryMethod = generic.DeliveryMethod,
+            DeliveryMethod = deliveryMethod,
             Purpose = purpose,
             ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
             CreatedAt = DateTime.UtcNow,
             CreatedByIp = ipAddress
         };
+        // Always saved regardless of delivery outcome below -- delivery isn't wired to a real
+        // provider yet (see the TODO), but even once it is, a delivery failure shouldn't lose the
+        // generated code: it stays retrievable (audit log today, DB lookup either way) and the UI
+        // still moves to the OTP-entry screen since a real, usable code exists.
         await _repo.AddOtpAsync(otp);
         await _repo.SaveChangesAsync();
 
@@ -170,7 +174,7 @@ public class AuthService : IAuthService
         return new OtpRequestResponse
         {
             Message = "OTP sent successfully.",
-            DeliveryMethod = generic.DeliveryMethod,
+            DeliveryMethod = deliveryMethod,
             DevOtp = isDevelopment ? rawCode : null  // never expose in production
         };
     }
