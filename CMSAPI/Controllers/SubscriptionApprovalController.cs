@@ -187,10 +187,12 @@ namespace CMSAPI.Controllers
             sub.Status = "Active";
             sub.SubscriptionStartDate = DateTime.UtcNow;
 
-            if (billingCycle.Equals("Yearly", StringComparison.OrdinalIgnoreCase))
-                sub.SubscriptionEndDate = DateTime.UtcNow.AddYears(1);
-            else
-                sub.SubscriptionEndDate = DateTime.UtcNow.AddMonths(1);
+            sub.SubscriptionEndDate = billingCycle.ToLowerInvariant() switch
+            {
+                "yearly" => DateTime.UtcNow.AddYears(1),
+                "quarterly" => DateTime.UtcNow.AddMonths(3),
+                _ => DateTime.UtcNow.AddMonths(1) // Monthly, and any unrecognized legacy value
+            };
 
             sub.NextBillingDate = sub.SubscriptionEndDate;
             // Denormalize the plan's limits onto the subscription row so easyHMSAPI can enforce
