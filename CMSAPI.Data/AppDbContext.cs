@@ -32,6 +32,7 @@ public class AppDbContext : DbContext
     public DbSet<SupportMessage> SupportMessages { get; set; } = null!;
     public DbSet<HospitalSubscription> HospitalSubscriptions { get; set; } = null!;
     public DbSet<HospitalSubscriptionPayment> HospitalSubscriptionPayments { get; set; } = null!;
+    public DbSet<BedMaster> BedMaster { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

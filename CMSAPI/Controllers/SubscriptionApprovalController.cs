@@ -181,6 +181,45 @@ namespace CMSAPI.Controllers
             if (easyHmsPlan == null && legacyPlan == null)
                 return BadRequest("Invalid plan selected by hospital.");
 
+            // A downgrade (new plan's limits below what the hospital already has) would leave the
+            // hospital permanently over its own cap the moment this activates. Block it up front
+            // rather than silently activating and letting easyHMSAPI's enforcement only catch the
+            // *next* doctor/bed the hospital tries to add. Legacy (1Rad) plans have no doctor/bed
+            // concept at all, so there's nothing to check for those.
+            if (easyHmsPlan != null && (easyHmsPlan.MaxDoctors.HasValue || easyHmsPlan.MaxBeds.HasValue))
+            {
+                var overLimitIssues = new List<string>();
+
+                if (easyHmsPlan.MaxDoctors.HasValue)
+                {
+                    // Doctor has no active/inactive flag of its own — exclude revoked user
+                    // accounts the same way easyHMSAPI's SubscriptionLimitHelper does.
+                    var currentDoctorCount = await _appDb.Doctors
+                        .Where(d => d.HospitalID == hospitalId)
+                        .Join(_appDb.Users, d => d.UserID, u => u.UserID, (d, u) => u)
+                        .CountAsync(u => u.UserStatusId != 3); // 3 = UserStatusEnum.Revoked
+
+                    if (currentDoctorCount > easyHmsPlan.MaxDoctors.Value)
+                        overLimitIssues.Add($"{currentDoctorCount} doctors (this plan allows {easyHmsPlan.MaxDoctors.Value})");
+                }
+
+                if (easyHmsPlan.MaxBeds.HasValue)
+                {
+                    var currentBedCount = await _appDb.BedMaster.CountAsync(b => b.HospitalId == hospitalId && b.IsActive);
+                    if (currentBedCount > easyHmsPlan.MaxBeds.Value)
+                        overLimitIssues.Add($"{currentBedCount} beds (this plan allows {easyHmsPlan.MaxBeds.Value})");
+                }
+
+                if (overLimitIssues.Count > 0)
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Cannot activate this plan — the hospital currently has {string.Join(" and ", overLimitIssues)}. " +
+                                   "Ask them to reduce their count first, or choose a higher tier."
+                    });
+                }
+            }
+
             var billingCycle = easyHmsPlan?.BillingCycle ?? legacyPlan!.BillingCycle;
 
             // Activate subscription
