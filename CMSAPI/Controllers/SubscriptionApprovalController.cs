@@ -91,6 +91,74 @@ namespace CMSAPI.Controllers
             return Ok(result);
         }
 
+        // Every payment ever submitted (PendingApproval/Approved/Rejected) across all hospitals —
+        // the audit trail behind "pending", sourced from the same append-only table the hospital's
+        // own Payment History view reads from.
+        [HttpGet("history")]
+        public async Task<IActionResult> GetApprovalHistory()
+        {
+            var payments = await _appDb.HospitalSubscriptionPayments
+                .OrderByDescending(p => p.SubmittedAt)
+                .Select(p => new
+                {
+                    p.PaymentId,
+                    p.HospitalId,
+                    p.PlanId,
+                    p.PlanName,
+                    p.Amount,
+                    p.Reference,
+                    p.PaymentMode,
+                    p.Status,
+                    p.SubmittedAt,
+                    p.ReviewedAt,
+                    p.RejectionReason
+                })
+                .ToListAsync();
+
+            var hospitalIds = payments.Select(p => p.HospitalId).Distinct().ToList();
+            var hospitalNames = await _appDb.Hospitals
+                .Where(h => hospitalIds.Contains(h.HospitalID))
+                .ToDictionaryAsync(h => h.HospitalID, h => h.Name);
+
+            var planIds = payments.Where(p => p.PlanId.HasValue).Select(p => p.PlanId!.Value).Distinct().ToList();
+            var easyHmsPlans = await _cmsDb.EasyHmsSubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => p.Name);
+            var legacyPlans = await _cmsDb.SubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => new { p.Name, p.ApplicationName });
+
+            var result = payments.Select(p =>
+            {
+                string applicationName = "EasyHMS";
+                string? resolvedPlanName = null;
+                if (p.PlanId.HasValue && easyHmsPlans.TryGetValue(p.PlanId.Value, out var easyHmsName))
+                {
+                    resolvedPlanName = easyHmsName;
+                }
+                else if (p.PlanId.HasValue && legacyPlans.TryGetValue(p.PlanId.Value, out var legacyPlan))
+                {
+                    resolvedPlanName = legacyPlan.Name;
+                    applicationName = legacyPlan.ApplicationName;
+                }
+
+                return new
+                {
+                    p.PaymentId,
+                    p.HospitalId,
+                    HospitalName = hospitalNames.TryGetValue(p.HospitalId, out var name) ? name : "",
+                    p.PlanId,
+                    PlanName = p.PlanName ?? resolvedPlanName ?? "Unknown",
+                    ApplicationName = applicationName,
+                    p.Amount,
+                    p.Reference,
+                    p.PaymentMode,
+                    p.Status,
+                    p.SubmittedAt,
+                    p.ReviewedAt,
+                    p.RejectionReason
+                };
+            }).ToList();
+
+            return Ok(result);
+        }
+
         [HttpPost("{hospitalId}/approve")]
         public async Task<IActionResult> ApprovePayment(Guid hospitalId)
         {

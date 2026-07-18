@@ -49,5 +49,17 @@ namespace CMSAPI.Domain.Entities
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // Mirrors easyHMSAPI's HospitalSubscription.GetEffectiveStatus — nothing flips Status to
+        // "Expired" in the background, so callers (e.g. the Onboarded Hospitals list) must compute
+        // this instead of trusting the raw column.
+        public string GetEffectiveStatus(DateTime utcNow)
+        {
+            if (Status.Equals("Trial", StringComparison.OrdinalIgnoreCase) && TrialEndDate.HasValue && TrialEndDate.Value <= utcNow)
+                return "Expired";
+            if (Status.Equals("Active", StringComparison.OrdinalIgnoreCase) && SubscriptionEndDate.HasValue && SubscriptionEndDate.Value <= utcNow)
+                return "Expired";
+            return Status;
+        }
     }
 }

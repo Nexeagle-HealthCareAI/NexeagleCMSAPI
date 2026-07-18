@@ -12,10 +12,31 @@ namespace CMSAPI.Data.Repositories
     public class HospitalRepository : IHospitalRepository
     {
         private readonly AppDbContext _db;
+        private readonly CmsDbContext _cmsDb;
 
-        public HospitalRepository(AppDbContext db)
+        public HospitalRepository(AppDbContext db, CmsDbContext cmsDb)
         {
             _db = db;
+            _cmsDb = cmsDb;
+        }
+
+        // Resolves plan names for a batch of subscriptions in two queries total (not per-row),
+        // preferring the dedicated EasyHMS catalog and falling back to the legacy shared (1Rad)
+        // one for any older rows created before the split — same pattern as
+        // SubscriptionApprovalController.
+        private async Task<Dictionary<Guid, string>> ResolvePlanNamesAsync(IEnumerable<Guid> planIds)
+        {
+            var ids = planIds.Distinct().ToList();
+            var easyHmsPlans = await _cmsDb.EasyHmsSubscriptionPlans.Where(p => ids.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => p.Name);
+            var legacyPlans = await _cmsDb.SubscriptionPlans.Where(p => ids.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => p.Name);
+
+            var result = new Dictionary<Guid, string>();
+            foreach (var id in ids)
+            {
+                if (easyHmsPlans.TryGetValue(id, out var easyHmsName)) result[id] = easyHmsName;
+                else if (legacyPlans.TryGetValue(id, out var legacyName)) result[id] = legacyName;
+            }
+            return result;
         }
 
         public async Task<HospitalDetails?> GetHospitalByIdAsync(Guid id)
@@ -208,6 +229,46 @@ namespace CMSAPI.Data.Repositories
                 hospitalStats.UniquePatients.Yearly.Add(new StatPoint { Label = y.ToString(), Value = yearAppts.Select(x => x.PatientID).Distinct().Count() });
             }
 
+            // Subscription summary + full payment ledger for this hospital.
+            var sub = await _db.HospitalSubscriptions.AsNoTracking().FirstOrDefaultAsync(s => s.HospitalId == id);
+            string? subPlanName = null;
+            string? subStatus = null;
+            int? subDaysRemaining = null;
+            bool subIsEnterprise = false;
+            if (sub != null)
+            {
+                subStatus = sub.GetEffectiveStatus(DateTime.UtcNow);
+                if (sub.PlanId.HasValue)
+                {
+                    var names = await ResolvePlanNamesAsync(new[] { sub.PlanId.Value });
+                    subPlanName = names.TryGetValue(sub.PlanId.Value, out var n) ? n : null;
+                    subIsEnterprise = await _cmsDb.EasyHmsSubscriptionPlans.AnyAsync(p => p.PlanId == sub.PlanId.Value && p.IsEnterprise);
+                }
+                var utcNow = DateTime.UtcNow;
+                if (subStatus == "Trial" && sub.TrialEndDate.HasValue)
+                    subDaysRemaining = Math.Max(0, (sub.TrialEndDate.Value - utcNow).Days);
+                else if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue)
+                    subDaysRemaining = Math.Max(0, (sub.SubscriptionEndDate.Value - utcNow).Days);
+            }
+
+            var paymentRows = await _db.HospitalSubscriptionPayments
+                .AsNoTracking()
+                .Where(p => p.HospitalId == id)
+                .OrderByDescending(p => p.SubmittedAt)
+                .ToListAsync();
+            var paymentPlanNames = await ResolvePlanNamesAsync(paymentRows.Where(p => p.PlanId.HasValue).Select(p => p.PlanId!.Value));
+            var paymentHistory = paymentRows.Select(p => new HospitalPaymentHistoryItem
+            {
+                PlanName = p.PlanName ?? (p.PlanId.HasValue && paymentPlanNames.TryGetValue(p.PlanId.Value, out var pn) ? pn : "Unknown"),
+                Amount = p.Amount,
+                Reference = p.Reference,
+                PaymentMode = p.PaymentMode,
+                Status = p.Status,
+                SubmittedAt = p.SubmittedAt,
+                ReviewedAt = p.ReviewedAt,
+                RejectionReason = p.RejectionReason
+            }).ToList();
+
             return new HospitalDetails
             {
                 Id = h.HospitalID,
@@ -222,8 +283,15 @@ namespace CMSAPI.Data.Repositories
                 TotalPatients = await _db.PatientRegistrations.CountAsync(pr => pr.HospitalID == h.HospitalID),
                 RegisteredOn = h.CreatedAt,
                 Status = h.IsActive ? "Active" : "Inactive",
-                SubscriptionMode = string.Empty,
-                PaymentMode = string.Empty,
+                SubscriptionPlanName = subPlanName,
+                SubscriptionStatus = subStatus,
+                SubscriptionDaysRemaining = subDaysRemaining,
+                SubscriptionIsEnterprise = subIsEnterprise,
+                TrialStartDate = sub?.TrialStartDate,
+                TrialEndDate = sub?.TrialEndDate,
+                SubscriptionStartDate = sub?.SubscriptionStartDate,
+                SubscriptionEndDate = sub?.SubscriptionEndDate,
+                PaymentHistory = paymentHistory,
                 Users = users,
                 Doctors = doctorInfos,
                 Stats = hospitalStats
@@ -262,19 +330,57 @@ namespace CMSAPI.Data.Repositories
                 .Take(limit)
                 .ToListAsync();
 
-            var projected = items.Select(h => new HospitalListItem
+            // Batch-fetch subscription rows for this page's hospitals (one query, not N+1) and
+            // resolve their plan names the same way the detail endpoint does.
+            var hospitalIdsOnPage = items.Select(h => h.HospitalID).ToList();
+            var subsByHospital = await _db.HospitalSubscriptions
+                .AsNoTracking()
+                .Where(s => hospitalIdsOnPage.Contains(s.HospitalId))
+                .ToDictionaryAsync(s => s.HospitalId);
+            var pagePlanIds = subsByHospital.Values.Where(s => s.PlanId.HasValue).Select(s => s.PlanId!.Value);
+            var pagePlanNames = await ResolvePlanNamesAsync(pagePlanIds);
+            var enterprisePlanIds = await _cmsDb.EasyHmsSubscriptionPlans.Where(p => p.IsEnterprise).Select(p => p.PlanId).ToListAsync();
+            var utcNow = DateTime.UtcNow;
+
+            var projected = items.Select(h =>
             {
-                Id = h.HospitalID,
-                PartnerName = string.Empty,
-                Name = h.Name,
-                ContactNumber = h.Contact,
-                Email = h.Email,
-                Address = h.Location,
-                City = h.City,
-                State = h.State,
-                TotalPatients = _db.PatientRegistrations.Count(pr => pr.HospitalID == h.HospitalID),
-                RegisteredOn = h.CreatedAt,
-                Status = h.IsActive ? "Active" : "Pending"
+                subsByHospital.TryGetValue(h.HospitalID, out var sub);
+                string? subStatus = null;
+                string? subPlanName = null;
+                int? subDaysRemaining = null;
+                var subIsEnterprise = false;
+                if (sub != null)
+                {
+                    subStatus = sub.GetEffectiveStatus(utcNow);
+                    if (sub.PlanId.HasValue)
+                    {
+                        pagePlanNames.TryGetValue(sub.PlanId.Value, out subPlanName);
+                        subIsEnterprise = enterprisePlanIds.Contains(sub.PlanId.Value);
+                    }
+                    if (subStatus == "Trial" && sub.TrialEndDate.HasValue)
+                        subDaysRemaining = Math.Max(0, (sub.TrialEndDate.Value - utcNow).Days);
+                    else if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue)
+                        subDaysRemaining = Math.Max(0, (sub.SubscriptionEndDate.Value - utcNow).Days);
+                }
+
+                return new HospitalListItem
+                {
+                    Id = h.HospitalID,
+                    PartnerName = string.Empty,
+                    Name = h.Name,
+                    ContactNumber = h.Contact,
+                    Email = h.Email,
+                    Address = h.Location,
+                    City = h.City,
+                    State = h.State,
+                    TotalPatients = _db.PatientRegistrations.Count(pr => pr.HospitalID == h.HospitalID),
+                    RegisteredOn = h.CreatedAt,
+                    Status = h.IsActive ? "Active" : "Pending",
+                    SubscriptionPlanName = subPlanName,
+                    SubscriptionStatus = subStatus,
+                    SubscriptionDaysRemaining = subDaysRemaining,
+                    SubscriptionIsEnterprise = subIsEnterprise
+                };
             }).ToList();
 
             return new PagedResult<HospitalListItem>
