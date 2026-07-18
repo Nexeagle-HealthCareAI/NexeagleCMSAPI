@@ -55,6 +55,14 @@ namespace CMSAPI.Controllers
             var easyHmsPlans = await _cmsDb.EasyHmsSubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => p.Name);
             var legacyPlans = await _cmsDb.SubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => new { p.Name, p.ApplicationName });
 
+            // Each hospital in `pending` has at most one live PendingApproval row in the payment
+            // log (older ones get marked Superseded when a new submission comes in) — pull it in
+            // so the queue can flag "this is a prorated mid-cycle switch" before an admin approves.
+            var pendingHospitalIds = pending.Select(p => p.HospitalId).ToList();
+            var latestPayments = await _appDb.HospitalSubscriptionPayments
+                .Where(p => pendingHospitalIds.Contains(p.HospitalId) && p.Status == "PendingApproval")
+                .ToDictionaryAsync(p => p.HospitalId, p => new { p.IsProratedSwitch, p.PreviousPlanName, p.ProratedCreditAmount });
+
             var result = pending.Select(p =>
             {
                 string planName = "Unknown";
@@ -68,6 +76,7 @@ namespace CMSAPI.Controllers
                     planName = legacyPlan.Name;
                     applicationName = legacyPlan.ApplicationName;
                 }
+                latestPayments.TryGetValue(p.HospitalId, out var proration);
 
                 return new
                 {
@@ -84,7 +93,10 @@ namespace CMSAPI.Controllers
                     p.PaymentAmount,
                     p.PaymentReference,
                     p.PaymentMode,
-                    p.PaymentDate
+                    p.PaymentDate,
+                    IsProratedSwitch = proration?.IsProratedSwitch ?? false,
+                    PreviousPlanName = proration?.PreviousPlanName,
+                    ProratedCreditAmount = proration?.ProratedCreditAmount
                 };
             }).ToList();
 
@@ -111,7 +123,10 @@ namespace CMSAPI.Controllers
                     p.Status,
                     p.SubmittedAt,
                     p.ReviewedAt,
-                    p.RejectionReason
+                    p.RejectionReason,
+                    p.IsProratedSwitch,
+                    p.PreviousPlanName,
+                    p.ProratedCreditAmount
                 })
                 .ToListAsync();
 
@@ -152,7 +167,10 @@ namespace CMSAPI.Controllers
                     p.Status,
                     p.SubmittedAt,
                     p.ReviewedAt,
-                    p.RejectionReason
+                    p.RejectionReason,
+                    p.IsProratedSwitch,
+                    p.PreviousPlanName,
+                    p.ProratedCreditAmount
                 };
             }).ToList();
 

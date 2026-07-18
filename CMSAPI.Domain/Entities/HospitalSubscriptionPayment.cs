@@ -39,5 +39,14 @@ namespace CMSAPI.Domain.Entities
         public string? RejectionReason { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Set when this submission is a mid-cycle plan switch (upgrade/downgrade) from an
+        // already-Active subscription — Amount above already has the unused-days credit applied;
+        // these fields let the CMS approval UI show the breakdown instead of a bare number.
+        public bool IsProratedSwitch { get; set; }
+        public Guid? PreviousPlanId { get; set; }
+        [MaxLength(200)]
+        public string? PreviousPlanName { get; set; }
+        public decimal? ProratedCreditAmount { get; set; }
     }
 }
