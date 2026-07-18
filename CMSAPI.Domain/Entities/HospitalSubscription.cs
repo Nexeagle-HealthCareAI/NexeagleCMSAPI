@@ -37,7 +37,13 @@ namespace CMSAPI.Domain.Entities
         public string? PaymentReference { get; set; }
         
         public DateTime? PaymentDate { get; set; }
-        
+
+        // Set when a CMS admin rejects a submitted payment (Status becomes "Rejected"); surfaced
+        // back to the hospital admin on the EasyHMS subscription page.
+        [MaxLength(500)]
+        public string? RejectionReason { get; set; }
+        public DateTime? RejectedAt { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }

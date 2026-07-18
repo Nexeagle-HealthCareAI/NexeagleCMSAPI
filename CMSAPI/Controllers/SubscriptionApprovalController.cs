@@ -23,10 +23,12 @@ namespace CMSAPI.Controllers
         [HttpGet("pending")]
         public async Task<IActionResult> GetPendingApprovals()
         {
-            // Find hospitals where subscription is expired or trial has ended, or they need activation
+            // Only hospitals that have actually submitted a payment reference for review — Trial/
+            // Pending (plan picked, not yet paid) and Expired rows have nothing for an admin to
+            // verify or act on here, and would otherwise clutter the queue.
             var pending = await _appDb.HospitalSubscriptions
                 .Include(hs => hs.Hospital)
-                .Where(hs => hs.Status != "Active" && hs.PlanId != null)
+                .Where(hs => hs.Status == "PendingApproval" && hs.PlanId != null)
                 .OrderByDescending(hs => hs.UpdatedAt)
                 .Select(hs => new
                 {
@@ -37,7 +39,10 @@ namespace CMSAPI.Controllers
                     hs.Status,
                     hs.TrialStartDate,
                     hs.TrialEndDate,
-                    hs.SubscriptionEndDate
+                    hs.SubscriptionEndDate,
+                    hs.PaymentAmount,
+                    hs.PaymentReference,
+                    hs.PaymentDate
                 })
                 .ToListAsync();
 
@@ -74,7 +79,10 @@ namespace CMSAPI.Controllers
                     p.Status,
                     p.TrialStartDate,
                     p.TrialEndDate,
-                    p.SubscriptionEndDate
+                    p.SubscriptionEndDate,
+                    p.PaymentAmount,
+                    p.PaymentReference,
+                    p.PaymentDate
                 };
             }).ToList();
 
@@ -89,6 +97,9 @@ namespace CMSAPI.Controllers
 
             if (!sub.PlanId.HasValue)
                 return BadRequest("Hospital has not selected a plan.");
+
+            if (sub.Status != "PendingApproval")
+                return BadRequest($"There is no pending payment to approve for this hospital (current status: {sub.Status}).");
 
             // Prefer the dedicated EasyHMS catalog; fall back to the legacy shared (1Rad) one for
             // any older rows created before the split.
@@ -117,11 +128,40 @@ namespace CMSAPI.Controllers
             // concept of limits) carries through as NULL, meaning unlimited.
             sub.MaxDoctors = easyHmsPlan?.MaxDoctors;
             sub.MaxBeds = easyHmsPlan?.MaxBeds;
+            sub.RejectionReason = null;
+            sub.RejectedAt = null;
             sub.UpdatedAt = DateTime.UtcNow;
 
             await _appDb.SaveChangesAsync();
 
             return Ok(new { message = "Subscription activated successfully.", sub.SubscriptionEndDate });
         }
+
+        [HttpPost("{hospitalId}/reject")]
+        public async Task<IActionResult> RejectPayment(Guid hospitalId, [FromBody] RejectPaymentRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Reason))
+                return BadRequest("A reason is required to reject a payment.");
+
+            var sub = await _appDb.HospitalSubscriptions.FirstOrDefaultAsync(hs => hs.HospitalId == hospitalId);
+            if (sub == null) return NotFound("Hospital subscription not found.");
+
+            if (sub.Status != "PendingApproval")
+                return BadRequest($"There is no pending payment to reject for this hospital (current status: {sub.Status}).");
+
+            sub.Status = "Rejected";
+            sub.RejectionReason = request.Reason.Trim();
+            sub.RejectedAt = DateTime.UtcNow;
+            sub.UpdatedAt = DateTime.UtcNow;
+
+            await _appDb.SaveChangesAsync();
+
+            return Ok(new { message = "Payment rejected." });
+        }
+    }
+
+    public class RejectPaymentRequest
+    {
+        public string Reason { get; set; } = string.Empty;
     }
 }
