@@ -41,22 +41,41 @@ namespace CMSAPI.Controllers
                 })
                 .ToListAsync();
 
-            // We also need plan names and application names from CmsDb
+            // HospitalSubscription.PlanId can reference either catalog: the dedicated EasyHMS one
+            // (the expected case going forward -- HospitalSubscription/Hospital are EasyHMS
+            // entities) or the legacy shared (1Rad) one, for any older rows created before the
+            // split. Check both and prefer the EasyHMS match.
             var planIds = pending.Where(p => p.PlanId.HasValue).Select(p => p.PlanId!.Value).Distinct().ToList();
-            var plans = await _cmsDb.SubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => new { p.Name, p.ApplicationName });
+            var easyHmsPlans = await _cmsDb.EasyHmsSubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => p.Name);
+            var legacyPlans = await _cmsDb.SubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => new { p.Name, p.ApplicationName });
 
-            var result = pending.Select(p => new
+            var result = pending.Select(p =>
             {
-                p.HospitalSubscriptionId,
-                p.HospitalId,
-                p.HospitalName,
-                p.PlanId,
-                PlanName = p.PlanId.HasValue && plans.ContainsKey(p.PlanId.Value) ? plans[p.PlanId.Value].Name : "Unknown",
-                ApplicationName = p.PlanId.HasValue && plans.ContainsKey(p.PlanId.Value) ? plans[p.PlanId.Value].ApplicationName : "EasyHMS",
-                p.Status,
-                p.TrialStartDate,
-                p.TrialEndDate,
-                p.SubscriptionEndDate
+                string planName = "Unknown";
+                string applicationName = "EasyHMS";
+                if (p.PlanId.HasValue && easyHmsPlans.TryGetValue(p.PlanId.Value, out var easyHmsName))
+                {
+                    planName = easyHmsName;
+                }
+                else if (p.PlanId.HasValue && legacyPlans.TryGetValue(p.PlanId.Value, out var legacyPlan))
+                {
+                    planName = legacyPlan.Name;
+                    applicationName = legacyPlan.ApplicationName;
+                }
+
+                return new
+                {
+                    p.HospitalSubscriptionId,
+                    p.HospitalId,
+                    p.HospitalName,
+                    p.PlanId,
+                    PlanName = planName,
+                    ApplicationName = applicationName,
+                    p.Status,
+                    p.TrialStartDate,
+                    p.TrialEndDate,
+                    p.SubscriptionEndDate
+                };
             }).ToList();
 
             return Ok(result);
@@ -71,20 +90,33 @@ namespace CMSAPI.Controllers
             if (!sub.PlanId.HasValue)
                 return BadRequest("Hospital has not selected a plan.");
 
-            var plan = await _cmsDb.SubscriptionPlans.FirstOrDefaultAsync(p => p.PlanId == sub.PlanId.Value);
-            if (plan == null)
+            // Prefer the dedicated EasyHMS catalog; fall back to the legacy shared (1Rad) one for
+            // any older rows created before the split.
+            var easyHmsPlan = await _cmsDb.EasyHmsSubscriptionPlans.FirstOrDefaultAsync(p => p.PlanId == sub.PlanId.Value);
+            var legacyPlan = easyHmsPlan == null
+                ? await _cmsDb.SubscriptionPlans.FirstOrDefaultAsync(p => p.PlanId == sub.PlanId.Value)
+                : null;
+
+            if (easyHmsPlan == null && legacyPlan == null)
                 return BadRequest("Invalid plan selected by hospital.");
+
+            var billingCycle = easyHmsPlan?.BillingCycle ?? legacyPlan!.BillingCycle;
 
             // Activate subscription
             sub.Status = "Active";
             sub.SubscriptionStartDate = DateTime.UtcNow;
-            
-            if (plan.BillingCycle.Equals("Yearly", StringComparison.OrdinalIgnoreCase))
+
+            if (billingCycle.Equals("Yearly", StringComparison.OrdinalIgnoreCase))
                 sub.SubscriptionEndDate = DateTime.UtcNow.AddYears(1);
             else
                 sub.SubscriptionEndDate = DateTime.UtcNow.AddMonths(1);
 
             sub.NextBillingDate = sub.SubscriptionEndDate;
+            // Denormalize the plan's limits onto the subscription row so easyHMSAPI can enforce
+            // doctor/bed limits with a local lookup — NULL (Enterprise, or a legacy plan with no
+            // concept of limits) carries through as NULL, meaning unlimited.
+            sub.MaxDoctors = easyHmsPlan?.MaxDoctors;
+            sub.MaxBeds = easyHmsPlan?.MaxBeds;
             sub.UpdatedAt = DateTime.UtcNow;
 
             await _appDb.SaveChangesAsync();

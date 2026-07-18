@@ -23,6 +23,7 @@ public class CmsDbContext : DbContext
     public DbSet<CmsOtp> CmsOtps => Set<CmsOtp>();
     public DbSet<CmsPartner> CmsPartners => Set<CmsPartner>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
+    public DbSet<EasyHmsSubscriptionPlan> EasyHmsSubscriptionPlans => Set<EasyHmsSubscriptionPlan>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CmsPartner>(e =>
@@ -128,6 +129,14 @@ public class CmsDbContext : DbContext
         b.Entity<SubscriptionPlan>(e =>
         {
             e.ToTable("SubscriptionPlans");
+            e.HasKey(x => x.PlanId);
+            e.Property(x => x.PlanId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        });
+
+        b.Entity<EasyHmsSubscriptionPlan>(e =>
+        {
+            e.ToTable("EasyHmsSubscriptionPlans");
             e.HasKey(x => x.PlanId);
             e.Property(x => x.PlanId).ValueGeneratedNever();
             e.Property(x => x.Name).HasMaxLength(100).IsRequired();

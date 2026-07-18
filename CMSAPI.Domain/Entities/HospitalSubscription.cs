@@ -24,6 +24,13 @@ namespace CMSAPI.Domain.Entities
         public DateTime? SubscriptionEndDate { get; set; }
         public DateTime? NextBillingDate { get; set; }
         
+        // Denormalized copy of the selected plan's limits, populated when the subscription is
+        // approved (see SubscriptionApprovalController.ApprovePayment) -- lets easyHMSAPI enforce
+        // doctor/bed limits with a single local lookup instead of calling CMSAPI on every
+        // doctor/bed creation. NULL = unlimited (Trial, or an Enterprise plan).
+        public int? MaxDoctors { get; set; }
+        public int? MaxBeds { get; set; }
+
         public decimal? PaymentAmount { get; set; }
         
         [MaxLength(100)]

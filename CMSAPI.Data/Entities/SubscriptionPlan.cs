@@ -25,9 +25,9 @@ namespace CMSAPI.Data.Entities
         [Required]
         [MaxLength(50)]
         public string ApplicationName { get; set; } = "1Rad"; // "1Rad" or "EasyHMS"
-        
+
         public bool IsActive { get; set; } = true;
-        
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }
