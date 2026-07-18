@@ -42,6 +42,7 @@ namespace CMSAPI.Controllers
                     hs.SubscriptionEndDate,
                     hs.PaymentAmount,
                     hs.PaymentReference,
+                    hs.PaymentMode,
                     hs.PaymentDate
                 })
                 .ToListAsync();
@@ -82,6 +83,7 @@ namespace CMSAPI.Controllers
                     p.SubscriptionEndDate,
                     p.PaymentAmount,
                     p.PaymentReference,
+                    p.PaymentMode,
                     p.PaymentDate
                 };
             }).ToList();
@@ -132,6 +134,18 @@ namespace CMSAPI.Controllers
             sub.RejectedAt = null;
             sub.UpdatedAt = DateTime.UtcNow;
 
+            var planName = easyHmsPlan?.Name ?? legacyPlan?.Name;
+            var latestPayment = await _appDb.HospitalSubscriptionPayments
+                .Where(p => p.HospitalId == hospitalId && p.Status == "PendingApproval")
+                .OrderByDescending(p => p.SubmittedAt)
+                .FirstOrDefaultAsync();
+            if (latestPayment != null)
+            {
+                latestPayment.Status = "Approved";
+                latestPayment.ReviewedAt = DateTime.UtcNow;
+                latestPayment.PlanName = planName;
+            }
+
             await _appDb.SaveChangesAsync();
 
             return Ok(new { message = "Subscription activated successfully.", sub.SubscriptionEndDate });
@@ -153,6 +167,17 @@ namespace CMSAPI.Controllers
             sub.RejectionReason = request.Reason.Trim();
             sub.RejectedAt = DateTime.UtcNow;
             sub.UpdatedAt = DateTime.UtcNow;
+
+            var latestPayment = await _appDb.HospitalSubscriptionPayments
+                .Where(p => p.HospitalId == hospitalId && p.Status == "PendingApproval")
+                .OrderByDescending(p => p.SubmittedAt)
+                .FirstOrDefaultAsync();
+            if (latestPayment != null)
+            {
+                latestPayment.Status = "Rejected";
+                latestPayment.ReviewedAt = DateTime.UtcNow;
+                latestPayment.RejectionReason = request.Reason.Trim();
+            }
 
             await _appDb.SaveChangesAsync();
 

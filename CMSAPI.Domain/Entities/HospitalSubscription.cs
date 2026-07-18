@@ -35,8 +35,11 @@ namespace CMSAPI.Domain.Entities
         
         [MaxLength(100)]
         public string? PaymentReference { get; set; }
-        
+
         public DateTime? PaymentDate { get; set; }
+
+        [MaxLength(50)]
+        public string? PaymentMode { get; set; }
 
         // Set when a CMS admin rejects a submitted payment (Status becomes "Rejected"); surfaced
         // back to the hospital admin on the EasyHMS subscription page.

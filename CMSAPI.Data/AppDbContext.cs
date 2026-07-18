@@ -31,6 +31,7 @@ public class AppDbContext : DbContext
     public DbSet<SupportSession> SupportSessions { get; set; } = null!;
     public DbSet<SupportMessage> SupportMessages { get; set; } = null!;
     public DbSet<HospitalSubscription> HospitalSubscriptions { get; set; } = null!;
+    public DbSet<HospitalSubscriptionPayment> HospitalSubscriptionPayments { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -410,6 +411,19 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Hospital)
                   .WithMany()
                   .HasForeignKey(e => e.HospitalId);
+        });
+
+        modelBuilder.Entity<HospitalSubscriptionPayment>(entity =>
+        {
+            entity.ToTable("HospitalSubscriptionPayments");
+            entity.HasKey(e => e.PaymentId);
+            entity.Property(e => e.PaymentId).HasDefaultValueSql("newid()");
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.Reference).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.SubmittedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            entity.Property(e => e.ReviewedAt).HasColumnType("datetime2(3)").IsRequired(false);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
         });
 
         base.OnModelCreating(modelBuilder);
