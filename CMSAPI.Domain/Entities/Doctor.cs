@@ -16,6 +16,14 @@ public class Doctor
     public int ProfileCompletionPercent { get; set; }
     public string? ObjectURL { get; set; }
     public Guid? PrimaryDepartmentID { get; set; }
+    public bool IsPubliclyListed { get; set; }
+    // CMS-controlled Doctor Dekho marketing/moderation fields — see easyHMSAPI's Doctor.cs for
+    // the full semantics (IsDelistedByAdmin is deliberately separate from IsPubliclyListed).
+    public decimal? DiscountPercent { get; set; }
+    public DateTime? DiscountStartAt { get; set; }
+    public DateTime? DiscountEndAt { get; set; }
+    public bool IsFeatured { get; set; }
+    public bool IsDelistedByAdmin { get; set; }
     public DateTime CreatedAt { get; set; }
 
     // Navigation

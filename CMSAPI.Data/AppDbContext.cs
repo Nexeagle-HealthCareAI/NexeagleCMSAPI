@@ -33,9 +33,17 @@ public class AppDbContext : DbContext
     public DbSet<HospitalSubscription> HospitalSubscriptions { get; set; } = null!;
     public DbSet<HospitalSubscriptionPayment> HospitalSubscriptionPayments { get; set; } = null!;
     public DbSet<BedMaster> BedMaster { get; set; } = null!;
+    public DbSet<DoctorFee> DoctorFees { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<DoctorFee>(entity =>
+        {
+            entity.ToTable("DoctorFee");
+            entity.HasKey(e => e.DoctorFeeId);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+        });
+
         modelBuilder.Entity<Hospital>(entity =>
         {
             entity.ToTable("Hospitals");
