@@ -22,6 +22,9 @@
 #   JWT_SECRET              >= 32 chars — signs/validates JWTs
 #   JWT_ISSUER              Token issuer (e.g. cms-api)
 #   JWT_AUDIENCE            Token audience (e.g. cms-client)
+#   EASYHMS_SERVICE_KEY     Shared secret for easyHMSAPI's server-to-server plan-list proxy
+#                           (GET /api/v1/SubscriptionPlans/service) — same value must also be set
+#                           as CMS_SERVICE_KEY in the easyHMSAPI repo's secrets.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 name: CMS API — CI/CD
@@ -132,13 +135,14 @@ jobs:
           CMS_DB_CONN:     ${{ secrets.DEV_CMS_DB_CONNECTION }}
           CMS_ADMIN_EMAIL: ${{ secrets.CMS_SEED_ADMIN_EMAIL }}
           CMS_ADMIN_PW:    ${{ secrets.CMS_SEED_ADMIN_PASSWORD }}
+          EASYHMS_SVC_KEY: ${{ secrets.EASYHMS_SERVICE_KEY }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -157,6 +161,7 @@ jobs:
               printf 'ConnectionStrings__CmsConnection=%s\n'   "${CMS_DB_CONN:-}"
               printf 'CMS_SEED_ADMIN_EMAIL=%s\n'               "${CMS_ADMIN_EMAIL:-}"
               printf 'CMS_SEED_ADMIN_PASSWORD=%s\n'            "${CMS_ADMIN_PW:-}"
+              printf 'ServiceAuth__EasyHmsServiceKey=%s\n'     "${EASYHMS_SVC_KEY:-}"
             } > "$ENVFILE"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
@@ -203,6 +208,7 @@ jobs:
           CMS_DB_CONN:     ${{ secrets.PROD_CMS_DB_CONNECTION }}
           CMS_ADMIN_EMAIL: ${{ secrets.CMS_SEED_ADMIN_EMAIL }}
           CMS_ADMIN_PW:    ${{ secrets.CMS_SEED_ADMIN_PASSWORD }}
+          EASYHMS_SVC_KEY: ${{ secrets.EASYHMS_SERVICE_KEY }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
           : "${JWT_SECRET:?JWT_SECRET is empty}"
@@ -218,6 +224,7 @@ jobs:
             printf 'ConnectionStrings__CmsConnection=%s\n'     "${CMS_DB_CONN:-}"
             printf 'CMS_SEED_ADMIN_EMAIL=%s\n'                 "${CMS_ADMIN_EMAIL:-}"
             printf 'CMS_SEED_ADMIN_PASSWORD=%s\n'              "${CMS_ADMIN_PW:-}"
+            printf 'ServiceAuth__EasyHmsServiceKey=%s\n'       "${EASYHMS_SVC_KEY:-}"
           } > "$ENVFILE"
 
       - name: Copy prod.env to Prod VM

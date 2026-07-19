@@ -17,11 +17,34 @@ public class HospitalDetails
     public int TotalPatients { get; set; }
     public DateTime RegisteredOn { get; set; }
     public string Status { get; set; } = "Active";
-    public string SubscriptionMode { get; set; } = string.Empty;
-    public string PaymentMode { get; set; } = string.Empty;
+
+    // Subscription — same summary as the list, plus the full timeline and payment ledger for
+    // this specific hospital.
+    public string? SubscriptionPlanName { get; set; }
+    public string? SubscriptionStatus { get; set; }
+    public int? SubscriptionDaysRemaining { get; set; }
+    public bool SubscriptionIsEnterprise { get; set; }
+    public DateTime? TrialStartDate { get; set; }
+    public DateTime? TrialEndDate { get; set; }
+    public DateTime? SubscriptionStartDate { get; set; }
+    public DateTime? SubscriptionEndDate { get; set; }
+    public List<HospitalPaymentHistoryItem> PaymentHistory { get; set; } = new();
+
     public List<HospitalUserInfo> Users { get; set; } = new();
     public List<DoctorInfo> Doctors { get; set; } = new();
     public HospitalStats Stats { get; set; } = new();
+}
+
+public class HospitalPaymentHistoryItem
+{
+    public string PlanName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string Reference { get; set; } = string.Empty;
+    public string? PaymentMode { get; set; }
+    public string Status { get; set; } = string.Empty; // PendingApproval, Approved, Rejected
+    public DateTime SubmittedAt { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public string? RejectionReason { get; set; }
 }
 
 public class HospitalUserInfo

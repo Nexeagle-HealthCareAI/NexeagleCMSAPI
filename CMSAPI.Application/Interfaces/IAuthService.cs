@@ -10,13 +10,17 @@ public interface IAuthService
     Task<MeResponse?> GetMeAsync(Guid userId);
     Task<bool> ChangePasswordAsync(Guid userId, ChangePasswordRequest request);
 
-    /// <summary>Generate and dispatch a 6-digit OTP to the user's email or phone.</summary>
-    Task<OtpRequestResponse> RequestOtpAsync(OtpRequest request, string? ipAddress, bool isDevelopment);
+    /// <summary>Generate and dispatch a 6-digit OTP to the user's email or phone. Null when no
+    /// account matches the identifier -- the controller surfaces this as a 404 so the login
+    /// screen can tell the user their email/phone isn't registered, rather than silently
+    /// advancing to an OTP-entry screen for a code that was never generated.</summary>
+    Task<OtpRequestResponse?> RequestOtpAsync(OtpRequest request, string? ipAddress, bool isDevelopment);
     /// <summary>Verify the OTP and, if valid, issue a full session (same response as Login).</summary>
     Task<LoginResponse?> VerifyOtpLoginAsync(OtpLoginRequest request, string? ipAddress);
 
-    /// <summary>Send a password-reset OTP to the user's email or phone.</summary>
-    Task<OtpRequestResponse> RequestForgotPasswordOtpAsync(ForgotPasswordRequest request, string? ipAddress, bool isDevelopment);
+    /// <summary>Send a password-reset OTP to the user's email or phone. Null when no account
+    /// matches (see RequestOtpAsync).</summary>
+    Task<OtpRequestResponse?> RequestForgotPasswordOtpAsync(ForgotPasswordRequest request, string? ipAddress, bool isDevelopment);
     /// <summary>Verify the reset OTP and, if valid, change the password. All existing sessions are revoked.</summary>
     Task<bool> ResetPasswordWithOtpAsync(OtpResetPasswordRequest request);
 }

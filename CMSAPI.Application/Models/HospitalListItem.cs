@@ -15,4 +15,11 @@ public class HospitalListItem
     public int TotalPatients { get; set; }
     public DateTime RegisteredOn { get; set; }
     public string Status { get; set; } = "Active"; // Active | Pending
+
+    // Subscription summary — null when the hospital has no HospitalSubscription row at all
+    // (shouldn't normally happen; every hospital gets a Trial row on registration).
+    public string? SubscriptionPlanName { get; set; }
+    public string? SubscriptionStatus { get; set; } // Trial, Active, Expired, Blocked, Rejected, Pending, PendingApproval
+    public int? SubscriptionDaysRemaining { get; set; }
+    public bool SubscriptionIsEnterprise { get; set; }
 }

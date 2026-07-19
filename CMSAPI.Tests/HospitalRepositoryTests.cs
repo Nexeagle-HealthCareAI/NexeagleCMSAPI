@@ -19,11 +19,20 @@ namespace CMSAPI.Tests
             return new AppDbContext(options);
         }
 
+        private CmsDbContext GetCmsDbContext()
+        {
+            var options = new DbContextOptionsBuilder<CmsDbContext>()
+                .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+                .Options;
+            return new CmsDbContext(options);
+        }
+
         [Fact]
         public async Task GetHospitalByIdAsync_ReturnsUserLoginDetails()
         {
             // Arrange
             using var context = GetDbContext();
+            using var cmsContext = GetCmsDbContext();
             
             var hospitalId = Guid.NewGuid();
             var userId = Guid.NewGuid();
@@ -120,7 +129,7 @@ namespace CMSAPI.Tests
             
             await context.SaveChangesAsync();
 
-            var repository = new HospitalRepository(context);
+            var repository = new HospitalRepository(context, cmsContext);
 
             // Act
             var result = await repository.GetHospitalByIdAsync(hospitalId);
@@ -143,6 +152,7 @@ namespace CMSAPI.Tests
         {
             // Arrange
             using var context = GetDbContext();
+            using var cmsContext = GetCmsDbContext();
             
             var hospitalId = Guid.NewGuid();
             var userId = Guid.NewGuid();
@@ -209,7 +219,7 @@ namespace CMSAPI.Tests
             
             await context.SaveChangesAsync();
 
-            var repository = new HospitalRepository(context);
+            var repository = new HospitalRepository(context, cmsContext);
 
             // Act
             var result = await repository.GetHospitalByIdAsync(hospitalId);
