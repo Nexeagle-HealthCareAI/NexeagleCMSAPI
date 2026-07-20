@@ -47,4 +47,15 @@ public class DoctorsController : ControllerBase
         if (!result.Success) return BadRequest(new { message = result.Message });
         return Ok(result);
     }
+
+    // Campaign-style bulk action — applies the same featured/delisted/discount change to many
+    // doctors in one save. Route is unambiguous against {doctorId:guid}/marketing above since
+    // "bulk" never matches the guid constraint.
+    [HttpPut("bulk/marketing")]
+    public async Task<IActionResult> BulkUpdateDoctorMarketing([FromBody] BulkUpdateDoctorMarketingRequest request)
+    {
+        var result = await _service.BulkUpdateDoctorMarketingAsync(request);
+        if (!result.Success) return BadRequest(new { message = result.Message });
+        return Ok(result);
+    }
 }

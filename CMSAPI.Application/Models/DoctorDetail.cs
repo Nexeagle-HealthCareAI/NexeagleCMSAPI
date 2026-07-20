@@ -46,6 +46,7 @@ public class DoctorHospitalAffiliation
 {
     public Guid HospitalId { get; set; }
     public string? HospitalName { get; set; }
+    public string? HospitalAddress { get; set; }
     public string? DepartmentName { get; set; }
     // Same dbo.DoctorFees rows easyHMSWeb's Configuration > Doctor Fees edits, hospital-scoped.
     public decimal? OpdConsultFee { get; set; }

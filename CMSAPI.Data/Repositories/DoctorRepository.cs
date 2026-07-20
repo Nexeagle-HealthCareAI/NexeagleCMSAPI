@@ -20,6 +20,15 @@ namespace CMSAPI.Data.Repositories
             _db = db;
         }
 
+        // Same convention easyHMSWeb's opdDocuments.ts/TokenPrintModal.tsx use for a display-ready
+        // hospital address: join whichever of Location/City/State/Pincode are non-empty.
+        private static string? FormatAddress(string? location, string? city, string? state, string? pincode)
+        {
+            var parts = new[] { location, city, state, pincode }.Where(p => !string.IsNullOrWhiteSpace(p));
+            var joined = string.Join(", ", parts);
+            return string.IsNullOrWhiteSpace(joined) ? null : joined;
+        }
+
         public async Task<PagedResult<DoctorListItem>> GetDoctorsAsync(int page, int limit, string? search, string? sortBy, string? sortDir)
         {
             if (page < 1) page = 1;
@@ -83,10 +92,10 @@ namespace CMSAPI.Data.Repositories
                 .ToDictionary(g => g.Key, g => g.OrderBy(p => p.HospitalID).First().HospitalID);
 
             var hospitalIdsUsed = doctorHospital.Values.Distinct().ToList();
-            var hospitalNameById = await _db.Hospitals
+            var hospitalById = await _db.Hospitals
                 .Where(h => hospitalIdsUsed.Contains(h.HospitalID))
-                .Select(h => new { h.HospitalID, h.Name })
-                .ToDictionaryAsync(h => h.HospitalID, h => h.Name);
+                .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode })
+                .ToDictionaryAsync(h => h.HospitalID);
 
             var userIds = items.Select(d => d.UserID).Distinct().ToList();
             var nameByUser = await _db.UserProfiles
@@ -111,12 +120,14 @@ namespace CMSAPI.Data.Repositories
             var projected = items.Select(d =>
             {
                 var hasHospital = doctorHospital.TryGetValue(d.DoctorID, out var hospitalId);
+                var hospital = hasHospital && hospitalById.TryGetValue(hospitalId, out var h) ? h : null;
                 return new DoctorListItem
                 {
                     DoctorId = d.DoctorID,
                     FullName = nameByUser.TryGetValue(d.UserID, out var n) ? n : null,
                     HospitalId = hasHospital ? hospitalId : Guid.Empty,
-                    HospitalName = hasHospital && hospitalNameById.TryGetValue(hospitalId, out var hn) ? hn : null,
+                    HospitalName = hospital?.Name,
+                    HospitalAddress = hospital != null ? FormatAddress(hospital.Location, hospital.City, hospital.State, hospital.Pincode) : null,
                     DepartmentName = d.PrimaryDepartmentID.HasValue && deptNameById.TryGetValue(d.PrimaryDepartmentID.Value, out var dn) ? dn : null,
                     OpdConsultFee = hasHospital && feeLookup.TryGetValue((d.DoctorID, hospitalId), out var fee) ? fee : (decimal?)null,
                     IsPubliclyListed = d.IsPubliclyListed,
@@ -165,9 +176,10 @@ namespace CMSAPI.Data.Repositories
             var hospitalIds = affiliations.Select(a => a.HospitalID).Distinct().ToList();
             var departmentIds = affiliations.Select(a => a.DepartmentID).Distinct().ToList();
 
-            var hospitalNameById = await _db.Hospitals.AsNoTracking()
+            var hospitalById = await _db.Hospitals.AsNoTracking()
                 .Where(h => hospitalIds.Contains(h.HospitalID))
-                .ToDictionaryAsync(h => h.HospitalID, h => h.Name);
+                .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode })
+                .ToDictionaryAsync(h => h.HospitalID);
             var departmentNameById = await _db.Departments.AsNoTracking()
                 .Where(dept => departmentIds.Contains(dept.DepartmentID))
                 .ToDictionaryAsync(dept => dept.DepartmentID, dept => dept.Name);
@@ -194,10 +206,12 @@ namespace CMSAPI.Data.Repositories
             {
                 var first = g.First();
                 feesByHospital.TryGetValue(g.Key, out var hospitalFees);
+                hospitalById.TryGetValue(g.Key, out var hospital);
                 return new DoctorHospitalAffiliation
                 {
                     HospitalId = g.Key,
-                    HospitalName = hospitalNameById.TryGetValue(g.Key, out var hn) ? hn : null,
+                    HospitalName = hospital?.Name,
+                    HospitalAddress = hospital != null ? FormatAddress(hospital.Location, hospital.City, hospital.State, hospital.Pincode) : null,
                     DepartmentName = departmentNameById.TryGetValue(first.DepartmentID, out var dn) ? dn : null,
                     OpdConsultFee = hospitalFees?.FirstOrDefault(f => f.FeeType == "OPD_CONSULT")?.Amount,
                     IpdVisitFee = hospitalFees?.FirstOrDefault(f => f.FeeType == "IPD_VISIT")?.Amount,
@@ -261,6 +275,48 @@ namespace CMSAPI.Data.Repositories
             await _db.SaveChangesAsync();
 
             return new UpdateDoctorMarketingResult { Success = true, Message = "Doctor marketing settings saved." };
+        }
+
+        public async Task<BulkUpdateDoctorMarketingResult> BulkUpdateDoctorMarketingAsync(BulkUpdateDoctorMarketingRequest request)
+        {
+            var doctorIds = request.DoctorIds.Distinct().ToList();
+            if (doctorIds.Count == 0)
+                return new BulkUpdateDoctorMarketingResult { Success = false, Message = "No doctors selected." };
+
+            if (request.UpdateDiscount)
+            {
+                if (request.DiscountPercent.HasValue && (request.DiscountPercent.Value < 0 || request.DiscountPercent.Value > 100))
+                    return new BulkUpdateDoctorMarketingResult { Success = false, Message = "Discount percent must be between 0 and 100." };
+
+                if (request.DiscountStartAt.HasValue && request.DiscountEndAt.HasValue && request.DiscountEndAt.Value < request.DiscountStartAt.Value)
+                    return new BulkUpdateDoctorMarketingResult { Success = false, Message = "Discount end date cannot be before the start date." };
+            }
+
+            var doctors = await _db.Doctors.Where(d => doctorIds.Contains(d.DoctorID)).ToListAsync();
+            var foundIds = doctors.Select(d => d.DoctorID).ToHashSet();
+            var notFoundIds = doctorIds.Where(id => !foundIds.Contains(id)).ToList();
+
+            foreach (var doctor in doctors)
+            {
+                if (request.IsFeatured.HasValue) doctor.IsFeatured = request.IsFeatured.Value;
+                if (request.IsDelistedByAdmin.HasValue) doctor.IsDelistedByAdmin = request.IsDelistedByAdmin.Value;
+                if (request.UpdateDiscount)
+                {
+                    doctor.DiscountPercent = request.DiscountPercent;
+                    doctor.DiscountStartAt = request.DiscountStartAt;
+                    doctor.DiscountEndAt = request.DiscountEndAt;
+                }
+            }
+
+            await _db.SaveChangesAsync();
+
+            return new BulkUpdateDoctorMarketingResult
+            {
+                Success = true,
+                Message = $"Updated {doctors.Count} doctor(s).",
+                UpdatedCount = doctors.Count,
+                NotFoundDoctorIds = notFoundIds,
+            };
         }
     }
 }
