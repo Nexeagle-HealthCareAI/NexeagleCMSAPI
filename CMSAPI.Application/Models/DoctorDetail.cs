@@ -36,6 +36,8 @@ public class DoctorDetail
     public DateTime? DiscountEndAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
+    // From UserAuth.LastLoginTime (UTC) — null if the doctor has never logged in.
+    public DateTime? LastLoginTime { get; set; }
 
     public List<DoctorHospitalAffiliation> Hospitals { get; set; } = new();
 }

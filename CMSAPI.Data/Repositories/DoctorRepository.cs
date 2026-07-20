@@ -92,6 +92,9 @@ namespace CMSAPI.Data.Repositories
             var nameByUser = await _db.UserProfiles
                 .Where(up => userIds.Contains(up.UserID))
                 .ToDictionaryAsync(up => up.UserID, up => up.FullName);
+            var lastLoginByUser = await _db.UserAuths
+                .Where(ua => userIds.Contains(ua.UserID))
+                .ToDictionaryAsync(ua => ua.UserID, ua => ua.LastLoginTime);
 
             var deptIds = items.Where(d => d.PrimaryDepartmentID.HasValue).Select(d => d.PrimaryDepartmentID!.Value).Distinct().ToList();
             var deptNameById = await _db.Departments
@@ -122,6 +125,7 @@ namespace CMSAPI.Data.Repositories
                     DiscountPercent = d.DiscountPercent,
                     DiscountStartAt = d.DiscountStartAt,
                     DiscountEndAt = d.DiscountEndAt,
+                    LastLoginTime = lastLoginByUser.TryGetValue(d.UserID, out var lastLogin) ? lastLogin : null,
                 };
             }).ToList();
 
@@ -147,6 +151,10 @@ namespace CMSAPI.Data.Repositories
             var user = await _db.Users.AsNoTracking()
                 .Where(u => u.UserID == doctor.UserID)
                 .Select(u => new { u.MobileNumber, u.Email })
+                .FirstOrDefaultAsync();
+            var lastLoginTime = await _db.UserAuths.AsNoTracking()
+                .Where(ua => ua.UserID == doctor.UserID)
+                .Select(ua => ua.LastLoginTime)
                 .FirstOrDefaultAsync();
 
             var affiliations = await _db.DoctorDepartments.AsNoTracking()
@@ -227,6 +235,7 @@ namespace CMSAPI.Data.Repositories
                 DiscountStartAt = doctor.DiscountStartAt,
                 DiscountEndAt = doctor.DiscountEndAt,
                 CreatedAt = doctor.CreatedAt,
+                LastLoginTime = lastLoginTime,
                 Hospitals = hospitalAffiliations,
             };
         }

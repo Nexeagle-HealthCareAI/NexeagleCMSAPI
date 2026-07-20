@@ -18,6 +18,8 @@ public class DoctorListItem
     public decimal? DiscountPercent { get; set; }
     public DateTime? DiscountStartAt { get; set; }
     public DateTime? DiscountEndAt { get; set; }
+    // From UserAuth.LastLoginTime (UTC) — null if the doctor has never logged in.
+    public DateTime? LastLoginTime { get; set; }
 }
 
 // Full-replace write model — whatever this says is exactly what gets set (including explicit
