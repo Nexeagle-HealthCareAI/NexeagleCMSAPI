@@ -138,7 +138,11 @@ var corsOrigins = new List<string>
     "http://localhost:5174",
     "http://localhost:5175",
     "https://nexeagle.com",
-    "https://cms.nexeagle.com"
+    "https://cms.nexeagle.com",
+    // NexEagleWebsite's actual public domain (the LiveChat widget embedded on its
+    // /business, /services, /products, /contact, /careers pages connects to this API's
+    // /chathub from here) — was missing entirely, silently breaking live chat in prod.
+    "https://1hms.nexeagle.com"
 };
 // Additional origins injected at deploy time (e.g. VM IPs for dev/prod)
 var extraOrigins = builder.Configuration["Cors:AllowedOrigins"];
