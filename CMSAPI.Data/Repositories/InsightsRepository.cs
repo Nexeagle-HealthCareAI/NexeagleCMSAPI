@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
+using CMSAPI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace CMSAPI.Data.Repositories
@@ -12,11 +14,37 @@ namespace CMSAPI.Data.Repositories
     {
         private const string NexeaglePublicSource = "NEXEAGLE_PUBLIC";
 
+        private const string EventType_LoginInitiated = "login_initiated";
+        private const string EventType_OtpSent = "otp_sent";
+        private const string EventType_OtpVerified = "otp_verified";
+        private const string EventType_SearchPerformed = "search_performed";
+        private const string EventType_DoctorProfileViewed = "doctor_profile_viewed";
+        private const string EventType_BookingStepReached = "booking_step_reached";
+
         private readonly AppDbContext _db;
 
         public InsightsRepository(AppDbContext db)
         {
             _db = db;
+        }
+
+        private static IQueryable<AnalyticsEvent> ApplyDateRange(IQueryable<AnalyticsEvent> query, DateOnly? from, DateOnly? to)
+        {
+            if (from.HasValue) query = query.Where(e => e.OccurredAt >= from.Value.ToDateTime(TimeOnly.MinValue));
+            if (to.HasValue) query = query.Where(e => e.OccurredAt < to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue));
+            return query;
+        }
+
+        private class SearchMetadata
+        {
+            public string? Query { get; set; }
+            public int? ResultsCount { get; set; }
+            public bool AiUsed { get; set; }
+        }
+
+        private class BookingStepMetadata
+        {
+            public string? Step { get; set; }
         }
 
         // "98XXXXXX10" — keeps the first 2 + last 2 digits, masks the rest. Short numbers (<=4
@@ -212,6 +240,235 @@ namespace CMSAPI.Data.Repositories
                 Data = pageItems,
                 Pagination = new PaginationInfo { CurrentPage = page, TotalPages = totalPages, TotalItems = totalItems, ItemsPerPage = limit }
             };
+        }
+
+        // Grouped by SessionId — one browser session is one login journey (open form -> send OTP
+        // -> verify), which is what makes "bounced at verification" and Time-to-Authenticate
+        // meaningful (vs. counting raw events, which double-counts a resent OTP).
+        public async Task<AuthFunnelStats> GetAuthFunnelStatsAsync(DateOnly? from, DateOnly? to)
+        {
+            var eventsQuery = ApplyDateRange(
+                _db.AnalyticsEvents.AsNoTracking().Where(e =>
+                    e.EventType == EventType_LoginInitiated || e.EventType == EventType_OtpSent || e.EventType == EventType_OtpVerified),
+                from, to);
+            var events = await eventsQuery
+                .Select(e => new { e.EventType, e.SessionId, e.Mobile, e.OccurredAt })
+                .ToListAsync();
+
+            var visitQuery = _db.WebsiteVisits.AsNoTracking().AsQueryable();
+            if (from.HasValue) visitQuery = visitQuery.Where(v => v.VisitedAt >= from.Value.ToDateTime(TimeOnly.MinValue));
+            if (to.HasValue) visitQuery = visitQuery.Where(v => v.VisitedAt < to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue));
+            var totalVisitorSessions = await visitQuery.Where(v => v.SessionId != null).Select(v => v.SessionId).Distinct().CountAsync();
+
+            int loginInitiated = 0, otpSent = 0, otpVerified = 0;
+            var timeToAuthSeconds = new List<double>();
+
+            foreach (var grp in events.Where(e => e.SessionId != null).GroupBy(e => e.SessionId))
+            {
+                var sentEvt = grp.Where(e => e.EventType == EventType_OtpSent).OrderBy(e => e.OccurredAt).FirstOrDefault();
+                var verifiedEvt = grp.Where(e => e.EventType == EventType_OtpVerified).OrderBy(e => e.OccurredAt).FirstOrDefault();
+
+                if (grp.Any(e => e.EventType == EventType_LoginInitiated)) loginInitiated++;
+                if (sentEvt != null) otpSent++;
+                if (verifiedEvt != null)
+                {
+                    otpVerified++;
+                    if (sentEvt != null && verifiedEvt.OccurredAt >= sentEvt.OccurredAt)
+                        timeToAuthSeconds.Add((verifiedEvt.OccurredAt - sentEvt.OccurredAt).TotalSeconds);
+                }
+            }
+
+            return new AuthFunnelStats
+            {
+                TotalVisitorSessions = totalVisitorSessions,
+                LoginInitiatedSessions = loginInitiated,
+                OtpSentSessions = otpSent,
+                OtpVerifiedSessions = otpVerified,
+                LoginInitiationRatePct = totalVisitorSessions > 0 ? Math.Round(loginInitiated * 100.0 / totalVisitorSessions, 1) : 0,
+                AuthCompletionRatePct = otpSent > 0 ? Math.Round(otpVerified * 100.0 / otpSent, 1) : 0,
+                AvgTimeToAuthenticateSeconds = timeToAuthSeconds.Count > 0 ? Math.Round(timeToAuthSeconds.Average(), 1) : (double?)null,
+            };
+        }
+
+        public async Task<PagedResult<AuthFunnelAttemptItem>> GetAuthFunnelAttemptsAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search)
+        {
+            if (page < 1) page = 1;
+            if (limit < 1) limit = 10;
+
+            var eventsQuery = ApplyDateRange(
+                _db.AnalyticsEvents.AsNoTracking().Where(e =>
+                    e.EventType == EventType_OtpSent || e.EventType == EventType_OtpVerified),
+                from, to);
+            var events = await eventsQuery
+                .Select(e => new { e.EventType, e.SessionId, e.Mobile, e.OccurredAt, e.Country, e.Region, e.City })
+                .ToListAsync();
+
+            var attempts = new List<(string Mobile, AuthFunnelAttemptItem Item)>();
+            foreach (var grp in events.Where(e => e.SessionId != null).GroupBy(e => e.SessionId))
+            {
+                var sentEvt = grp.Where(e => e.EventType == EventType_OtpSent).OrderBy(e => e.OccurredAt).FirstOrDefault();
+                var verifiedEvt = grp.Where(e => e.EventType == EventType_OtpVerified).OrderBy(e => e.OccurredAt).FirstOrDefault();
+                var mobile = verifiedEvt?.Mobile ?? sentEvt?.Mobile;
+                if (string.IsNullOrWhiteSpace(mobile)) continue;
+
+                var regionSource = verifiedEvt ?? sentEvt!;
+                double? timeToAuth = null;
+                if (sentEvt != null && verifiedEvt != null && verifiedEvt.OccurredAt >= sentEvt.OccurredAt)
+                    timeToAuth = Math.Round((verifiedEvt.OccurredAt - sentEvt.OccurredAt).TotalSeconds, 1);
+
+                attempts.Add((mobile, new AuthFunnelAttemptItem
+                {
+                    MobileMasked = MaskMobile(mobile),
+                    OtpSentAt = sentEvt?.OccurredAt,
+                    VerifiedAt = verifiedEvt?.OccurredAt,
+                    Outcome = verifiedEvt != null ? "Verified" : "Bounced",
+                    TimeToAuthenticateSeconds = timeToAuth,
+                    Country = regionSource.Country,
+                    Region = regionSource.Region,
+                    City = regionSource.City,
+                }));
+            }
+
+            IEnumerable<(string Mobile, AuthFunnelAttemptItem Item)> filtered = attempts;
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim();
+                filtered = filtered.Where(a => a.Mobile.Contains(s));
+            }
+
+            var sortedList = filtered
+                .OrderByDescending(a => a.Item.VerifiedAt ?? a.Item.OtpSentAt ?? DateTime.MinValue)
+                .Select(a => a.Item)
+                .ToList();
+            var totalItems = sortedList.Count;
+            var totalPages = (int)Math.Ceiling(totalItems / (double)limit);
+            var pageItems = sortedList.Skip((page - 1) * limit).Take(limit).ToList();
+
+            return new PagedResult<AuthFunnelAttemptItem>
+            {
+                Data = pageItems,
+                Pagination = new PaginationInfo { CurrentPage = page, TotalPages = totalPages, TotalItems = totalItems, ItemsPerPage = limit }
+            };
+        }
+
+        public async Task<BookingFunnelStats> GetBookingFunnelStatsAsync(DateOnly? from, DateOnly? to)
+        {
+            var query = ApplyDateRange(
+                _db.AnalyticsEvents.AsNoTracking().Where(e =>
+                    e.EventType == EventType_SearchPerformed || e.EventType == EventType_DoctorProfileViewed || e.EventType == EventType_BookingStepReached),
+                from, to);
+            var events = await query
+                .Select(e => new { e.EventType, e.SpecialtyId, e.MetadataJson })
+                .ToListAsync();
+
+            var searches = events.Where(e => e.EventType == EventType_SearchPerformed).ToList();
+            var profileViews = events.Where(e => e.EventType == EventType_DoctorProfileViewed).ToList();
+            var bookingSteps = events.Where(e => e.EventType == EventType_BookingStepReached).ToList();
+
+            var stepCounts = bookingSteps
+                .Select(e => ParseJson<BookingStepMetadata>(e.MetadataJson)?.Step)
+                .Where(step => !string.IsNullOrWhiteSpace(step))
+                .GroupBy(step => step)
+                .ToDictionary(g => g.Key!, g => g.Count());
+
+            var doneEvents = bookingSteps.Where(e =>
+                string.Equals(ParseJson<BookingStepMetadata>(e.MetadataJson)?.Step, "done", StringComparison.OrdinalIgnoreCase)).ToList();
+
+            var specialtyIds = new HashSet<string>(
+                searches.Select(e => e.SpecialtyId)
+                    .Concat(profileViews.Select(e => e.SpecialtyId))
+                    .Concat(doneEvents.Select(e => e.SpecialtyId))
+                    .Where(s => !string.IsNullOrWhiteSpace(s))!);
+
+            var specialtyDemand = specialtyIds.Select(sid => new SpecialtyDemandItem
+            {
+                SpecialtyId = sid,
+                SearchCount = searches.Count(e => e.SpecialtyId == sid),
+                ProfileViewCount = profileViews.Count(e => e.SpecialtyId == sid),
+                CompletedBookingCount = doneEvents.Count(e => e.SpecialtyId == sid),
+            })
+            .OrderByDescending(s => s.ProfileViewCount)
+            .ToList();
+
+            return new BookingFunnelStats
+            {
+                SearchCount = searches.Count,
+                ProfileViewCount = profileViews.Count,
+                SearchToViewRatePct = searches.Count > 0 ? Math.Round(profileViews.Count * 100.0 / searches.Count, 1) : 0,
+                VisitStepCount = stepCounts.TryGetValue("visit", out var v) ? v : 0,
+                DetailsStepCount = stepCounts.TryGetValue("details", out var d) ? d : 0,
+                DoneStepCount = stepCounts.TryGetValue("done", out var done) ? done : 0,
+                SpecialtyDemand = specialtyDemand,
+            };
+        }
+
+        public async Task<PagedResult<SearchLogItem>> GetSearchLogAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir)
+        {
+            if (page < 1) page = 1;
+            if (limit < 1) limit = 10;
+
+            var query = ApplyDateRange(
+                _db.AnalyticsEvents.AsNoTracking().Where(e => e.EventType == EventType_SearchPerformed),
+                from, to);
+            var events = await query
+                .Select(e => new { e.OccurredAt, e.SpecialtyId, e.Country, e.Region, e.City, e.MetadataJson })
+                .ToListAsync();
+
+            var items = events.Select(e =>
+            {
+                var meta = ParseJson<SearchMetadata>(e.MetadataJson);
+                return new SearchLogItem
+                {
+                    OccurredAt = e.OccurredAt,
+                    Query = meta?.Query,
+                    SpecialtyId = e.SpecialtyId,
+                    ResultsCount = meta?.ResultsCount,
+                    AiUsed = meta?.AiUsed ?? false,
+                    Country = e.Country,
+                    Region = e.Region,
+                    City = e.City,
+                };
+            });
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim();
+                items = items.Where(i =>
+                    (i.Query != null && i.Query.Contains(s, StringComparison.OrdinalIgnoreCase))
+                    || (i.SpecialtyId != null && i.SpecialtyId.Contains(s, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            var isAsc = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
+            IOrderedEnumerable<SearchLogItem> sorted = sortBy?.ToLowerInvariant() switch
+            {
+                "resultscount" => isAsc ? items.OrderBy(i => i.ResultsCount) : items.OrderByDescending(i => i.ResultsCount),
+                "specialtyid" => isAsc ? items.OrderBy(i => i.SpecialtyId) : items.OrderByDescending(i => i.SpecialtyId),
+                _ => isAsc ? items.OrderBy(i => i.OccurredAt) : items.OrderByDescending(i => i.OccurredAt),
+            };
+
+            var sortedList = sorted.ToList();
+            var totalItems = sortedList.Count;
+            var totalPages = (int)Math.Ceiling(totalItems / (double)limit);
+            var pageItems = sortedList.Skip((page - 1) * limit).Take(limit).ToList();
+
+            return new PagedResult<SearchLogItem>
+            {
+                Data = pageItems,
+                Pagination = new PaginationInfo { CurrentPage = page, TotalPages = totalPages, TotalItems = totalItems, ItemsPerPage = limit }
+            };
+        }
+
+        private static T? ParseJson<T>(string? json) where T : class
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try
+            {
+                return JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

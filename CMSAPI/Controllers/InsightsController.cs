@@ -52,4 +52,41 @@ public class InsightsController : ControllerBase
         var result = await _service.GetOnlineAppointmentsAsync(page, limit, from, to, search, sortBy, sortDir, source);
         return Ok(result);
     }
+
+    [HasPermission("insights.view")]
+    [HttpGet("auth-funnel")]
+    public async Task<IActionResult> GetAuthFunnelStats([FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null)
+    {
+        var result = await _service.GetAuthFunnelStatsAsync(from, to);
+        return Ok(result);
+    }
+
+    [HasPermission("insights.view")]
+    [HttpGet("auth-funnel/attempts")]
+    public async Task<IActionResult> GetAuthFunnelAttempts(
+        [FromQuery] int page = 1, [FromQuery] int limit = 10,
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] string? search = null)
+    {
+        var result = await _service.GetAuthFunnelAttemptsAsync(page, limit, from, to, search);
+        return Ok(result);
+    }
+
+    [HasPermission("insights.view")]
+    [HttpGet("booking-funnel")]
+    public async Task<IActionResult> GetBookingFunnelStats([FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null)
+    {
+        var result = await _service.GetBookingFunnelStatsAsync(from, to);
+        return Ok(result);
+    }
+
+    [HasPermission("insights.view")]
+    [HttpGet("searches")]
+    public async Task<IActionResult> GetSearchLog(
+        [FromQuery] int page = 1, [FromQuery] int limit = 10,
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null,
+        [FromQuery] string? search = null, [FromQuery] string? sortBy = null, [FromQuery] string? sortDir = null)
+    {
+        var result = await _service.GetSearchLogAsync(page, limit, from, to, search, sortBy, sortDir);
+        return Ok(result);
+    }
 }
