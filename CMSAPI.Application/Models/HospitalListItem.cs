@@ -13,6 +13,8 @@ public class HospitalListItem
     public string City { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
     public int TotalPatients { get; set; }
+    public int TotalDoctors { get; set; }
+    public int TotalNonDoctorUsers { get; set; }
     public DateTime RegisteredOn { get; set; }
     public string Status { get; set; } = "Active"; // Active | Pending
 

@@ -14,8 +14,8 @@ public class HospitalService : IHospitalService
         _repo = repo;
     }
 
-    public Task<PagedResult<HospitalListItem>> GetHospitalsAsync(int page, int limit, string? search, string? sortBy, string? sortDir)
-        => _repo.GetHospitalsAsync(page, limit, search, sortBy, sortDir);
+    public Task<PagedResult<HospitalListItem>> GetHospitalsAsync(int page, int limit, string? search, string? sortBy, string? sortDir, string? status = null, string? subscriptionStatus = null)
+        => _repo.GetHospitalsAsync(page, limit, search, sortBy, sortDir, status, subscriptionStatus);
 
     public Task<HospitalDetails?> GetHospitalByIdAsync(Guid id)
         => _repo.GetHospitalByIdAsync(id);

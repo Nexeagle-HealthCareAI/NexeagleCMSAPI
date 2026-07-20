@@ -21,9 +21,12 @@ public class HospitalsController : ControllerBase
 
     [HasPermission("onboarded-hospitals.view")]
     [HttpGet]
-    public async Task<IActionResult> GetHospitals([FromQuery] int page = 1, [FromQuery] int limit = 10, [FromQuery] string? search = null, [FromQuery] string? sortBy = null, [FromQuery] string? sortDir = null)
+    public async Task<IActionResult> GetHospitals(
+        [FromQuery] int page = 1, [FromQuery] int limit = 10, [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = null, [FromQuery] string? sortDir = null,
+        [FromQuery] string? status = null, [FromQuery] string? subscriptionStatus = null)
     {
-        var result = await _service.GetHospitalsAsync(page, limit, search, sortBy, sortDir);
+        var result = await _service.GetHospitalsAsync(page, limit, search, sortBy, sortDir, status, subscriptionStatus);
         return Ok(result);
     }
 

@@ -27,7 +27,7 @@ public class HospitalServiceTests
             Data = new List<HospitalListItem> { new HospitalListItem { Name = "Test" } },
             Pagination = new PaginationInfo { TotalItems = 1 }
         };
-        _mockRepo.Setup(r => r.GetHospitalsAsync(1, 10, null, null, null)).ReturnsAsync(paged);
+        _mockRepo.Setup(r => r.GetHospitalsAsync(1, 10, null, null, null, null, null)).ReturnsAsync(paged);
 
         // Act
         var result = await _service.GetHospitalsAsync(1, 10, null, null, null);
@@ -35,7 +35,7 @@ public class HospitalServiceTests
         // Assert
         Assert.NotNull(result);
         Assert.Single(result.Data);
-        _mockRepo.Verify(r => r.GetHospitalsAsync(1, 10, null, null, null), Times.Once);
+        _mockRepo.Verify(r => r.GetHospitalsAsync(1, 10, null, null, null, null, null), Times.Once);
     }
 
     [Fact]
