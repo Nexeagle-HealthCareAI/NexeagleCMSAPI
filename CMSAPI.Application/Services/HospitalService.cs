@@ -1,5 +1,6 @@
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
+using System;
 using System.Threading.Tasks;
 
 namespace CMSAPI.Application.Services;
@@ -18,4 +19,7 @@ public class HospitalService : IHospitalService
 
     public Task<HospitalDetails?> GetHospitalByIdAsync(Guid id)
         => _repo.GetHospitalByIdAsync(id);
+
+    public Task<HospitalAppointmentSourceStats> GetAppointmentSourceStatsAsync(Guid hospitalId, DateOnly? from, DateOnly? to)
+        => _repo.GetAppointmentSourceStatsAsync(hospitalId, from, to);
 }

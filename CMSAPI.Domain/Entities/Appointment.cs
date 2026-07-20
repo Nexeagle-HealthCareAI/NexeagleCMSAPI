@@ -22,6 +22,10 @@ public class Appointment
     public Guid? CreatedBy { get; set; }
     public string? PdfUrl { get; set; }
     public DateOnly? ValidUptoDate { get; set; }
+    // "NEXEAGLE_PUBLIC" for patient-initiated bookings via the public site, null/"INTERNAL" for
+    // everything booked by hospital staff in easyHMSWeb — the only reliable online-vs-in-hospital
+    // signal on this table.
+    public string? BookingSource { get; set; }
 
     // Navigation
     public Doctor? Doctor { get; set; }

@@ -269,6 +269,12 @@ namespace CMSAPI.Data.Repositories
                 RejectionReason = p.RejectionReason
             }).ToList();
 
+            // Doctors are also HospitalUsers (they log in too), so "other users than doctor" is
+            // everyone in the users list whose UserID isn't one of this hospital's doctor UserIDs —
+            // not a role-name string match, which would miss legacy/mislabelled role rows.
+            var doctorUserIdSet = doctors.Select(d => d.UserID).ToHashSet();
+            var nonDoctorUserCount = userIds.Count(uid => !doctorUserIdSet.Contains(uid));
+
             return new HospitalDetails
             {
                 Id = h.HospitalID,
@@ -294,7 +300,32 @@ namespace CMSAPI.Data.Repositories
                 PaymentHistory = paymentHistory,
                 Users = users,
                 Doctors = doctorInfos,
-                Stats = hospitalStats
+                Stats = hospitalStats,
+                TotalDoctors = doctorInfos.Count,
+                TotalNonDoctorUsers = nonDoctorUserCount
+            };
+        }
+
+        // Online (BookingSource == "NEXEAGLE_PUBLIC") vs hospital-booked (everything else, i.e.
+        // staff-created via easyHMSWeb — including legacy rows predating this column, which are
+        // never NEXEAGLE_PUBLIC) appointment counts for an arbitrary inclusive date range. Omitting
+        // both from/to returns all-time; passing the same date for both is the "today" preset.
+        public async Task<HospitalAppointmentSourceStats> GetAppointmentSourceStatsAsync(Guid hospitalId, DateOnly? from, DateOnly? to)
+        {
+            var query = _db.Appointments.Where(a => a.HospitalID == hospitalId);
+            if (from.HasValue) query = query.Where(a => a.ApptDate >= from.Value);
+            if (to.HasValue) query = query.Where(a => a.ApptDate <= to.Value);
+
+            var bookingSources = await query.Select(a => a.BookingSource).ToListAsync();
+
+            var online = bookingSources.Count(s => s == "NEXEAGLE_PUBLIC");
+            var total = bookingSources.Count;
+
+            return new HospitalAppointmentSourceStats
+            {
+                OnlineAppointments = online,
+                HospitalAppointments = total - online,
+                TotalAppointments = total
             };
         }
 

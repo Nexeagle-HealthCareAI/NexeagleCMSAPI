@@ -101,6 +101,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.CreatedBy).IsRequired(false);
             entity.Property(e => e.PdfUrl).HasMaxLength(500).IsRequired(false);
             entity.Property(e => e.ValidUptoDate).HasColumnType("date").IsRequired(false);
+            entity.Property(e => e.BookingSource).HasMaxLength(50).IsRequired(false);
 
             entity.HasOne(e => e.Doctor)
                   .WithMany(d => d.Appointments)

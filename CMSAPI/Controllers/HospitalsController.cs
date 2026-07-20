@@ -35,4 +35,14 @@ public class HospitalsController : ControllerBase
         if (details == null) return NotFound(new { message = "Hospital not found" });
         return Ok(details);
     }
+
+    // Online vs hospital-booked appointment counts for a date range. from/to are inclusive
+    // "yyyy-MM-dd" dates; omit both for all-time, or pass the same date for both for "today".
+    [HasPermission("hospital-details.view")]
+    [HttpGet("{id:guid}/appointment-stats")]
+    public async Task<IActionResult> GetAppointmentSourceStats([FromRoute] Guid id, [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null)
+    {
+        var stats = await _service.GetAppointmentSourceStatsAsync(id, from, to);
+        return Ok(stats);
+    }
 }

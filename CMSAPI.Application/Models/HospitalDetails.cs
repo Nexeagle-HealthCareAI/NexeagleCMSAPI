@@ -33,6 +33,21 @@ public class HospitalDetails
     public List<HospitalUserInfo> Users { get; set; } = new();
     public List<DoctorInfo> Doctors { get; set; } = new();
     public HospitalStats Stats { get; set; } = new();
+
+    // Quick counts — not date-scoped, unlike appointment source stats below.
+    public int TotalDoctors { get; set; }
+    public int TotalNonDoctorUsers { get; set; }
+}
+
+// Online vs in-hospital appointment counts for an arbitrary date range (or all-time when both
+// bounds are omitted). "Online" = BookingSource == "NEXEAGLE_PUBLIC" (booked by a patient on the
+// public site); everything else (including legacy rows with no BookingSource at all) is a
+// hospital-booked appointment, since only the public-booking path ever sets that value.
+public class HospitalAppointmentSourceStats
+{
+    public int OnlineAppointments { get; set; }
+    public int HospitalAppointments { get; set; }
+    public int TotalAppointments { get; set; }
 }
 
 public class HospitalPaymentHistoryItem
