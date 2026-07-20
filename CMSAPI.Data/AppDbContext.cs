@@ -34,6 +34,8 @@ public class AppDbContext : DbContext
     public DbSet<HospitalSubscriptionPayment> HospitalSubscriptionPayments { get; set; } = null!;
     public DbSet<BedMaster> BedMaster { get; set; } = null!;
     public DbSet<DoctorFee> DoctorFees { get; set; } = null!;
+    public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; } = null!;
+    public DbSet<WebsiteVisit> WebsiteVisits { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,6 +44,19 @@ public class AppDbContext : DbContext
             entity.ToTable("DoctorFee");
             entity.HasKey(e => e.DoctorFeeId);
             entity.Property(e => e.Amount).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<PublicPatientAuth>(entity =>
+        {
+            entity.ToTable("PublicPatientAuth");
+            entity.HasKey(e => e.Mobile);
+            entity.Property(e => e.Mobile).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<WebsiteVisit>(entity =>
+        {
+            entity.ToTable("WebsiteVisits");
+            entity.HasKey(e => e.VisitId);
         });
 
         modelBuilder.Entity<Hospital>(entity =>
@@ -102,6 +117,10 @@ public class AppDbContext : DbContext
             entity.Property(e => e.PdfUrl).HasMaxLength(500).IsRequired(false);
             entity.Property(e => e.ValidUptoDate).HasColumnType("date").IsRequired(false);
             entity.Property(e => e.BookingSource).HasMaxLength(50).IsRequired(false);
+            entity.Property(e => e.BookedByMobile).HasMaxLength(20).IsRequired(false);
+            entity.Property(e => e.BookingIpAddress).HasMaxLength(64).IsRequired(false);
+            entity.Property(e => e.BookingReferrerUrl).HasMaxLength(500).IsRequired(false);
+            entity.Property(e => e.BookingUtmCampaign).HasMaxLength(200).IsRequired(false);
 
             entity.HasOne(e => e.Doctor)
                   .WithMany(d => d.Appointments)
