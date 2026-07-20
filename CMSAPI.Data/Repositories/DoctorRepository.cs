@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
@@ -128,6 +129,105 @@ namespace CMSAPI.Data.Repositories
             {
                 Data = projected,
                 Pagination = new PaginationInfo { CurrentPage = page, TotalPages = totalPages, TotalItems = totalItems, ItemsPerPage = limit }
+            };
+        }
+
+        // Full "A to Z" profile for the CMS admin detail view — every hospital this doctor is
+        // affiliated with (not the single deterministic pick GetDoctorsAsync's list row uses),
+        // each with its own department + OPD/IPD/Emergency fees.
+        public async Task<DoctorDetail?> GetDoctorDetailAsync(Guid doctorId)
+        {
+            var doctor = await _db.Doctors.AsNoTracking().FirstOrDefaultAsync(d => d.DoctorID == doctorId);
+            if (doctor == null) return null;
+
+            var userProfile = await _db.UserProfiles.AsNoTracking()
+                .Where(up => up.UserID == doctor.UserID)
+                .Select(up => new { up.FullName })
+                .FirstOrDefaultAsync();
+            var user = await _db.Users.AsNoTracking()
+                .Where(u => u.UserID == doctor.UserID)
+                .Select(u => new { u.MobileNumber, u.Email })
+                .FirstOrDefaultAsync();
+
+            var affiliations = await _db.DoctorDepartments.AsNoTracking()
+                .Where(dd => dd.DoctorID == doctorId)
+                .Select(dd => new { dd.HospitalID, dd.DepartmentID })
+                .Distinct()
+                .ToListAsync();
+            var hospitalIds = affiliations.Select(a => a.HospitalID).Distinct().ToList();
+            var departmentIds = affiliations.Select(a => a.DepartmentID).Distinct().ToList();
+
+            var hospitalNameById = await _db.Hospitals.AsNoTracking()
+                .Where(h => hospitalIds.Contains(h.HospitalID))
+                .ToDictionaryAsync(h => h.HospitalID, h => h.Name);
+            var departmentNameById = await _db.Departments.AsNoTracking()
+                .Where(dept => departmentIds.Contains(dept.DepartmentID))
+                .ToDictionaryAsync(dept => dept.DepartmentID, dept => dept.Name);
+
+            var specializations = await _db.DoctorSpecializations.AsNoTracking()
+                .Where(ds => ds.DoctorID == doctorId && ds.Specialization != null && ds.Specialization.IsActive)
+                .Select(ds => ds.Specialization!.Name)
+                .ToListAsync();
+
+            var fees = await _db.DoctorFees.AsNoTracking()
+                .Where(f => f.DoctorId == doctorId && hospitalIds.Contains(f.HospitalId) && f.IsActive
+                    && (f.FeeType == "OPD_CONSULT" || f.FeeType == "IPD_VISIT" || f.FeeType == "EMERGENCY"))
+                .ToListAsync();
+            var feesByHospital = fees.GroupBy(f => f.HospitalId).ToDictionary(g => g.Key, g => g.ToList());
+
+            var languages = string.IsNullOrWhiteSpace(doctor.LanguagesJson)
+                ? new List<string>()
+                : (JsonSerializer.Deserialize<List<string>>(doctor.LanguagesJson) ?? new List<string>());
+
+            // Group by hospital rather than iterate affiliations directly — a doctor can have more
+            // than one department row per hospital; one affiliation entry per hospital is enough here.
+            var hospitalGroups = affiliations.GroupBy(a => a.HospitalID);
+            var hospitalAffiliations = hospitalGroups.Select(g =>
+            {
+                var first = g.First();
+                feesByHospital.TryGetValue(g.Key, out var hospitalFees);
+                return new DoctorHospitalAffiliation
+                {
+                    HospitalId = g.Key,
+                    HospitalName = hospitalNameById.TryGetValue(g.Key, out var hn) ? hn : null,
+                    DepartmentName = departmentNameById.TryGetValue(first.DepartmentID, out var dn) ? dn : null,
+                    OpdConsultFee = hospitalFees?.FirstOrDefault(f => f.FeeType == "OPD_CONSULT")?.Amount,
+                    IpdVisitFee = hospitalFees?.FirstOrDefault(f => f.FeeType == "IPD_VISIT")?.Amount,
+                    EmergencyFee = hospitalFees?.FirstOrDefault(f => f.FeeType == "EMERGENCY")?.Amount,
+                };
+            }).OrderBy(h => h.HospitalName).ToList();
+
+            return new DoctorDetail
+            {
+                DoctorId = doctor.DoctorID,
+                UserId = doctor.UserID,
+                FullName = userProfile?.FullName,
+                MobileNumber = user?.MobileNumber,
+                Email = user?.Email,
+                PhotoUrl = doctor.ObjectURL,
+                LicenseNumber = doctor.LicenseNumber,
+                MedicalCouncil = doctor.MedicalCouncil,
+                RegistrationYear = doctor.RegistrationYear,
+                Qualification = doctor.Qualification,
+                ExperienceYears = doctor.ExperienceYears,
+                Bio = doctor.Bio,
+                ProfileCompletionPercent = doctor.ProfileCompletionPercent,
+                Specializations = specializations
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                Languages = languages,
+                PublicContactEmail = doctor.PublicContactEmail,
+                PublicContactPhone = doctor.PublicContactPhone,
+                IsPubliclyListed = doctor.IsPubliclyListed,
+                IsFeatured = doctor.IsFeatured,
+                IsDelistedByAdmin = doctor.IsDelistedByAdmin,
+                DiscountPercent = doctor.DiscountPercent,
+                DiscountStartAt = doctor.DiscountStartAt,
+                DiscountEndAt = doctor.DiscountEndAt,
+                CreatedAt = doctor.CreatedAt,
+                Hospitals = hospitalAffiliations,
             };
         }
 

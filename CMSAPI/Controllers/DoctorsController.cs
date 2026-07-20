@@ -30,6 +30,16 @@ public class DoctorsController : ControllerBase
         return Ok(result);
     }
 
+    // Full "A to Z" profile for the detail view — every hospital affiliation, license/council/
+    // registration, qualifications, specializations, languages, fees, and marketing status.
+    [HttpGet("{doctorId:guid}")]
+    public async Task<IActionResult> GetDoctorDetail([FromRoute] Guid doctorId)
+    {
+        var result = await _service.GetDoctorDetailAsync(doctorId);
+        if (result == null) return NotFound(new { message = "Doctor not found." });
+        return Ok(result);
+    }
+
     [HttpPut("{doctorId:guid}/marketing")]
     public async Task<IActionResult> UpdateDoctorMarketing([FromRoute] Guid doctorId, [FromBody] UpdateDoctorMarketingRequest request)
     {
