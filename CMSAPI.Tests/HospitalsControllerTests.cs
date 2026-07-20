@@ -34,10 +34,10 @@ public class HospitalsControllerTests
                 ItemsPerPage = 10
             }
         };
-        _mockService.Setup(s => s.GetHospitalsAsync(1, 10, null, null, null)).ReturnsAsync(paged);
+        _mockService.Setup(s => s.GetHospitalsAsync(1, 10, null, null, null, null, null)).ReturnsAsync(paged);
 
         // Act
-        var result = await _controller.GetHospitals(1, 10, null, null, null);
+        var result = await _controller.GetHospitals(1, 10, null, null, null, null, null);
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result);

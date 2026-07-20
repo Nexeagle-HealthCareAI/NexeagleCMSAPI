@@ -269,6 +269,12 @@ namespace CMSAPI.Data.Repositories
                 RejectionReason = p.RejectionReason
             }).ToList();
 
+            // Doctors are also HospitalUsers (they log in too), so "other users than doctor" is
+            // everyone in the users list whose UserID isn't one of this hospital's doctor UserIDs —
+            // not a role-name string match, which would miss legacy/mislabelled role rows.
+            var doctorUserIdSet = doctors.Select(d => d.UserID).ToHashSet();
+            var nonDoctorUserCount = userIds.Count(uid => !doctorUserIdSet.Contains(uid));
+
             return new HospitalDetails
             {
                 Id = h.HospitalID,
@@ -294,11 +300,36 @@ namespace CMSAPI.Data.Repositories
                 PaymentHistory = paymentHistory,
                 Users = users,
                 Doctors = doctorInfos,
-                Stats = hospitalStats
+                Stats = hospitalStats,
+                TotalDoctors = doctorInfos.Count,
+                TotalNonDoctorUsers = nonDoctorUserCount
             };
         }
 
-        public async Task<PagedResult<HospitalListItem>> GetHospitalsAsync(int page, int limit, string? search, string? sortBy, string? sortDir)
+        // Online (BookingSource == "NEXEAGLE_PUBLIC") vs hospital-booked (everything else, i.e.
+        // staff-created via easyHMSWeb — including legacy rows predating this column, which are
+        // never NEXEAGLE_PUBLIC) appointment counts for an arbitrary inclusive date range. Omitting
+        // both from/to returns all-time; passing the same date for both is the "today" preset.
+        public async Task<HospitalAppointmentSourceStats> GetAppointmentSourceStatsAsync(Guid hospitalId, DateOnly? from, DateOnly? to)
+        {
+            var query = _db.Appointments.Where(a => a.HospitalID == hospitalId);
+            if (from.HasValue) query = query.Where(a => a.ApptDate >= from.Value);
+            if (to.HasValue) query = query.Where(a => a.ApptDate <= to.Value);
+
+            var bookingSources = await query.Select(a => a.BookingSource).ToListAsync();
+
+            var online = bookingSources.Count(s => s == "NEXEAGLE_PUBLIC");
+            var total = bookingSources.Count;
+
+            return new HospitalAppointmentSourceStats
+            {
+                OnlineAppointments = online,
+                HospitalAppointments = total - online,
+                TotalAppointments = total
+            };
+        }
+
+        public async Task<PagedResult<HospitalListItem>> GetHospitalsAsync(int page, int limit, string? search, string? sortBy, string? sortDir, string? status = null, string? subscriptionStatus = null)
         {
             if (page < 1) page = 1;
             if (limit < 1) limit = 10;
@@ -314,35 +345,60 @@ namespace CMSAPI.Data.Repositories
                     (h.Email != null && h.Email.Contains(s)));
             }
 
-            var isAsc = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
-            query = sortBy?.ToLowerInvariant() switch
+            if (!string.IsNullOrWhiteSpace(status))
             {
-                "name" => isAsc ? query.OrderBy(h => h.Name) : query.OrderByDescending(h => h.Name),
-                "registeredon" => isAsc ? query.OrderBy(h => h.CreatedAt) : query.OrderByDescending(h => h.CreatedAt),
-                _ => query.OrderByDescending(h => h.CreatedAt)
-            };
+                var isActive = string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase);
+                query = query.Where(h => h.IsActive == isActive);
+            }
 
-            var totalItems = await query.LongCountAsync();
-            var totalPages = (int)Math.Ceiling(totalItems / (double)limit);
+            // Subscription effective status, doctor counts, and non-doctor user counts are all
+            // computed values (not plain columns), so filtering/sorting by them can't happen at the
+            // SQL level. Materialize every hospital matching the DB-level filters above (search +
+            // status — an admin console's hospital count is small enough for this) and do
+            // subscriptionStatus filtering + all sorting in memory, same as the detail endpoint
+            // already computes these per-hospital.
+            var matchingHospitals = await query.ToListAsync();
+            var hospitalIds = matchingHospitals.Select(h => h.HospitalID).ToList();
 
-            var items = await query
-                .Skip((page - 1) * limit)
-                .Take(limit)
-                .ToListAsync();
-
-            // Batch-fetch subscription rows for this page's hospitals (one query, not N+1) and
-            // resolve their plan names the same way the detail endpoint does.
-            var hospitalIdsOnPage = items.Select(h => h.HospitalID).ToList();
             var subsByHospital = await _db.HospitalSubscriptions
                 .AsNoTracking()
-                .Where(s => hospitalIdsOnPage.Contains(s.HospitalId))
+                .Where(s => hospitalIds.Contains(s.HospitalId))
                 .ToDictionaryAsync(s => s.HospitalId);
-            var pagePlanIds = subsByHospital.Values.Where(s => s.PlanId.HasValue).Select(s => s.PlanId!.Value);
-            var pagePlanNames = await ResolvePlanNamesAsync(pagePlanIds);
+            var allPlanIds = subsByHospital.Values.Where(s => s.PlanId.HasValue).Select(s => s.PlanId!.Value);
+            var allPlanNames = await ResolvePlanNamesAsync(allPlanIds);
             var enterprisePlanIds = await _cmsDb.EasyHmsSubscriptionPlans.Where(p => p.IsEnterprise).Select(p => p.PlanId).ToListAsync();
             var utcNow = DateTime.UtcNow;
 
-            var projected = items.Select(h =>
+            var patientCounts = await _db.PatientRegistrations
+                .Where(pr => hospitalIds.Contains(pr.HospitalID))
+                .GroupBy(pr => pr.HospitalID)
+                .Select(g => new { HospitalId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.HospitalId, x => x.Count);
+
+            // Doctors: DoctorDepartments gives the doctor-hospital affiliation; Doctors gives the
+            // UserID needed to tell doctor-users apart from everyone else in HospitalUsers.
+            var doctorPairs = await _db.DoctorDepartments
+                .Where(dd => hospitalIds.Contains(dd.HospitalID))
+                .Select(dd => new { dd.HospitalID, dd.DoctorID })
+                .Distinct()
+                .ToListAsync();
+            var doctorIdsByHospital = doctorPairs
+                .GroupBy(p => p.HospitalID)
+                .ToDictionary(g => g.Key, g => g.Select(p => p.DoctorID).ToHashSet());
+            var allDoctorIds = doctorPairs.Select(p => p.DoctorID).Distinct().ToList();
+            var doctorUserIdByDoctorId = await _db.Doctors
+                .Where(d => allDoctorIds.Contains(d.DoctorID))
+                .ToDictionaryAsync(d => d.DoctorID, d => d.UserID);
+
+            var hospitalUserPairs = await _db.HospitalUsers
+                .Where(hu => hospitalIds.Contains(hu.HospitalID))
+                .Select(hu => new { hu.HospitalID, hu.UserID })
+                .ToListAsync();
+            var userIdsByHospital = hospitalUserPairs
+                .GroupBy(p => p.HospitalID)
+                .ToDictionary(g => g.Key, g => g.Select(p => p.UserID).ToHashSet());
+
+            var projected = matchingHospitals.Select(h =>
             {
                 subsByHospital.TryGetValue(h.HospitalID, out var sub);
                 string? subStatus = null;
@@ -354,7 +410,7 @@ namespace CMSAPI.Data.Repositories
                     subStatus = sub.GetEffectiveStatus(utcNow);
                     if (sub.PlanId.HasValue)
                     {
-                        pagePlanNames.TryGetValue(sub.PlanId.Value, out subPlanName);
+                        allPlanNames.TryGetValue(sub.PlanId.Value, out subPlanName);
                         subIsEnterprise = enterprisePlanIds.Contains(sub.PlanId.Value);
                     }
                     if (subStatus == "Trial" && sub.TrialEndDate.HasValue)
@@ -362,6 +418,18 @@ namespace CMSAPI.Data.Repositories
                     else if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue)
                         subDaysRemaining = Math.Max(0, (sub.SubscriptionEndDate.Value - utcNow).Days);
                 }
+
+                doctorIdsByHospital.TryGetValue(h.HospitalID, out var doctorIdSet);
+                doctorIdSet ??= new HashSet<Guid>();
+                var doctorUserIds = doctorIdSet
+                    .Select(did => doctorUserIdByDoctorId.TryGetValue(did, out var uid) ? uid : Guid.Empty)
+                    .ToHashSet();
+
+                userIdsByHospital.TryGetValue(h.HospitalID, out var userIdSet);
+                userIdSet ??= new HashSet<Guid>();
+                var nonDoctorUserCount = userIdSet.Count(uid => !doctorUserIds.Contains(uid));
+
+                patientCounts.TryGetValue(h.HospitalID, out var patientCount);
 
                 return new HospitalListItem
                 {
@@ -373,7 +441,9 @@ namespace CMSAPI.Data.Repositories
                     Address = h.Location,
                     City = h.City,
                     State = h.State,
-                    TotalPatients = _db.PatientRegistrations.Count(pr => pr.HospitalID == h.HospitalID),
+                    TotalPatients = patientCount,
+                    TotalDoctors = doctorIdSet.Count,
+                    TotalNonDoctorUsers = nonDoctorUserCount,
                     RegisteredOn = h.CreatedAt,
                     Status = h.IsActive ? "Active" : "Pending",
                     SubscriptionPlanName = subPlanName,
@@ -381,11 +451,38 @@ namespace CMSAPI.Data.Repositories
                     SubscriptionDaysRemaining = subDaysRemaining,
                     SubscriptionIsEnterprise = subIsEnterprise
                 };
-            }).ToList();
+            });
+
+            if (!string.IsNullOrWhiteSpace(subscriptionStatus))
+            {
+                projected = string.Equals(subscriptionStatus, "None", StringComparison.OrdinalIgnoreCase)
+                    ? projected.Where(p => p.SubscriptionStatus == null)
+                    : projected.Where(p => string.Equals(p.SubscriptionStatus, subscriptionStatus, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var isAsc = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
+            IOrderedEnumerable<HospitalListItem> sorted = sortBy?.ToLowerInvariant() switch
+            {
+                "name" => isAsc ? projected.OrderBy(p => p.Name) : projected.OrderByDescending(p => p.Name),
+                "registeredon" => isAsc ? projected.OrderBy(p => p.RegisteredOn) : projected.OrderByDescending(p => p.RegisteredOn),
+                "totalpatients" => isAsc ? projected.OrderBy(p => p.TotalPatients) : projected.OrderByDescending(p => p.TotalPatients),
+                "totaldoctors" => isAsc ? projected.OrderBy(p => p.TotalDoctors) : projected.OrderByDescending(p => p.TotalDoctors),
+                "totalnondoctorusers" => isAsc ? projected.OrderBy(p => p.TotalNonDoctorUsers) : projected.OrderByDescending(p => p.TotalNonDoctorUsers),
+                "status" => isAsc ? projected.OrderBy(p => p.Status) : projected.OrderByDescending(p => p.Status),
+                "subscriptionstatus" => isAsc ? projected.OrderBy(p => p.SubscriptionStatus) : projected.OrderByDescending(p => p.SubscriptionStatus),
+                "city" => isAsc ? projected.OrderBy(p => p.City) : projected.OrderByDescending(p => p.City),
+                "contactnumber" => isAsc ? projected.OrderBy(p => p.ContactNumber) : projected.OrderByDescending(p => p.ContactNumber),
+                _ => projected.OrderByDescending(p => p.RegisteredOn)
+            };
+
+            var sortedList = sorted.ToList();
+            var totalItems = sortedList.Count;
+            var totalPages = (int)Math.Ceiling(totalItems / (double)limit);
+            var pageItems = sortedList.Skip((page - 1) * limit).Take(limit).ToList();
 
             return new PagedResult<HospitalListItem>
             {
-                Data = projected,
+                Data = pageItems,
                 Pagination = new PaginationInfo
                 {
                     CurrentPage = page,

@@ -17,6 +17,11 @@ public class Doctor
     public string? ObjectURL { get; set; }
     public Guid? PrimaryDepartmentID { get; set; }
     public bool IsPubliclyListed { get; set; }
+    // Public-facing contact + languages — same columns easyHMSAPI's Doctor.cs maps, added here
+    // for the CMS admin's full doctor-detail view.
+    public string? PublicContactEmail { get; set; }
+    public string? PublicContactPhone { get; set; }
+    public string? LanguagesJson { get; set; }
     // CMS-controlled Doctor Dekho marketing/moderation fields — see easyHMSAPI's Doctor.cs for
     // the full semantics (IsDelistedByAdmin is deliberately separate from IsPubliclyListed).
     public decimal? DiscountPercent { get; set; }
