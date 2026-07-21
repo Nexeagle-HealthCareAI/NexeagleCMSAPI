@@ -8,6 +8,6 @@ public interface IDoctorService
 {
     Task<PagedResult<DoctorListItem>> GetDoctorsAsync(int page, int limit, string? search, string? sortBy, string? sortDir);
     Task<DoctorDetail?> GetDoctorDetailAsync(Guid doctorId);
-    Task<UpdateDoctorMarketingResult> UpdateDoctorMarketingAsync(Guid doctorId, UpdateDoctorMarketingRequest request);
+    Task<UpdateDoctorMarketingResult> UpdateDoctorMarketingAsync(Guid doctorId, UpdateDoctorMarketingRequest request, Guid? actingUserId);
     Task<BulkUpdateDoctorMarketingResult> BulkUpdateDoctorMarketingAsync(BulkUpdateDoctorMarketingRequest request);
 }

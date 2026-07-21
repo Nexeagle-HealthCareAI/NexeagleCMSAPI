@@ -20,8 +20,8 @@ public class DoctorService : IDoctorService
     public Task<DoctorDetail?> GetDoctorDetailAsync(Guid doctorId)
         => _repo.GetDoctorDetailAsync(doctorId);
 
-    public Task<UpdateDoctorMarketingResult> UpdateDoctorMarketingAsync(Guid doctorId, UpdateDoctorMarketingRequest request)
-        => _repo.UpdateDoctorMarketingAsync(doctorId, request);
+    public Task<UpdateDoctorMarketingResult> UpdateDoctorMarketingAsync(Guid doctorId, UpdateDoctorMarketingRequest request, Guid? actingUserId)
+        => _repo.UpdateDoctorMarketingAsync(doctorId, request, actingUserId);
 
     public Task<BulkUpdateDoctorMarketingResult> BulkUpdateDoctorMarketingAsync(BulkUpdateDoctorMarketingRequest request)
         => _repo.BulkUpdateDoctorMarketingAsync(request);

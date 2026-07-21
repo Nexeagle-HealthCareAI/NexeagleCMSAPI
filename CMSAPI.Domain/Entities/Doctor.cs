@@ -29,6 +29,12 @@ public class Doctor
     public DateTime? DiscountEndAt { get; set; }
     public bool IsFeatured { get; set; }
     public bool IsDelistedByAdmin { get; set; }
+    // Set by a CMS admin only after manually confirming registration against the NMC's Indian
+    // Medical Register (no automated verification API exists in India). Drives the public
+    // "Verified profile" badge on Doctor Dekho.
+    public bool IsRegistrationVerified { get; set; }
+    public DateTime? RegistrationVerifiedAt { get; set; }
+    public Guid? RegistrationVerifiedByUserId { get; set; }
     public DateTime CreatedAt { get; set; }
 
     // Navigation

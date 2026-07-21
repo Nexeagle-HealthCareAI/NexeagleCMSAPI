@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
+using System.Security.Claims;
 
 using Microsoft.AspNetCore.Authorization;
 
@@ -43,7 +44,10 @@ public class DoctorsController : ControllerBase
     [HttpPut("{doctorId:guid}/marketing")]
     public async Task<IActionResult> UpdateDoctorMarketing([FromRoute] Guid doctorId, [FromBody] UpdateDoctorMarketingRequest request)
     {
-        var result = await _service.UpdateDoctorMarketingAsync(doctorId, request);
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        Guid? actingUserId = Guid.TryParse(userIdClaim, out var uid) ? uid : null;
+
+        var result = await _service.UpdateDoctorMarketingAsync(doctorId, request, actingUserId);
         if (!result.Success) return BadRequest(new { message = result.Message });
         return Ok(result);
     }
