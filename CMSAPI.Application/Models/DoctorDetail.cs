@@ -31,6 +31,8 @@ public class DoctorDetail
     public bool IsPubliclyListed { get; set; }
     public bool IsFeatured { get; set; }
     public bool IsDelistedByAdmin { get; set; }
+    public bool IsRegistrationVerified { get; set; }
+    public DateTime? RegistrationVerifiedAt { get; set; }
     public decimal? DiscountPercent { get; set; }
     public DateTime? DiscountStartAt { get; set; }
     public DateTime? DiscountEndAt { get; set; }

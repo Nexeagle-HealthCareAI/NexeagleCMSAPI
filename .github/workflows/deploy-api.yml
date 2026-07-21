@@ -157,7 +157,8 @@ jobs:
               printf 'TokenSettings__Key=%s\n'                 "$JWT_SECRET"
               printf 'TokenSettings__Issuer=%s\n'              "$JWT_ISSUER"
               printf 'TokenSettings__Audience=%s\n'            "$JWT_AUD"
-              printf 'Cors__AllowedOrigins=%s\n'               'http://151.185.45.77:83,http://151.185.45.77:8080'
+              # :83 = cms-web-dev, :82 = nexeagle-website-dev (LiveChat widget's origin), :8080 = legacy
+              printf 'Cors__AllowedOrigins=%s\n'               'http://151.185.45.77:83,http://151.185.45.77:82,http://151.185.45.77:8080'
               printf 'ConnectionStrings__CmsConnection=%s\n'   "${CMS_DB_CONN:-}"
               printf 'CMS_SEED_ADMIN_EMAIL=%s\n'               "${CMS_ADMIN_EMAIL:-}"
               printf 'CMS_SEED_ADMIN_PASSWORD=%s\n'            "${CMS_ADMIN_PW:-}"
@@ -220,6 +221,8 @@ jobs:
             printf 'TokenSettings__Key=%s\n'                   "$JWT_SECRET"
             printf 'TokenSettings__Issuer=%s\n'                "$JWT_ISSUER"
             printf 'TokenSettings__Audience=%s\n'              "$JWT_AUD"
+            # :83 = cms-web-prod, :8080 = nexeagle-website-prod raw-IP fallback (its real public
+            # domain, https://1hms.nexeagle.com, is in Program.cs's hardcoded CORS list already)
             printf 'Cors__AllowedOrigins=%s\n'                 'http://151.185.45.67:83,http://151.185.45.67:8080'
             printf 'ConnectionStrings__CmsConnection=%s\n'     "${CMS_DB_CONN:-}"
             printf 'CMS_SEED_ADMIN_EMAIL=%s\n'                 "${CMS_ADMIN_EMAIL:-}"

@@ -63,6 +63,7 @@ namespace CMSAPI.Data.Repositories
                 {
                     d.DoctorID, d.UserID, d.PrimaryDepartmentID,
                     d.IsPubliclyListed, d.IsFeatured, d.IsDelistedByAdmin,
+                    d.IsRegistrationVerified, d.RegistrationVerifiedAt,
                     d.DiscountPercent, d.DiscountStartAt, d.DiscountEndAt
                 })
                 .ToListAsync();
@@ -133,6 +134,8 @@ namespace CMSAPI.Data.Repositories
                     IsPubliclyListed = d.IsPubliclyListed,
                     IsFeatured = d.IsFeatured,
                     IsDelistedByAdmin = d.IsDelistedByAdmin,
+                    IsRegistrationVerified = d.IsRegistrationVerified,
+                    RegistrationVerifiedAt = d.RegistrationVerifiedAt,
                     DiscountPercent = d.DiscountPercent,
                     DiscountStartAt = d.DiscountStartAt,
                     DiscountEndAt = d.DiscountEndAt,
@@ -245,6 +248,8 @@ namespace CMSAPI.Data.Repositories
                 IsPubliclyListed = doctor.IsPubliclyListed,
                 IsFeatured = doctor.IsFeatured,
                 IsDelistedByAdmin = doctor.IsDelistedByAdmin,
+                IsRegistrationVerified = doctor.IsRegistrationVerified,
+                RegistrationVerifiedAt = doctor.RegistrationVerifiedAt,
                 DiscountPercent = doctor.DiscountPercent,
                 DiscountStartAt = doctor.DiscountStartAt,
                 DiscountEndAt = doctor.DiscountEndAt,
@@ -254,7 +259,7 @@ namespace CMSAPI.Data.Repositories
             };
         }
 
-        public async Task<UpdateDoctorMarketingResult> UpdateDoctorMarketingAsync(Guid doctorId, UpdateDoctorMarketingRequest request)
+        public async Task<UpdateDoctorMarketingResult> UpdateDoctorMarketingAsync(Guid doctorId, UpdateDoctorMarketingRequest request, Guid? actingUserId)
         {
             if (request.DiscountPercent.HasValue && (request.DiscountPercent.Value < 0 || request.DiscountPercent.Value > 100))
                 return new UpdateDoctorMarketingResult { Success = false, Message = "Discount percent must be between 0 and 100." };
@@ -271,6 +276,16 @@ namespace CMSAPI.Data.Repositories
             doctor.DiscountPercent = request.DiscountPercent;
             doctor.DiscountStartAt = request.DiscountStartAt;
             doctor.DiscountEndAt = request.DiscountEndAt;
+
+            // Only touch the verified-at/by-whom audit trail on an actual transition — otherwise
+            // resaving this endpoint for an unrelated field (e.g. just toggling Featured) would
+            // keep resetting RegistrationVerifiedAt to "now" every time.
+            if (request.IsRegistrationVerified != doctor.IsRegistrationVerified)
+            {
+                doctor.IsRegistrationVerified = request.IsRegistrationVerified;
+                doctor.RegistrationVerifiedAt = request.IsRegistrationVerified ? DateTime.UtcNow : (DateTime?)null;
+                doctor.RegistrationVerifiedByUserId = request.IsRegistrationVerified ? actingUserId : (Guid?)null;
+            }
 
             await _db.SaveChangesAsync();
 

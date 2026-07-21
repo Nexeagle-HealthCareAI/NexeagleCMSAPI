@@ -19,6 +19,8 @@ public class DoctorListItem
     public bool IsPubliclyListed { get; set; }
     public bool IsFeatured { get; set; }
     public bool IsDelistedByAdmin { get; set; }
+    public bool IsRegistrationVerified { get; set; }
+    public DateTime? RegistrationVerifiedAt { get; set; }
     public decimal? DiscountPercent { get; set; }
     public DateTime? DiscountStartAt { get; set; }
     public DateTime? DiscountEndAt { get; set; }
@@ -33,6 +35,10 @@ public class UpdateDoctorMarketingRequest
 {
     public bool IsFeatured { get; set; }
     public bool IsDelistedByAdmin { get; set; }
+    // Full-replace like the two booleans above, but RegistrationVerifiedAt/ByUserId are only
+    // touched when this actually flips value — see DoctorRepository.UpdateDoctorMarketingAsync —
+    // so resaving an unrelated field (e.g. just Featured) never resets an existing verification.
+    public bool IsRegistrationVerified { get; set; }
     public decimal? DiscountPercent { get; set; }
     public DateTime? DiscountStartAt { get; set; }
     public DateTime? DiscountEndAt { get; set; }
