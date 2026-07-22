@@ -37,6 +37,7 @@ public class AppDbContext : DbContext
     public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; } = null!;
     public DbSet<WebsiteVisit> WebsiteVisits { get; set; } = null!;
     public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; } = null!;
+    public DbSet<SymptomTrainingExample> SymptomTrainingExamples { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,6 +65,12 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("AnalyticsEvents");
             entity.HasKey(e => e.EventId);
+        });
+
+        modelBuilder.Entity<SymptomTrainingExample>(entity =>
+        {
+            entity.ToTable("SymptomTrainingExamples");
+            entity.HasKey(e => e.Id);
         });
 
         modelBuilder.Entity<Hospital>(entity =>

@@ -25,6 +25,13 @@
 #   EASYHMS_SERVICE_KEY     Shared secret for easyHMSAPI's server-to-server plan-list proxy
 #                           (GET /api/v1/SubscriptionPlans/service) — same value must also be set
 #                           as CMS_SERVICE_KEY in the easyHMSAPI repo's secrets.
+#   SYMPTOM_ROUTER_SERVICE_KEY  Shared secret for the NLP retrain pipeline's server-to-server
+#                           reads (GET /api/v1/symptom-router/{training-examples,feedback-log}/service)
+#                           — same value must also be set as CMSAPI_SERVICE_KEY in the
+#                           1HMS-NLP-Router repo's secrets (used by retrain.yml).
+#   RETRAIN_WORKFLOW_TOKEN  GitHub PAT (repo + workflow scope) letting CMSAPI trigger
+#                           1HMS-NLP-Router's retrain.yml via workflow_dispatch (CMS's
+#                           "Retrain now" button).
 # ═══════════════════════════════════════════════════════════════════════════════
 
 name: CMS API — CI/CD
@@ -136,13 +143,15 @@ jobs:
           CMS_ADMIN_EMAIL: ${{ secrets.CMS_SEED_ADMIN_EMAIL }}
           CMS_ADMIN_PW:    ${{ secrets.CMS_SEED_ADMIN_PASSWORD }}
           EASYHMS_SVC_KEY: ${{ secrets.EASYHMS_SERVICE_KEY }}
+          SYMPTOM_ROUTER_SVC_KEY: ${{ secrets.SYMPTOM_ROUTER_SERVICE_KEY }}
+          RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY,SYMPTOM_ROUTER_SVC_KEY,RETRAIN_TOKEN
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -163,6 +172,8 @@ jobs:
               printf 'CMS_SEED_ADMIN_EMAIL=%s\n'               "${CMS_ADMIN_EMAIL:-}"
               printf 'CMS_SEED_ADMIN_PASSWORD=%s\n'            "${CMS_ADMIN_PW:-}"
               printf 'ServiceAuth__EasyHmsServiceKey=%s\n'     "${EASYHMS_SVC_KEY:-}"
+              printf 'ServiceAuth__SymptomRouterServiceKey=%s\n' "${SYMPTOM_ROUTER_SVC_KEY:-}"
+              printf 'GitHub__RetrainWorkflowToken=%s\n'       "${RETRAIN_TOKEN:-}"
             } > "$ENVFILE"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
@@ -210,6 +221,8 @@ jobs:
           CMS_ADMIN_EMAIL: ${{ secrets.CMS_SEED_ADMIN_EMAIL }}
           CMS_ADMIN_PW:    ${{ secrets.CMS_SEED_ADMIN_PASSWORD }}
           EASYHMS_SVC_KEY: ${{ secrets.EASYHMS_SERVICE_KEY }}
+          SYMPTOM_ROUTER_SVC_KEY: ${{ secrets.SYMPTOM_ROUTER_SERVICE_KEY }}
+          RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
           : "${JWT_SECRET:?JWT_SECRET is empty}"
@@ -228,6 +241,8 @@ jobs:
             printf 'CMS_SEED_ADMIN_EMAIL=%s\n'                 "${CMS_ADMIN_EMAIL:-}"
             printf 'CMS_SEED_ADMIN_PASSWORD=%s\n'              "${CMS_ADMIN_PW:-}"
             printf 'ServiceAuth__EasyHmsServiceKey=%s\n'       "${EASYHMS_SVC_KEY:-}"
+            printf 'ServiceAuth__SymptomRouterServiceKey=%s\n' "${SYMPTOM_ROUTER_SVC_KEY:-}"
+            printf 'GitHub__RetrainWorkflowToken=%s\n'         "${RETRAIN_TOKEN:-}"
           } > "$ENVFILE"
 
       - name: Copy prod.env to Prod VM
