@@ -118,6 +118,11 @@ namespace CMSAPI.Data.Repositories
             public string? Method { get; set; }
             public double? Confidence { get; set; }
             public string? ModelVersion { get; set; }
+            // Full candidate set the router considered for a close call (DoctorDirectory.tsx
+            // merges doctors across all of these, not just SpecialtyId/PredictedSpecialtyId) —
+            // only present when the router actually flagged ambiguity. Null/empty means
+            // SpecialtyId was the router's only answer.
+            public List<string>? CandidateSpecialtyIds { get; set; }
         }
 
         private static T? ParseJson<T>(string? json) where T : class
@@ -178,9 +183,16 @@ namespace CMSAPI.Data.Repositories
 
                 var actualSpecialtyId = hasBooking ? doneEvt!.SpecialtyId : null;
                 var predictedSpecialtyId = searchEvt.SpecialtyId;
+                // A booking that lands on any candidate the router surfaced (not just its top
+                // pick) is a confirmation, not a correction — the merged result list at
+                // DoctorDirectory.tsx deliberately shows doctors from every close-call
+                // candidate, so booking #2 or #3 is exactly the router working as intended.
+                var acceptableSpecialtyIds = searchEvt.Meta?.CandidateSpecialtyIds is { Count: > 0 } candidates
+                    ? candidates
+                    : (predictedSpecialtyId != null ? new List<string> { predictedSpecialtyId } : new List<string>());
                 var wasCorrection = hasBooking
                     && !string.IsNullOrWhiteSpace(actualSpecialtyId)
-                    && !string.Equals(actualSpecialtyId, predictedSpecialtyId, StringComparison.OrdinalIgnoreCase);
+                    && !acceptableSpecialtyIds.Any(id => string.Equals(id, actualSpecialtyId, StringComparison.OrdinalIgnoreCase));
 
                 results.Add(new FeedbackLogItem
                 {
