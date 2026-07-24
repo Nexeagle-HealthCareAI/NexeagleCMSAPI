@@ -74,12 +74,16 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IHospitalService, HospitalService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IInsightsService, InsightsService>();
+// Typed HttpClient (not just AddScoped) -- SymptomRouterService calls out to the NLP router
+// and GitHub's API, so it needs an injected HttpClient the DI container manages properly.
+builder.Services.AddHttpClient<ISymptomRouterService, SymptomRouterService>();
 
 // Register Data Repositories
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<IHospitalRepository, HospitalRepository>();
 builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
 builder.Services.AddScoped<IInsightsRepository, InsightsRepository>();
+builder.Services.AddScoped<ISymptomRouterRepository, SymptomRouterRepository>();
 
 // CMS identity / RBAC (CMSDatabase)
 builder.Services.AddScoped<ICmsAuthRepository, CmsAuthRepository>();
