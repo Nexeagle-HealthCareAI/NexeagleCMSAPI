@@ -93,6 +93,7 @@ builder.Services.AddScoped<ICmsAdminService, CmsAdminService>();
 builder.Services.AddScoped<ICmsPartnerService, CmsPartnerService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddSingleton<IEmailService, EmailService>();
 builder.Services.AddScoped<CmsAdminSeeder>();
 
 // =============================

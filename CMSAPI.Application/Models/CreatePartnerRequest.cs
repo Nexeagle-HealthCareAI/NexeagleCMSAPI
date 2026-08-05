@@ -7,10 +7,14 @@ namespace CMSAPI.Application.Models
         [Required, MaxLength(150)]
         public string Name { get; set; } = null!;
         
-        [Required]
+        [Required, Range(18, 120)]
         public int Age { get; set; }
-        
+
+        // Matches AddPartnerModal.tsx's <select> exactly -- the client only ever submits one of
+        // these, but the server has to enforce it too (client-side validation alone can't stop a
+        // direct API call).
         [Required, MaxLength(20)]
+        [RegularExpression("^(Male|Female|Other)$", ErrorMessage = "Sex must be Male, Female, or Other.")]
         public string Sex { get; set; } = null!;
         
         [Required, MaxLength(100)]

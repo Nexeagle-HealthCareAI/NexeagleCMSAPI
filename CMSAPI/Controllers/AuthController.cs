@@ -3,6 +3,7 @@ using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace CMSAPI.Controllers;
 
@@ -14,16 +15,23 @@ public class AuthController : ControllerBase
 
     private readonly IAuthService _authService;
     private readonly IWebHostEnvironment _env;
+    private readonly TokenSettings _tokenSettings;
 
-    public AuthController(IAuthService authService, IWebHostEnvironment env)
+    public AuthController(IAuthService authService, IWebHostEnvironment env, IOptions<TokenSettings> tokenSettings)
     {
         _authService = authService;
         _env = env;
+        _tokenSettings = tokenSettings.Value;
     }
 
     private string? ClientIp => HttpContext?.Connection?.RemoteIpAddress?.ToString();
 
     // Stores the refresh token in an HttpOnly, Secure cookie so it cannot be read by JS.
+    // Expiry is derived from the same TokenSettings:RefreshTokenDays TokenService uses for the
+    // DB-enforced token expiry -- previously a separate hardcoded AddDays(7) literal here, which
+    // would silently desync from the server-enforced lifetime if RefreshTokenDays were ever
+    // changed in only one place (the cookie is what actually caps a real session, since the
+    // browser drops it first).
     private void SetRefreshCookie(string refreshToken)
     {
         var isProd = !_env.IsDevelopment();
@@ -32,7 +40,7 @@ public class AuthController : ControllerBase
             HttpOnly = true,
             Secure   = isProd,
             SameSite = isProd ? SameSiteMode.None : SameSiteMode.Lax,
-            Expires  = DateTimeOffset.UtcNow.AddDays(7),
+            Expires  = DateTimeOffset.UtcNow.AddDays(_tokenSettings.RefreshTokenDays),
             Path     = "/api/v1/auth"
         });
     }

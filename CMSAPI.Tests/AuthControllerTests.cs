@@ -5,6 +5,7 @@ using CMSAPI.Application.Models;
 using CMSAPI.Application.Interfaces;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 using Moq;
 using System.Threading.Tasks;
 
@@ -19,7 +20,8 @@ public class AuthControllerTests
         _mockAuthService = new Mock<IAuthService>();
         _mockEnv = new Mock<IWebHostEnvironment>();
         _mockEnv.Setup(e => e.EnvironmentName).Returns("Development");
-        _controller = new AuthController(_mockAuthService.Object, _mockEnv.Object);
+        var tokenSettings = Options.Create(new TokenSettings { RefreshTokenDays = 7 });
+        _controller = new AuthController(_mockAuthService.Object, _mockEnv.Object, tokenSettings);
         _controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()
