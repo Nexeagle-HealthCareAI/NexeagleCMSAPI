@@ -32,6 +32,11 @@
 #   RETRAIN_WORKFLOW_TOKEN  GitHub PAT (repo + workflow scope) letting CMSAPI trigger
 #                           1HMS-NLP-Router's retrain.yml via workflow_dispatch (CMS's
 #                           "Retrain now" button).
+#   SMTP_SENDER_EMAIL       GoDaddy Workspace/Professional Email mailbox OTP emails send from
+#                           (e.g. info@nexeagle.com). Also the SMTP auth username.
+#   SMTP_PASSWORD           That mailbox's password. Server/port default to GoDaddy's
+#                           smtpout.secureserver.net:587 in appsettings.json (not secret, not
+#                           injected here) -- only the mailbox credential needs to be.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 name: CMS API — CI/CD
@@ -145,13 +150,15 @@ jobs:
           EASYHMS_SVC_KEY: ${{ secrets.EASYHMS_SERVICE_KEY }}
           SYMPTOM_ROUTER_SVC_KEY: ${{ secrets.SYMPTOM_ROUTER_SERVICE_KEY }}
           RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
+          SMTP_EMAIL: ${{ secrets.SMTP_SENDER_EMAIL }}
+          SMTP_PW: ${{ secrets.SMTP_PASSWORD }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY,SYMPTOM_ROUTER_SVC_KEY,RETRAIN_TOKEN
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY,SYMPTOM_ROUTER_SVC_KEY,RETRAIN_TOKEN,SMTP_EMAIL,SMTP_PW
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -174,6 +181,8 @@ jobs:
               printf 'ServiceAuth__EasyHmsServiceKey=%s\n'     "${EASYHMS_SVC_KEY:-}"
               printf 'ServiceAuth__SymptomRouterServiceKey=%s\n' "${SYMPTOM_ROUTER_SVC_KEY:-}"
               printf 'GitHub__RetrainWorkflowToken=%s\n'       "${RETRAIN_TOKEN:-}"
+              printf 'Smtp__SenderEmail=%s\n'                  "${SMTP_EMAIL:-}"
+              printf 'Smtp__Password=%s\n'                     "${SMTP_PW:-}"
             } > "$ENVFILE"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
@@ -223,6 +232,8 @@ jobs:
           EASYHMS_SVC_KEY: ${{ secrets.EASYHMS_SERVICE_KEY }}
           SYMPTOM_ROUTER_SVC_KEY: ${{ secrets.SYMPTOM_ROUTER_SERVICE_KEY }}
           RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
+          SMTP_EMAIL: ${{ secrets.SMTP_SENDER_EMAIL }}
+          SMTP_PW: ${{ secrets.SMTP_PASSWORD }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
           : "${JWT_SECRET:?JWT_SECRET is empty}"
@@ -243,6 +254,8 @@ jobs:
             printf 'ServiceAuth__EasyHmsServiceKey=%s\n'       "${EASYHMS_SVC_KEY:-}"
             printf 'ServiceAuth__SymptomRouterServiceKey=%s\n' "${SYMPTOM_ROUTER_SVC_KEY:-}"
             printf 'GitHub__RetrainWorkflowToken=%s\n'         "${RETRAIN_TOKEN:-}"
+            printf 'Smtp__SenderEmail=%s\n'                    "${SMTP_EMAIL:-}"
+            printf 'Smtp__Password=%s\n'                       "${SMTP_PW:-}"
           } > "$ENVFILE"
 
       - name: Copy prod.env to Prod VM

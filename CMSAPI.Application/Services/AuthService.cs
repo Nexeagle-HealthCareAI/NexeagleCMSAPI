@@ -17,13 +17,15 @@ public class AuthService : IAuthService
     private readonly ICmsAuthRepository _repo;
     private readonly IPasswordHasher _hasher;
     private readonly ITokenService _tokens;
+    private readonly IEmailService _email;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(ICmsAuthRepository repo, IPasswordHasher hasher, ITokenService tokens, ILogger<AuthService> logger)
+    public AuthService(ICmsAuthRepository repo, IPasswordHasher hasher, ITokenService tokens, IEmailService email, ILogger<AuthService> logger)
     {
         _repo = repo;
         _hasher = hasher;
         _tokens = tokens;
+        _email = email;
         _logger = logger;
     }
 
@@ -159,17 +161,25 @@ public class AuthService : IAuthService
             CreatedAt = DateTime.UtcNow,
             CreatedByIp = ipAddress
         };
-        // Always saved regardless of delivery outcome below -- delivery isn't wired to a real
-        // provider yet (see the TODO), but even once it is, a delivery failure shouldn't lose the
-        // generated code: it stays retrievable (audit log today, DB lookup either way) and the UI
+        // Always saved regardless of delivery outcome below -- a delivery failure shouldn't lose
+        // the generated code: it stays retrievable (audit log, DB lookup either way) and the UI
         // still moves to the OTP-entry screen since a real, usable code exists.
         await _repo.AddOtpAsync(otp);
         await _repo.SaveChangesAsync();
 
-        // TODO: integrate a real email/SMS provider here.
+        // Still logged regardless of delivery outcome -- the one place to check if a real send
+        // ever fails (SMTP down, mailbox misconfigured, etc.), and the only delivery channel at
+        // all for SMS identifiers (no SMS/WhatsApp provider wired up yet).
         _logger.LogWarning(
             "AUDIT OTP: purpose={Purpose} identifier={Identifier} code={Code} expires={Expiry}",
             purpose, identifier, rawCode, otp.ExpiresAt);
+
+        if (deliveryMethod == "email")
+        {
+            var sent = await _email.SendOtpEmailAsync(identifier, rawCode, OtpExpiryMinutes);
+            if (!sent)
+                _logger.LogWarning("OTP email delivery failed for {Identifier} -- code is still valid, see AUDIT OTP log above.", identifier);
+        }
 
         return new OtpRequestResponse
         {
