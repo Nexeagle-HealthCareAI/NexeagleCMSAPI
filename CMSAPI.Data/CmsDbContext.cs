@@ -118,7 +118,7 @@ public class CmsDbContext : DbContext
             e.ToTable("CmsOtps");
             e.HasKey(x => x.OtpId);
             e.Property(x => x.OtpId).ValueGeneratedNever();
-            e.Property(x => x.CodeHash).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Code).HasMaxLength(6).IsRequired();
             e.Property(x => x.DeliveryTarget).HasMaxLength(256).IsRequired();
             e.Property(x => x.DeliveryMethod).HasMaxLength(10).IsRequired();
             e.Property(x => x.Purpose).HasMaxLength(20).IsRequired().HasDefaultValue("login");
