@@ -278,6 +278,12 @@ namespace CMSAPI.Data.Repositories
             return new HospitalDetails
             {
                 Id = h.HospitalID,
+                // Always empty: Hospital has no PartnerId, and no relationship linking a hospital
+                // to a CmsPartner exists anywhere in the schema (see CmsPartner -- it only tracks
+                // CreatedByUserId, the CMS staff account that created the partner record, not
+                // which hospitals that partner is associated with). Not a bug to fix here -- needs
+                // a real product decision (attributed at onboarding? via a referral code? something
+                // else?) and a schema change, not a query change.
                 PartnerName = string.Empty,
                 Name = h.Name,
                 HospitalType = h.Type,
@@ -288,7 +294,12 @@ namespace CMSAPI.Data.Repositories
                 State = h.State,
                 TotalPatients = await _db.PatientRegistrations.CountAsync(pr => pr.HospitalID == h.HospitalID),
                 RegisteredOn = h.CreatedAt,
-                Status = h.IsActive ? "Active" : "Inactive",
+                // "Pending", not "Inactive" -- must match GetHospitalsAsync's list-view label
+                // below (also driven by the same IsActive flag) since OnboardedHospitals.tsx
+                // filters the list by "Pending" and a detail page reached from that filtered
+                // list needs to show the same status vocabulary, not a differently-worded label
+                // for the identical underlying state.
+                Status = h.IsActive ? "Active" : "Pending",
                 SubscriptionPlanName = subPlanName,
                 SubscriptionStatus = subStatus,
                 SubscriptionDaysRemaining = subDaysRemaining,

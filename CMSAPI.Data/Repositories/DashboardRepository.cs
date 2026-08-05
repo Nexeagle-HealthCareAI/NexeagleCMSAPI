@@ -30,12 +30,20 @@ public class DashboardRepository : IDashboardRepository
                 .ToListAsync();
 
             // 2. Patients
+            // RegistrationId (the real PK, one row per registration) -- NOT PatientID (a business
+            // identifier a patient can share across multiple registrations/hospitals), so this
+            // total matches a plain row count, consistent with every other metric here and with
+            // HospitalRepository's per-hospital "Total Patients" (also an undeduped row count).
             var patients = await _db.PatientRegistrations
-                .Select(p => new { p.PatientID, p.RegisteredAt })
+                .Select(p => new { p.RegistrationId, p.RegisteredAt })
                 .ToListAsync();
 
             // 3. Doctors (Joined via UserProfile for date)
-            // Note: If Doctor.UserID is null, we can't determine date easily. Ignoring those for charts.
+            // Note: If Doctor.UserID is null, we can't determine date easily. Ignoring those for
+            // the week-over-week trend and charts below, which both need a CreatedAt to bucket by
+            // -- but NOT for the headline total (see totalDoctorsCount), which must count every
+            // doctor regardless of whether a linked UserProfile row exists.
+            var totalDoctorsCount = await _db.Doctors.Select(d => d.DoctorID).Distinct().CountAsync();
             var doctors = await (from d in _db.Doctors
                                      join u in _db.UserProfiles on d.UserID equals u.UserID
                                      select new { d.DoctorID, u.CreatedAt })
@@ -60,12 +68,12 @@ public class DashboardRepository : IDashboardRepository
             // Doctors Metric
             var docThisWeek = doctors.Count(d => d.CreatedAt >= startOfThisWeek);
             var docLastWeek = doctors.Count(d => d.CreatedAt >= startOfLastWeek && d.CreatedAt < startOfThisWeek);
-            resp.TotalDoctors = CalculateMetric(doctors.Select(d => d.DoctorID).Distinct().Count(), docThisWeek, docLastWeek, "this week");
+            resp.TotalDoctors = CalculateMetric(totalDoctorsCount, docThisWeek, docLastWeek, "this week");
 
             // Patients Metric ("overall" period in example, but calculation same)
             var patThisWeek = patients.Count(p => p.RegisteredAt >= startOfThisWeek);
             var patLastWeek = patients.Count(p => p.RegisteredAt >= startOfLastWeek && p.RegisteredAt < startOfThisWeek);
-            resp.TotalPatients = CalculateMetric(patients.Select(p => p.PatientID).Distinct().Count(), patThisWeek, patLastWeek, "overall");
+            resp.TotalPatients = CalculateMetric(patients.Select(p => p.RegistrationId).Distinct().Count(), patThisWeek, patLastWeek, "overall");
 
             // Users Metric
             var userThisWeek = users.Count(u => u.CreatedAt >= startOfThisWeek);

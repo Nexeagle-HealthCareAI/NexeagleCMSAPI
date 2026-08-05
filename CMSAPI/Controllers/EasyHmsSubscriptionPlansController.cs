@@ -78,6 +78,9 @@ namespace CMSAPI.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdatePlan(Guid id, [FromBody] EasyHmsSubscriptionPlan request)
         {
+            if (string.IsNullOrWhiteSpace(request.Name) || request.BasePrice < 0 || request.DiscountPrice < 0)
+                return BadRequest("Invalid plan data.");
+
             var plan = await _db.EasyHmsSubscriptionPlans.FindAsync(id);
             if (plan == null) return NotFound("Plan not found.");
 

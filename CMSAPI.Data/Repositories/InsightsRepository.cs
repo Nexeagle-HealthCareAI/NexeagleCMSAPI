@@ -284,8 +284,15 @@ namespace CMSAPI.Data.Repositories
                 LoginInitiatedSessions = loginInitiated,
                 OtpSentSessions = otpSent,
                 OtpVerifiedSessions = otpVerified,
-                LoginInitiationRatePct = totalVisitorSessions > 0 ? Math.Round(loginInitiated * 100.0 / totalVisitorSessions, 1) : 0,
-                AuthCompletionRatePct = otpSent > 0 ? Math.Round(otpVerified * 100.0 / otpSent, 1) : 0,
+                // Clamped to 100: LoginInitiated/OtpSent/OtpVerified come from AnalyticsEvents,
+                // totalVisitorSessions from the separate WebsiteVisits table -- both are
+                // independent, best-effort "fire and forget, never throws" tracking beacons (see
+                // NexEagleWebsite's analytics.ts) that can fail independently (ad blockers
+                // commonly target exactly this kind of endpoint), so a session's funnel event can
+                // exist with no matching page-view row. Without a clamp that edge case would
+                // render as a rate over 100%.
+                LoginInitiationRatePct = totalVisitorSessions > 0 ? Math.Min(100, Math.Round(loginInitiated * 100.0 / totalVisitorSessions, 1)) : 0,
+                AuthCompletionRatePct = otpSent > 0 ? Math.Min(100, Math.Round(otpVerified * 100.0 / otpSent, 1)) : 0,
                 AvgTimeToAuthenticateSeconds = timeToAuthSeconds.Count > 0 ? Math.Round(timeToAuthSeconds.Average(), 1) : (double?)null,
             };
         }
@@ -394,7 +401,10 @@ namespace CMSAPI.Data.Repositories
             {
                 SearchCount = searches.Count,
                 ProfileViewCount = profileViews.Count,
-                SearchToViewRatePct = searches.Count > 0 ? Math.Round(profileViews.Count * 100.0 / searches.Count, 1) : 0,
+                // Clamped to 100: one search commonly leads to viewing more than one doctor
+                // profile from the results, which would otherwise legitimately push this over
+                // 100% under completely normal usage, not just a tracking edge case.
+                SearchToViewRatePct = searches.Count > 0 ? Math.Min(100, Math.Round(profileViews.Count * 100.0 / searches.Count, 1)) : 0,
                 VisitStepCount = stepCounts.TryGetValue("visit", out var v) ? v : 0,
                 DetailsStepCount = stepCounts.TryGetValue("details", out var d) ? d : 0,
                 DoneStepCount = stepCounts.TryGetValue("done", out var done) ? done : 0,

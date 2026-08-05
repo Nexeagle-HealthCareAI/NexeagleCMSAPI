@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
+using CMSAPI.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,7 +21,7 @@ namespace CMSAPI.Controllers
         }
 
         [HttpGet]
-        [Authorize] // Assume CMS Admins can view this
+        [HasPermission("partners.manage")]
         public async Task<IActionResult> GetAllPartners()
         {
             var partners = await _partnerService.GetAllPartnersAsync();
@@ -28,7 +29,7 @@ namespace CMSAPI.Controllers
         }
 
         [HttpPost]
-        [Authorize]
+        [HasPermission("partners.manage")]
         public async Task<IActionResult> CreatePartner([FromBody] CreatePartnerRequest request)
         {
             if (!ModelState.IsValid)
@@ -44,7 +45,7 @@ namespace CMSAPI.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize]
+        [HasPermission("partners.manage")]
         public async Task<IActionResult> DeletePartner(Guid id)
         {
             var success = await _partnerService.DeletePartnerAsync(id);
