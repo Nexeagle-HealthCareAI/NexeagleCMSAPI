@@ -21,7 +21,7 @@ public interface ICmsAuthRepository
     // OTP
     Task AddOtpAsync(CmsOtp otp);
     /// <summary>Returns the first active (unused, not expired) OTP matching userId + code hash + purpose.</summary>
-    Task<CmsOtp?> GetActiveOtpAsync(Guid userId, string codeHash, string purpose);
+    Task<CmsOtp?> GetActiveOtpAsync(Guid userId, string code, string purpose);
 
     Task SaveChangesAsync();
 }

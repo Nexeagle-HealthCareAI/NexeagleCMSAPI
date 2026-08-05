@@ -99,12 +99,12 @@ public class CmsAuthRepository : ICmsAuthRepository
         return Task.CompletedTask;
     }
 
-    public Task<CmsOtp?> GetActiveOtpAsync(Guid userId, string codeHash, string purpose)
+    public Task<CmsOtp?> GetActiveOtpAsync(Guid userId, string code, string purpose)
     {
         var now = DateTime.UtcNow;
         return _db.CmsOtps.FirstOrDefaultAsync(o =>
             o.UserId == userId &&
-            o.CodeHash == codeHash &&
+            o.Code == code &&
             o.Purpose == purpose &&
             o.UsedAt == null &&
             o.ExpiresAt > now);

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
 using CMSAPI.Domain.Entities;
@@ -153,7 +151,7 @@ public class AuthService : IAuthService
         {
             OtpId = Guid.NewGuid(),
             UserId = user.UserId,
-            CodeHash = HashOtp(rawCode),
+            Code = rawCode,
             DeliveryTarget = identifier,
             DeliveryMethod = deliveryMethod,
             Purpose = purpose,
@@ -198,8 +196,8 @@ public class AuthService : IAuthService
         var now = DateTime.UtcNow;
         if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > now) return null;
 
-        var codeHash = HashOtp(request.Otp ?? string.Empty);
-        var otp = await _repo.GetActiveOtpAsync(user.UserId, codeHash, "login");
+        var code = (request.Otp ?? string.Empty).Trim();
+        var otp = await _repo.GetActiveOtpAsync(user.UserId, code, "login");
 
         if (otp == null)
         {
@@ -239,8 +237,8 @@ public class AuthService : IAuthService
         var now = DateTime.UtcNow;
         if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > now) return false;
 
-        var codeHash = HashOtp(request.Otp ?? string.Empty);
-        var otp = await _repo.GetActiveOtpAsync(user.UserId, codeHash, "password_reset");
+        var code = (request.Otp ?? string.Empty).Trim();
+        var otp = await _repo.GetActiveOtpAsync(user.UserId, code, "password_reset");
 
         if (otp == null)
         {
@@ -277,9 +275,6 @@ public class AuthService : IAuthService
 
     private static string GenerateOtpCode() =>
         Random.Shared.Next(100_000, 1_000_000).ToString();
-
-    private static string HashOtp(string code) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code)));
 
     private async Task<LoginResponse> IssueTokensAsync(CmsUser user, string? ipAddress, CmsRefreshToken? rotatedFrom = null)
     {
