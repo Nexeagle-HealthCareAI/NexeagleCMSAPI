@@ -266,19 +266,32 @@ jobs:
               /tmp/cms-prod.env \
               ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:/opt/cms-prod/prod.env
 
+      - name: Login to GHCR on Prod VM
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} \
+              "echo '$GHCR_TOKEN' | docker login ghcr.io -u '$ACTOR' --password-stdin"
+
       - name: Pull & restart container
         env:
           IMAGE: "${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}"
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          ACTOR: ${{ github.actor }}
         run: |
           IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
           ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
               ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} \
-              "echo '$GHCR_TOKEN' | docker login ghcr.io -u '$ACTOR' --password-stdin && \
-               docker pull '$IMAGE_LC' && docker rm -f cms-api-prod 2>/dev/null; \
+              "set -e; \
+               PULLED=0; \
+               for i in 1 2 3; do \
+                 if docker pull '$IMAGE_LC'; then PULLED=1; break; fi; \
+                 sleep 5; \
+               done; \
+               if [ \"\$PULLED\" != 1 ]; then echo 'docker pull failed after 3 attempts, aborting without touching the running container' >&2; exit 1; fi; \
+               docker rm -f cms-api-prod 2>/dev/null || true; \
                docker run -d --name cms-api-prod --restart unless-stopped \
-               --network host --env-file /opt/cms-prod/prod.env '$IMAGE_LC' && \
+                 --network host --env-file /opt/cms-prod/prod.env '$IMAGE_LC'; \
                docker image prune -f"
 
       - name: Health check
