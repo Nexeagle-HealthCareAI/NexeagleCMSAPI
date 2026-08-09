@@ -453,6 +453,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.NextBillingDate).HasColumnType("datetime2(3)").IsRequired(false);
             entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            entity.Property(e => e.ReferralCodeRedeemedAt).HasColumnType("datetime2(3)").IsRequired(false);
 
             entity.HasOne(e => e.Hospital)
                   .WithMany()

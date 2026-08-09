@@ -91,6 +91,8 @@ builder.Services.AddScoped<ICmsPartnerRepository, CmsPartnerRepository>();
 builder.Services.AddScoped<ICmsAdminRepository, CmsAdminRepository>();
 builder.Services.AddScoped<ICmsAdminService, CmsAdminService>();
 builder.Services.AddScoped<ICmsPartnerService, CmsPartnerService>();
+builder.Services.AddScoped<IReferralCodeRepository, ReferralCodeRepository>();
+builder.Services.AddScoped<IReferralCodeService, ReferralCodeService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddSingleton<IEmailService, EmailService>();
