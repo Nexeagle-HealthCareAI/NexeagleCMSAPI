@@ -300,6 +300,8 @@ namespace CMSAPI.Data.Repositories
                 // list needs to show the same status vocabulary, not a differently-worded label
                 // for the identical underlying state.
                 Status = h.IsActive ? "Active" : "Pending",
+                IsArchived = h.IsArchived,
+                ArchivedAt = h.ArchivedAt,
                 SubscriptionPlanName = subPlanName,
                 SubscriptionStatus = subStatus,
                 SubscriptionDaysRemaining = subDaysRemaining,
@@ -340,12 +342,15 @@ namespace CMSAPI.Data.Repositories
             };
         }
 
-        public async Task<PagedResult<HospitalListItem>> GetHospitalsAsync(int page, int limit, string? search, string? sortBy, string? sortDir, string? status = null, string? subscriptionStatus = null)
+        public async Task<PagedResult<HospitalListItem>> GetHospitalsAsync(int page, int limit, string? search, string? sortBy, string? sortDir, string? status = null, string? subscriptionStatus = null, bool includeArchived = false)
         {
             if (page < 1) page = 1;
             if (limit < 1) limit = 10;
 
             var query = _db.Hospitals.AsQueryable();
+
+            if (!includeArchived)
+                query = query.Where(h => !h.IsArchived);
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -457,6 +462,8 @@ namespace CMSAPI.Data.Repositories
                     TotalNonDoctorUsers = nonDoctorUserCount,
                     RegisteredOn = h.CreatedAt,
                     Status = h.IsActive ? "Active" : "Pending",
+                    IsArchived = h.IsArchived,
+                    ArchivedAt = h.ArchivedAt,
                     SubscriptionPlanName = subPlanName,
                     SubscriptionStatus = subStatus,
                     SubscriptionDaysRemaining = subDaysRemaining,
@@ -502,6 +509,36 @@ namespace CMSAPI.Data.Repositories
                     ItemsPerPage = limit
                 }
             };
+        }
+
+        // Soft-delete only — no cascading data removal. Hiding this hospital everywhere is
+        // enforced by easyHMSAPI's HospitalAccessFilter (and the handful of places that bypass
+        // it) reading IsArchived live; this just flips the flag. Returns false if the hospital
+        // doesn't exist.
+        public async Task<bool> ArchiveHospitalAsync(Guid id, Guid archivedByUserId)
+        {
+            var hospital = await _db.Hospitals.FirstOrDefaultAsync(h => h.HospitalID == id);
+            if (hospital == null) return false;
+
+            hospital.IsArchived = true;
+            hospital.ArchivedAt = DateTime.UtcNow;
+            hospital.ArchivedByUserId = archivedByUserId;
+            hospital.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> RestoreHospitalAsync(Guid id)
+        {
+            var hospital = await _db.Hospitals.FirstOrDefaultAsync(h => h.HospitalID == id);
+            if (hospital == null) return false;
+
+            hospital.IsArchived = false;
+            hospital.ArchivedAt = null;
+            hospital.ArchivedByUserId = null;
+            hospital.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return true;
         }
     }
 }

@@ -6,7 +6,9 @@ namespace CMSAPI.Application.Interfaces;
 
 public interface IHospitalRepository
 {
-    Task<PagedResult<HospitalListItem>> GetHospitalsAsync(int page, int limit, string? search, string? sortBy, string? sortDir, string? status = null, string? subscriptionStatus = null);
+    Task<PagedResult<HospitalListItem>> GetHospitalsAsync(int page, int limit, string? search, string? sortBy, string? sortDir, string? status = null, string? subscriptionStatus = null, bool includeArchived = false);
     Task<HospitalDetails?> GetHospitalByIdAsync(Guid id);
     Task<HospitalAppointmentSourceStats> GetAppointmentSourceStatsAsync(Guid hospitalId, DateOnly? from, DateOnly? to);
+    Task<bool> ArchiveHospitalAsync(Guid id, Guid archivedByUserId);
+    Task<bool> RestoreHospitalAsync(Guid id);
 }

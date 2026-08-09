@@ -18,6 +18,11 @@ public class HospitalDetails
     public DateTime RegisteredOn { get; set; }
     public string Status { get; set; } = "Active";
 
+    // Soft-delete — separate concept from Status above (which is IsActive-driven onboarding
+    // status).
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+
     // Subscription — same summary as the list, plus the full timeline and payment ledger for
     // this specific hospital.
     public string? SubscriptionPlanName { get; set; }

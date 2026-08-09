@@ -95,6 +95,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.TimeZone).HasMaxLength(100).IsRequired(false);
             entity.Property(e => e.RegistrationNumber).HasMaxLength(100).IsRequired();
             entity.Property(e => e.IsActive).HasDefaultValue(true).IsRequired();
+            entity.Property(e => e.IsArchived).HasDefaultValue(false).IsRequired();
+            entity.Property(e => e.ArchivedAt).HasColumnType("datetime2(3)").IsRequired(false);
+            entity.Property(e => e.ArchivedByUserId).IsRequired(false);
             entity.Property(e => e.CreatedByUserID).IsRequired();
             entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             entity.Property(e => e.LastUpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
