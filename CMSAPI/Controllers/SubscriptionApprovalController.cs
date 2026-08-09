@@ -43,7 +43,10 @@ namespace CMSAPI.Controllers
                     hs.PaymentAmount,
                     hs.PaymentReference,
                     hs.PaymentMode,
-                    hs.PaymentDate
+                    hs.PaymentDate,
+                    hs.ReferralCode,
+                    hs.ReferralCodeRewardKind,
+                    hs.ReferralCodeRewardValue
                 })
                 .ToListAsync();
 
@@ -94,6 +97,9 @@ namespace CMSAPI.Controllers
                     p.PaymentReference,
                     p.PaymentMode,
                     p.PaymentDate,
+                    p.ReferralCode,
+                    p.ReferralCodeRewardKind,
+                    p.ReferralCodeRewardValue,
                     IsProratedSwitch = proration?.IsProratedSwitch ?? false,
                     PreviousPlanName = proration?.PreviousPlanName,
                     ProratedCreditAmount = proration?.ProratedCreditAmount
@@ -135,6 +141,13 @@ namespace CMSAPI.Controllers
                 .Where(h => hospitalIds.Contains(h.HospitalID))
                 .ToDictionaryAsync(h => h.HospitalID, h => h.Name);
 
+            // A hospital's referral code (if any) is attached once, at registration, to its single
+            // subscription row -- join by HospitalId rather than duplicating these columns onto the
+            // append-only payments table.
+            var referralByHospital = await _appDb.HospitalSubscriptions
+                .Where(hs => hospitalIds.Contains(hs.HospitalId) && hs.ReferralCode != null)
+                .ToDictionaryAsync(hs => hs.HospitalId, hs => new { hs.ReferralCode, hs.ReferralCodeRewardKind, hs.ReferralCodeRewardValue });
+
             var planIds = payments.Where(p => p.PlanId.HasValue).Select(p => p.PlanId!.Value).Distinct().ToList();
             var easyHmsPlans = await _cmsDb.EasyHmsSubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => p.Name);
             var legacyPlans = await _cmsDb.SubscriptionPlans.Where(p => planIds.Contains(p.PlanId)).ToDictionaryAsync(p => p.PlanId, p => new { p.Name, p.ApplicationName });
@@ -152,6 +165,7 @@ namespace CMSAPI.Controllers
                     resolvedPlanName = legacyPlan.Name;
                     applicationName = legacyPlan.ApplicationName;
                 }
+                referralByHospital.TryGetValue(p.HospitalId, out var referral);
 
                 return new
                 {
@@ -170,7 +184,10 @@ namespace CMSAPI.Controllers
                     p.RejectionReason,
                     p.IsProratedSwitch,
                     p.PreviousPlanName,
-                    p.ProratedCreditAmount
+                    p.ProratedCreditAmount,
+                    ReferralCode = referral?.ReferralCode,
+                    ReferralCodeRewardKind = referral?.ReferralCodeRewardKind,
+                    ReferralCodeRewardValue = referral?.ReferralCodeRewardValue
                 };
             }).ToList();
 
@@ -262,6 +279,33 @@ namespace CMSAPI.Controllers
             sub.RejectedAt = null;
             sub.UpdatedAt = DateTime.UtcNow;
 
+            // Referral code reward: lands only once, only on a Yearly plan. A PercentageOff reward
+            // already reduced what the hospital paid (applied client-side when the price was
+            // quoted) -- nothing further to do for that kind here. ExtraMonths extends the end date
+            // just computed above. ReferralCodeRedeemedAt is the idempotency guard against
+            // re-applying this on a retried/duplicate approval; the CMSDatabase-side ReferralCode
+            // row's own RedeemedByHospitalId is the global single-use guard across hospitals.
+            ReferralCode? referralCode = null;
+            if (billingCycle.Equals("yearly", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(sub.ReferralCode)
+                && sub.ReferralCodeRedeemedAt == null)
+            {
+                referralCode = await _cmsDb.ReferralCodes.FirstOrDefaultAsync(r => r.Code == sub.ReferralCode);
+                if (referralCode != null && (referralCode.RedeemedByHospitalId == null || referralCode.RedeemedByHospitalId == hospitalId))
+                {
+                    if (string.Equals(sub.ReferralCodeRewardKind, "ExtraMonths", StringComparison.OrdinalIgnoreCase) && sub.ReferralCodeRewardValue.HasValue)
+                    {
+                        sub.SubscriptionEndDate = sub.SubscriptionEndDate!.Value.AddMonths((int)sub.ReferralCodeRewardValue.Value);
+                        sub.NextBillingDate = sub.SubscriptionEndDate;
+                    }
+                    sub.ReferralCodeRedeemedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    referralCode = null; // already claimed by a different hospital -- nothing to redeem
+                }
+            }
+
             var planName = easyHmsPlan?.Name ?? legacyPlan?.Name;
             var latestPayment = await _appDb.HospitalSubscriptionPayments
                 .Where(p => p.HospitalId == hospitalId && p.Status == "PendingApproval")
@@ -275,6 +319,17 @@ namespace CMSAPI.Controllers
             }
 
             await _appDb.SaveChangesAsync();
+
+            // Only mark the code globally redeemed once the subscription activation above has
+            // actually committed -- this codebase has no cross-database transaction spanning
+            // AppDbContext (easyHMSDatabase) and CmsDbContext (CMSDatabase), so this order avoids
+            // ever marking a code spent for an activation that didn't happen.
+            if (referralCode != null && sub.ReferralCodeRedeemedAt != null && referralCode.RedeemedByHospitalId == null)
+            {
+                referralCode.RedeemedByHospitalId = hospitalId;
+                referralCode.RedeemedAt = sub.ReferralCodeRedeemedAt;
+                await _cmsDb.SaveChangesAsync();
+            }
 
             return Ok(new { message = "Subscription activated successfully.", sub.SubscriptionEndDate });
         }

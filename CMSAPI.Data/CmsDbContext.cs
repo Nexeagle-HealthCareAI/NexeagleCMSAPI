@@ -24,6 +24,8 @@ public class CmsDbContext : DbContext
     public DbSet<CmsPartner> CmsPartners => Set<CmsPartner>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<EasyHmsSubscriptionPlan> EasyHmsSubscriptionPlans => Set<EasyHmsSubscriptionPlan>();
+    public DbSet<ReferralCodeType> ReferralCodeTypes => Set<ReferralCodeType>();
+    public DbSet<ReferralCode> ReferralCodes => Set<ReferralCode>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CmsPartner>(e =>
@@ -140,6 +142,29 @@ public class CmsDbContext : DbContext
             e.HasKey(x => x.PlanId);
             e.Property(x => x.PlanId).ValueGeneratedNever();
             e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        });
+
+        b.Entity<ReferralCodeType>(e =>
+        {
+            e.ToTable("ReferralCodeTypes");
+            e.HasKey(x => x.ReferralCodeTypeId);
+            e.Property(x => x.ReferralCodeTypeId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            e.Property(x => x.RewardKind).HasMaxLength(20).IsRequired();
+            e.Property(x => x.RewardValue).HasColumnType("decimal(10,2)");
+        });
+
+        b.Entity<ReferralCode>(e =>
+        {
+            e.ToTable("ReferralCodes");
+            e.HasKey(x => x.ReferralCodeId);
+            e.Property(x => x.ReferralCodeId).ValueGeneratedNever();
+            e.Property(x => x.Code).HasMaxLength(30).IsRequired();
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasOne(x => x.ReferralCodeType)
+                .WithMany()
+                .HasForeignKey(x => x.ReferralCodeTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
