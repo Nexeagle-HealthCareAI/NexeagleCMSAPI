@@ -20,6 +20,13 @@ public class Hospital
     public string? TimeZone { get; set; }
     public string RegistrationNumber { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
+    // Soft-delete: distinct from IsActive, which this repository already uses to mean
+    // "still pending onboarding" (see HospitalRepository.GetHospitalsAsync's Status mapping).
+    // An archived hospital is hidden everywhere — enforced server-side in easyHMSAPI's
+    // HospitalAccessFilter, not here; this service only sets/reads the flag.
+    public bool IsArchived { get; set; } = false;
+    public DateTime? ArchivedAt { get; set; }
+    public Guid? ArchivedByUserId { get; set; }
     public Guid CreatedByUserID { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime LastUpdatedAt { get; set; }

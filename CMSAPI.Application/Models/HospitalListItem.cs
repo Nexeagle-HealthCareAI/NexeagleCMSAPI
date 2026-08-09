@@ -18,6 +18,11 @@ public class HospitalListItem
     public DateTime RegisteredOn { get; set; }
     public string Status { get; set; } = "Active"; // Active | Pending
 
+    // Soft-delete — separate concept from Status above (which is IsActive-driven onboarding
+    // status). Excluded from GetHospitalsAsync by default; see includeArchived.
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+
     // Subscription summary — null when the hospital has no HospitalSubscription row at all
     // (shouldn't normally happen; every hospital gets a Trial row on registration).
     public string? SubscriptionPlanName { get; set; }

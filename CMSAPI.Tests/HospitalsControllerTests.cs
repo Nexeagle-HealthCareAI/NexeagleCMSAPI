@@ -34,7 +34,7 @@ public class HospitalsControllerTests
                 ItemsPerPage = 10
             }
         };
-        _mockService.Setup(s => s.GetHospitalsAsync(1, 10, null, null, null, null, null)).ReturnsAsync(paged);
+        _mockService.Setup(s => s.GetHospitalsAsync(1, 10, null, null, null, null, null, false)).ReturnsAsync(paged);
 
         // Act
         var result = await _controller.GetHospitals(1, 10, null, null, null, null, null);
