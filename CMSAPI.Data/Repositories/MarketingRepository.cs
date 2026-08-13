@@ -51,5 +51,32 @@ namespace CMSAPI.Data.Repositories
                 Pagination = new PaginationInfo { CurrentPage = page, TotalPages = totalPages, TotalItems = totalItems, ItemsPerPage = limit }
             };
         }
+
+        public async Task<DemoLoginStats> GetDemoLoginStatsAsync()
+        {
+            var query = _db.HospitalLeads.AsNoTracking().Where(l => l.Source == Source_1HMSDemo);
+
+            var totalLogins = await query.CountAsync();
+            var uniqueVisitors = await query
+                .Where(l => l.SessionId != null)
+                .Select(l => l.SessionId)
+                .Distinct()
+                .CountAsync();
+
+            var topLocations = await query
+                .Where(l => l.Country != null || l.Region != null || l.City != null)
+                .GroupBy(l => new { l.Country, l.Region, l.City })
+                .Select(g => new DemoLocationCount { Country = g.Key.Country, Region = g.Key.Region, City = g.Key.City, Count = g.Count() })
+                .OrderByDescending(g => g.Count)
+                .Take(10)
+                .ToListAsync();
+
+            return new DemoLoginStats
+            {
+                TotalLogins = totalLogins,
+                UniqueVisitors = uniqueVisitors,
+                TopLocations = topLocations,
+            };
+        }
     }
 }

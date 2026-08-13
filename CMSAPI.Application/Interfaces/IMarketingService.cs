@@ -6,4 +6,5 @@ namespace CMSAPI.Application.Interfaces;
 public interface IMarketingService
 {
     Task<PagedResult<DemoLoginLeadItem>> GetDemoLoginLeadsAsync(int page, int limit);
+    Task<DemoLoginStats> GetDemoLoginStatsAsync();
 }

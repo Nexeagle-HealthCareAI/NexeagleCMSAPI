@@ -15,4 +15,7 @@ public class MarketingService : IMarketingService
 
     public Task<PagedResult<DemoLoginLeadItem>> GetDemoLoginLeadsAsync(int page, int limit)
         => _repo.GetDemoLoginLeadsAsync(page, limit);
+
+    public Task<DemoLoginStats> GetDemoLoginStatsAsync()
+        => _repo.GetDemoLoginStatsAsync();
 }

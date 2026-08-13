@@ -31,4 +31,12 @@ public class MarketingController : ControllerBase
         var result = await _service.GetDemoLoginLeadsAsync(page, limit);
         return Ok(result);
     }
+
+    [HasPermission("marketing.view")]
+    [HttpGet("demo-logins/stats")]
+    public async Task<IActionResult> GetDemoLoginStats()
+    {
+        var result = await _service.GetDemoLoginStatsAsync();
+        return Ok(result);
+    }
 }
