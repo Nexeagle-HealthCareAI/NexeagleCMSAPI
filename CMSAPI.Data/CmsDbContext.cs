@@ -26,6 +26,9 @@ public class CmsDbContext : DbContext
     public DbSet<EasyHmsSubscriptionPlan> EasyHmsSubscriptionPlans => Set<EasyHmsSubscriptionPlan>();
     public DbSet<ReferralCodeType> ReferralCodeTypes => Set<ReferralCodeType>();
     public DbSet<ReferralCode> ReferralCodes => Set<ReferralCode>();
+    public DbSet<MigrationBatch> MigrationBatches => Set<MigrationBatch>();
+    public DbSet<MigrationBatchRow> MigrationBatchRows => Set<MigrationBatchRow>();
+    public DbSet<MigrationDoctorMap> MigrationDoctorMaps => Set<MigrationDoctorMap>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CmsPartner>(e =>
@@ -165,6 +168,44 @@ public class CmsDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.ReferralCodeTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        b.Entity<MigrationBatch>(e =>
+        {
+            e.ToTable("MigrationBatches");
+            e.HasKey(x => x.BatchId);
+            e.Property(x => x.BatchId).ValueGeneratedNever();
+            e.Property(x => x.DataType).HasMaxLength(30).IsRequired();
+            e.Property(x => x.SourceFileName).HasMaxLength(260).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(20).IsRequired();
+        });
+
+        b.Entity<MigrationBatchRow>(e =>
+        {
+            e.ToTable("MigrationBatchRows");
+            e.HasKey(x => x.RowId);
+            e.Property(x => x.RowId).ValueGeneratedNever();
+            e.Property(x => x.RawDataJson).IsRequired();
+            e.Property(x => x.ResolvedPatientId).HasMaxLength(20);
+            e.Property(x => x.RowStatus).HasMaxLength(20).IsRequired();
+            e.HasOne(x => x.Batch)
+                .WithMany()
+                .HasForeignKey(x => x.BatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<MigrationDoctorMap>(e =>
+        {
+            e.ToTable("MigrationDoctorMap");
+            e.HasKey(x => x.MapId);
+            e.Property(x => x.MapId).ValueGeneratedNever();
+            e.Property(x => x.SourceDoctorName).HasMaxLength(200).IsRequired();
+            e.Property(x => x.SourceDepartment).HasMaxLength(200);
+            e.Property(x => x.MappedDoctorName).HasMaxLength(200);
+            e.HasOne(x => x.Batch)
+                .WithMany()
+                .HasForeignKey(x => x.BatchId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

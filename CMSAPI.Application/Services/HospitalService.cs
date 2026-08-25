@@ -28,4 +28,7 @@ public class HospitalService : IHospitalService
 
     public Task<bool> RestoreHospitalAsync(Guid id)
         => _repo.RestoreHospitalAsync(id);
+
+    public Task<System.Collections.Generic.List<PatientIdentitySnapshot>> GetPatientIdentitySnapshotAsync(Guid hospitalId)
+        => _repo.GetPatientIdentitySnapshotAsync(hospitalId);
 }

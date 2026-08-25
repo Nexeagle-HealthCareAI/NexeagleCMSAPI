@@ -356,8 +356,13 @@ public class AppDbContext : DbContext
             entity.Property(e => e.RegisteredAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             entity.Property(e => e.FullName).HasMaxLength(150).IsRequired();
             entity.Property(e => e.Mobile).HasMaxLength(20).IsRequired(false);
-            entity.Property(e => e.AgeYears).HasColumnType("smallint").IsRequired(false);
+            // AgeYears maps to the real column "Age" -- without HasColumnName, EF's default
+            // convention would target a nonexistent "AgeYears" column (this had never been
+            // queried before, so the mismatch was latent).
+            entity.Property(e => e.AgeYears).HasColumnName("Age").HasColumnType("smallint").IsRequired(false);
             entity.Property(e => e.Sex).HasMaxLength(20).IsRequired(false);
+            entity.Property(e => e.GuardianName).HasMaxLength(150).IsRequired(false);
+            entity.Property(e => e.GuardianRelation).HasMaxLength(20).IsRequired(false);
             entity.Property(e => e.AddressLine).HasMaxLength(255).IsRequired(false);
             entity.Property(e => e.City).HasMaxLength(100).IsRequired(false);
             entity.Property(e => e.State).HasMaxLength(100).IsRequired(false);
