@@ -48,14 +48,22 @@ public class DripCampaignWorker : BackgroundService
         // Find leads in "NEW" or "CONTACTED" state created within last 14 days
         var fourteenDaysAgo = DateTime.UtcNow.AddDays(-14);
         var leads = await db.CrmLeads
+            .Include(l => l.Activities)
             .Where(l => (l.Status == "NEW" || l.Status == "CONTACTED") && l.CreatedAt >= fourteenDaysAgo)
             .ToListAsync(ct);
 
         foreach (var lead in leads)
+        {
+            // Halt drip sequence if the lead has responded
+            bool hasInboundActivity = lead.Activities.Any(a => a.Direction == "INBOUND");
+            if (hasInboundActivity)
             {
+                continue;
+            }
+
             var daysSinceCreation = (DateTime.UtcNow - lead.CreatedAt).Days;
 
-            // Simplified drip logic
+            // 14-day Drip schedule
             string? templateToRun = daysSinceCreation switch
             {
                 1 => "day1_intro_pitch",
@@ -68,8 +76,8 @@ public class DripCampaignWorker : BackgroundService
             if (templateToRun != null)
             {
                 // check if already sent this template
-                var alreadySent = await db.CrmLeadActivities
-                    .AnyAsync(a => a.LeadId == lead.Id && a.TemplateName == templateToRun, ct);
+                var alreadySent = lead.Activities
+                    .Any(a => a.TemplateName == templateToRun);
 
                 if (!alreadySent)
                 {
@@ -81,6 +89,7 @@ public class DripCampaignWorker : BackgroundService
                         {
                             LeadId = lead.Id,
                             ActivityType = "WHATSAPP_DRIP",
+                            Direction = "OUTBOUND",
                             TemplateName = templateToRun,
                             MessageBody = $"Drip Campaign: {templateToRun}",
                             Status = "SENT"
