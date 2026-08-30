@@ -74,16 +74,27 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IHospitalService, HospitalService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IInsightsService, InsightsService>();
+builder.Services.AddScoped<IMarketingService, MarketingService>();
+builder.Services.AddScoped<ISalesLeadService, SalesLeadService>();
 // Typed HttpClient (not just AddScoped) -- SymptomRouterService calls out to the NLP router
 // and GitHub's API, so it needs an injected HttpClient the DI container manages properly.
 builder.Services.AddHttpClient<ISymptomRouterService, SymptomRouterService>();
+// Same reasoning -- DataMigrationService calls the Python DataMigrationService. A longer timeout
+// than the 100s HttpClient default: CSV parsing + a Groq call can run past that on a large file.
+builder.Services.AddHttpClient<IDataMigrationService, DataMigrationService>(c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(120);
+});
 
 // Register Data Repositories
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<IHospitalRepository, HospitalRepository>();
 builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
 builder.Services.AddScoped<IInsightsRepository, InsightsRepository>();
+builder.Services.AddScoped<IMarketingRepository, MarketingRepository>();
+builder.Services.AddScoped<ISalesLeadRepository, SalesLeadRepository>();
 builder.Services.AddScoped<ISymptomRouterRepository, SymptomRouterRepository>();
+builder.Services.AddScoped<IDataMigrationRepository, DataMigrationRepository>();
 
 // CMS identity / RBAC (CMSDatabase)
 builder.Services.AddScoped<ICmsAuthRepository, CmsAuthRepository>();

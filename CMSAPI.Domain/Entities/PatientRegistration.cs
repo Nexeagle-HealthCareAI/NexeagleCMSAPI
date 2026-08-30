@@ -13,6 +13,8 @@ public class PatientRegistration
     public string? Mobile { get; set; }
     public short? AgeYears { get; set; }
     public string? Sex { get; set; }
+    public string? GuardianName { get; set; }
+    public string? GuardianRelation { get; set; }
     public string? AddressLine { get; set; }
     public string? City { get; set; }
     public string? State { get; set; }

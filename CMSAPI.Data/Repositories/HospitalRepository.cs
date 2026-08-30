@@ -148,6 +148,7 @@ namespace CMSAPI.Data.Repositories
 
                 doctorInfos.Add(new DoctorInfo
                 {
+                    Id = doc.DoctorID,
                     Name = doctorName,
                     Departments = deps,
                     Speciality = specs.FirstOrDefault() ?? string.Empty,
@@ -539,6 +540,23 @@ namespace CMSAPI.Data.Repositories
             hospital.LastUpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<List<PatientIdentitySnapshot>> GetPatientIdentitySnapshotAsync(Guid hospitalId)
+        {
+            return await _db.PatientRegistrations
+                .AsNoTracking()
+                .Where(p => p.HospitalID == hospitalId)
+                .Select(p => new PatientIdentitySnapshot
+                {
+                    PatientId = p.PatientID,
+                    FullName = p.FullName,
+                    GuardianName = p.GuardianName,
+                    GuardianRelation = p.GuardianRelation,
+                    Age = p.AgeYears,
+                    Sex = p.Sex,
+                })
+                .ToListAsync();
         }
     }
 }

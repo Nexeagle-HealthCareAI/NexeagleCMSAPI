@@ -11,4 +11,5 @@ public interface IHospitalService
     Task<HospitalAppointmentSourceStats> GetAppointmentSourceStatsAsync(Guid hospitalId, DateOnly? from, DateOnly? to);
     Task<bool> ArchiveHospitalAsync(Guid id, Guid archivedByUserId);
     Task<bool> RestoreHospitalAsync(Guid id);
+    Task<System.Collections.Generic.List<PatientIdentitySnapshot>> GetPatientIdentitySnapshotAsync(Guid hospitalId);
 }

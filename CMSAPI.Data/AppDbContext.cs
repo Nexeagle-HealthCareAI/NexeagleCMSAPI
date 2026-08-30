@@ -37,6 +37,7 @@ public class AppDbContext : DbContext
     public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; } = null!;
     public DbSet<WebsiteVisit> WebsiteVisits { get; set; } = null!;
     public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; } = null!;
+    public DbSet<HospitalLead> HospitalLeads { get; set; } = null!;
     public DbSet<SymptomTrainingExample> SymptomTrainingExamples { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -65,6 +66,12 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("AnalyticsEvents");
             entity.HasKey(e => e.EventId);
+        });
+
+        modelBuilder.Entity<HospitalLead>(entity =>
+        {
+            entity.ToTable("HospitalLeads");
+            entity.HasKey(e => e.LeadId);
         });
 
         modelBuilder.Entity<SymptomTrainingExample>(entity =>
@@ -349,8 +356,13 @@ public class AppDbContext : DbContext
             entity.Property(e => e.RegisteredAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             entity.Property(e => e.FullName).HasMaxLength(150).IsRequired();
             entity.Property(e => e.Mobile).HasMaxLength(20).IsRequired(false);
-            entity.Property(e => e.AgeYears).HasColumnType("smallint").IsRequired(false);
+            // AgeYears maps to the real column "Age" -- without HasColumnName, EF's default
+            // convention would target a nonexistent "AgeYears" column (this had never been
+            // queried before, so the mismatch was latent).
+            entity.Property(e => e.AgeYears).HasColumnName("Age").HasColumnType("smallint").IsRequired(false);
             entity.Property(e => e.Sex).HasMaxLength(20).IsRequired(false);
+            entity.Property(e => e.GuardianName).HasMaxLength(150).IsRequired(false);
+            entity.Property(e => e.GuardianRelation).HasMaxLength(20).IsRequired(false);
             entity.Property(e => e.AddressLine).HasMaxLength(255).IsRequired(false);
             entity.Property(e => e.City).HasMaxLength(100).IsRequired(false);
             entity.Property(e => e.State).HasMaxLength(100).IsRequired(false);

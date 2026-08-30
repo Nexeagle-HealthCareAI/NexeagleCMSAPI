@@ -80,6 +80,7 @@ public class HospitalUserInfo
 
 public class DoctorInfo
 {
+    public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public List<string> Departments { get; set; } = new();
     public string Speciality { get; set; } = string.Empty;
