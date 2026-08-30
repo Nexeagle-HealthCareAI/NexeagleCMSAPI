@@ -76,7 +76,7 @@ public class MarketingController : ControllerBase
         return Ok(lead);
     }
 
-    [HasPermission("marketing.manage")]
+    [HasPermission("marketing.view")]
     [HttpPost("leads")]
     public async Task<IActionResult> CreateLead([FromBody] CreateSalesLeadRequest req)
     {
@@ -87,7 +87,7 @@ public class MarketingController : ControllerBase
         return CreatedAtAction(nameof(GetLead), new { id = lead.LeadId }, lead);
     }
 
-    [HasPermission("marketing.manage")]
+    [HasPermission("marketing.view")]
     [HttpPut("leads/{id:guid}")]
     public async Task<IActionResult> UpdateLead(Guid id, [FromBody] UpdateSalesLeadRequest req)
     {
@@ -96,7 +96,7 @@ public class MarketingController : ControllerBase
         return Ok(lead);
     }
 
-    [HasPermission("marketing.manage")]
+    [HasPermission("marketing.view")]
     [HttpDelete("leads/{id:guid}")]
     public async Task<IActionResult> DeleteLead(Guid id)
     {
@@ -105,7 +105,7 @@ public class MarketingController : ControllerBase
         return NoContent();
     }
 
-    [HasPermission("marketing.manage")]
+    [HasPermission("marketing.view")]
     [HttpPost("leads/{id:guid}/followups")]
     public async Task<IActionResult> AddFollowUp(Guid id, [FromBody] AddFollowUpRequest req)
     {

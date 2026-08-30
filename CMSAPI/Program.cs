@@ -22,6 +22,7 @@ var builder = WebApplication.CreateBuilder(args);
 // CONFIGURATION
 // =============================
 builder.Services.AddHostedService<CMSAPI.Services.ScheduledHealthCheck>();
+builder.Services.AddHostedService<CMSAPI.Services.DripCampaignWorker>();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -85,6 +86,8 @@ builder.Services.AddHttpClient<IDataMigrationService, DataMigrationService>(c =>
 {
     c.Timeout = TimeSpan.FromSeconds(120);
 });
+builder.Services.AddHttpClient<IGroqSalesAiService, GroqSalesAiService>();
+builder.Services.AddHttpClient<IWhatsAppService, WhatsAppService>();
 
 // Register Data Repositories
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
