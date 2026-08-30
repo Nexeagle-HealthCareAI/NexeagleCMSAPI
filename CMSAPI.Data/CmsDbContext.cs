@@ -24,6 +24,13 @@ public class CmsDbContext : DbContext
     public DbSet<CmsPartner> CmsPartners => Set<CmsPartner>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<EasyHmsSubscriptionPlan> EasyHmsSubscriptionPlans => Set<EasyHmsSubscriptionPlan>();
+    public DbSet<ReferralCodeType> ReferralCodeTypes => Set<ReferralCodeType>();
+    public DbSet<ReferralCode> ReferralCodes => Set<ReferralCode>();
+    public DbSet<MigrationBatch> MigrationBatches => Set<MigrationBatch>();
+    public DbSet<MigrationBatchRow> MigrationBatchRows => Set<MigrationBatchRow>();
+    public DbSet<MigrationDoctorMap> MigrationDoctorMaps => Set<MigrationDoctorMap>();
+    public DbSet<CmsSalesLead> CmsSalesLeads => Set<CmsSalesLead>();
+    public DbSet<CmsSalesLeadFollowUp> CmsSalesLeadFollowUps => Set<CmsSalesLeadFollowUp>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CmsPartner>(e =>
@@ -140,6 +147,101 @@ public class CmsDbContext : DbContext
             e.HasKey(x => x.PlanId);
             e.Property(x => x.PlanId).ValueGeneratedNever();
             e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        });
+
+        b.Entity<ReferralCodeType>(e =>
+        {
+            e.ToTable("ReferralCodeTypes");
+            e.HasKey(x => x.ReferralCodeTypeId);
+            e.Property(x => x.ReferralCodeTypeId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            e.Property(x => x.RewardKind).HasMaxLength(20).IsRequired();
+            e.Property(x => x.RewardValue).HasColumnType("decimal(10,2)");
+        });
+
+        b.Entity<ReferralCode>(e =>
+        {
+            e.ToTable("ReferralCodes");
+            e.HasKey(x => x.ReferralCodeId);
+            e.Property(x => x.ReferralCodeId).ValueGeneratedNever();
+            e.Property(x => x.Code).HasMaxLength(30).IsRequired();
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasOne(x => x.ReferralCodeType)
+                .WithMany()
+                .HasForeignKey(x => x.ReferralCodeTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        b.Entity<MigrationBatch>(e =>
+        {
+            e.ToTable("MigrationBatches");
+            e.HasKey(x => x.BatchId);
+            e.Property(x => x.BatchId).ValueGeneratedNever();
+            e.Property(x => x.DataType).HasMaxLength(30).IsRequired();
+            e.Property(x => x.SourceFileName).HasMaxLength(260).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(20).IsRequired();
+        });
+
+        b.Entity<MigrationBatchRow>(e =>
+        {
+            e.ToTable("MigrationBatchRows");
+            e.HasKey(x => x.RowId);
+            e.Property(x => x.RowId).ValueGeneratedNever();
+            e.Property(x => x.RawDataJson).IsRequired();
+            e.Property(x => x.ResolvedPatientId).HasMaxLength(20);
+            e.Property(x => x.RowStatus).HasMaxLength(20).IsRequired();
+            e.HasOne(x => x.Batch)
+                .WithMany()
+                .HasForeignKey(x => x.BatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<MigrationDoctorMap>(e =>
+        {
+            e.ToTable("MigrationDoctorMap");
+            e.HasKey(x => x.MapId);
+            e.Property(x => x.MapId).ValueGeneratedNever();
+            e.Property(x => x.SourceDoctorName).HasMaxLength(200).IsRequired();
+            e.Property(x => x.SourceDepartment).HasMaxLength(200);
+            e.Property(x => x.MappedDoctorName).HasMaxLength(200);
+            e.HasOne(x => x.Batch)
+                .WithMany()
+                .HasForeignKey(x => x.BatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<CmsSalesLead>(e =>
+        {
+            e.ToTable("CmsSalesLeads");
+            e.HasKey(x => x.LeadId);
+            e.Property(x => x.LeadId).ValueGeneratedNever();
+            e.Property(x => x.HospitalName).HasMaxLength(200).IsRequired();
+            e.Property(x => x.ContactName).HasMaxLength(150);
+            e.Property(x => x.Mobile).HasMaxLength(20);
+            e.Property(x => x.Email).HasMaxLength(256);
+            e.Property(x => x.City).HasMaxLength(100);
+            e.Property(x => x.State).HasMaxLength(100);
+            e.Property(x => x.Source).HasMaxLength(50).IsRequired();
+            e.Property(x => x.Stage).HasMaxLength(50).IsRequired();
+            e.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            e.HasOne(x => x.AssignedTo)
+                .WithMany()
+                .HasForeignKey(x => x.AssignedToUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.FollowUps)
+                .WithOne(f => f.Lead)
+                .HasForeignKey(f => f.LeadId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<CmsSalesLeadFollowUp>(e =>
+        {
+            e.ToTable("CmsSalesLeadFollowUps");
+            e.HasKey(x => x.FollowUpId);
+            e.Property(x => x.FollowUpId).ValueGeneratedNever();
+            e.Property(x => x.ActivityType).HasMaxLength(50).IsRequired();
+            e.Property(x => x.AuthorName).HasMaxLength(150);
+            e.Property(x => x.Notes).IsRequired();
         });
     }
 }

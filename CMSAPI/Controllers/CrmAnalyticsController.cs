@@ -1,0 +1,52 @@
+using Microsoft.AspNetCore.Mvc;
+using CMSAPI.Data;
+using Microsoft.EntityFrameworkCore;
+using CMSAPI.Application.Models;
+
+namespace CMSAPI.Controllers;
+
+[ApiController]
+[Route("api/v1/crm/analytics")]
+public class CrmAnalyticsController : ControllerBase
+{
+    private readonly AppDbContext _db;
+
+    public CrmAnalyticsController(AppDbContext db)
+    {
+        _db = db;
+    }
+
+    [HttpGet("financial")]
+    public async Task<ActionResult<FinancialAttributionDto>> GetFinancialAttribution(CancellationToken ct)
+    {
+        // Total Ad Spend from Campaigns
+        var totalSpend = await _db.CrmCampaigns
+            .Where(c => c.IsActive)
+            .SumAsync(c => c.ActualSpend, ct);
+
+        // Leads metrics
+        var totalLeads = await _db.CrmLeads.CountAsync(ct);
+        
+        var totalQualifiedLeads = await _db.CrmLeads
+            .Where(l => l.AiIntentScore >= 50)
+            .CountAsync(ct);
+
+        var closedWonLeads = await _db.CrmLeads
+            .Where(l => l.Status == "CLOSED_WON")
+            .ToListAsync(ct);
+
+        var totalCustomers = closedWonLeads.Count;
+        var totalRevenue = closedWonLeads.Sum(l => l.DealValue);
+
+        var dto = new FinancialAttributionDto
+        {
+            TotalSpend = totalSpend,
+            TotalRevenue = totalRevenue,
+            TotalLeads = totalLeads,
+            TotalQualifiedLeads = totalQualifiedLeads,
+            TotalCustomers = totalCustomers
+        };
+
+        return Ok(dto);
+    }
+}

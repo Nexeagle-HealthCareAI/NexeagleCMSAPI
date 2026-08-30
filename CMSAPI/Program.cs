@@ -22,6 +22,7 @@ var builder = WebApplication.CreateBuilder(args);
 // CONFIGURATION
 // =============================
 builder.Services.AddHostedService<CMSAPI.Services.ScheduledHealthCheck>();
+builder.Services.AddHostedService<CMSAPI.Services.DripCampaignWorker>();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -74,16 +75,29 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IHospitalService, HospitalService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IInsightsService, InsightsService>();
+builder.Services.AddScoped<IMarketingService, MarketingService>();
+builder.Services.AddScoped<ISalesLeadService, SalesLeadService>();
 // Typed HttpClient (not just AddScoped) -- SymptomRouterService calls out to the NLP router
 // and GitHub's API, so it needs an injected HttpClient the DI container manages properly.
 builder.Services.AddHttpClient<ISymptomRouterService, SymptomRouterService>();
+// Same reasoning -- DataMigrationService calls the Python DataMigrationService. A longer timeout
+// than the 100s HttpClient default: CSV parsing + a Groq call can run past that on a large file.
+builder.Services.AddHttpClient<IDataMigrationService, DataMigrationService>(c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(120);
+});
+builder.Services.AddHttpClient<IGroqSalesAiService, GroqSalesAiService>();
+builder.Services.AddHttpClient<IWhatsAppService, WhatsAppService>();
 
 // Register Data Repositories
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<IHospitalRepository, HospitalRepository>();
 builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
 builder.Services.AddScoped<IInsightsRepository, InsightsRepository>();
+builder.Services.AddScoped<IMarketingRepository, MarketingRepository>();
+builder.Services.AddScoped<ISalesLeadRepository, SalesLeadRepository>();
 builder.Services.AddScoped<ISymptomRouterRepository, SymptomRouterRepository>();
+builder.Services.AddScoped<IDataMigrationRepository, DataMigrationRepository>();
 
 // CMS identity / RBAC (CMSDatabase)
 builder.Services.AddScoped<ICmsAuthRepository, CmsAuthRepository>();
@@ -91,6 +105,8 @@ builder.Services.AddScoped<ICmsPartnerRepository, CmsPartnerRepository>();
 builder.Services.AddScoped<ICmsAdminRepository, CmsAdminRepository>();
 builder.Services.AddScoped<ICmsAdminService, CmsAdminService>();
 builder.Services.AddScoped<ICmsPartnerService, CmsPartnerService>();
+builder.Services.AddScoped<IReferralCodeRepository, ReferralCodeRepository>();
+builder.Services.AddScoped<IReferralCodeService, ReferralCodeService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddSingleton<IEmailService, EmailService>();
@@ -376,6 +392,7 @@ try
     // =============================
     app.MapControllers();
     app.MapHub<CMSAPI.Hubs.ChatHub>("/chathub").RequireRateLimiting("login").AllowAnonymous();
+    app.MapHub<CMSAPI.Hubs.CrmHub>("/hubs/crm").AllowAnonymous();
 
     app.MapHealthChecks("/health")
         .AllowAnonymous();

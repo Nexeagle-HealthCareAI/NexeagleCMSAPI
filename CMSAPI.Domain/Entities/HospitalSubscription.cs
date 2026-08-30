@@ -47,6 +47,19 @@ namespace CMSAPI.Domain.Entities
         public string? RejectionReason { get; set; }
         public DateTime? RejectedAt { get; set; }
 
+        // Snapshotted by easyHMSAPI's HospitalRegisterHandler when a valid referral code is entered
+        // at registration. RewardKind/Value are copied from CMSDatabase's ReferralCodeType at that
+        // moment so nothing needs to be re-queried later. RedeemedAt is set by
+        // SubscriptionApprovalController.ApprovePayment the first time this hospital's subscription
+        // is activated on a Yearly plan -- NULL means the reward hasn't landed yet, and doubles as
+        // the idempotency guard against re-applying it on a later renewal/approval.
+        [MaxLength(30)]
+        public string? ReferralCode { get; set; }
+        [MaxLength(20)]
+        public string? ReferralCodeRewardKind { get; set; } // 'PercentageOff' | 'ExtraMonths'
+        public decimal? ReferralCodeRewardValue { get; set; }
+        public DateTime? ReferralCodeRedeemedAt { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
