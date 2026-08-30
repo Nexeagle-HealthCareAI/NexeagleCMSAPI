@@ -152,13 +152,16 @@ jobs:
           RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
           SMTP_EMAIL: ${{ secrets.SMTP_SENDER_EMAIL }}
           SMTP_PW: ${{ secrets.SMTP_PASSWORD }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+          WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY,SYMPTOM_ROUTER_SVC_KEY,RETRAIN_TOKEN,SMTP_EMAIL,SMTP_PW
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY,SYMPTOM_ROUTER_SVC_KEY,RETRAIN_TOKEN,SMTP_EMAIL,SMTP_PW,GROQ_API_KEY,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_ACCESS_TOKEN
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -183,6 +186,9 @@ jobs:
               printf 'GitHub__RetrainWorkflowToken=%s\n'       "${RETRAIN_TOKEN:-}"
               printf 'Smtp__SenderEmail=%s\n'                  "${SMTP_EMAIL:-}"
               printf 'Smtp__Password=%s\n'                     "${SMTP_PW:-}"
+              printf 'Groq__ApiKey=%s\n'                       "${GROQ_API_KEY:-}"
+              printf 'Meta__WhatsApp__PhoneNumberId=%s\n'      "${WHATSAPP_PHONE_NUMBER_ID:-}"
+              printf 'Meta__WhatsApp__AccessToken=%s\n'        "${WHATSAPP_ACCESS_TOKEN:-}"
             } > "$ENVFILE"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
@@ -234,6 +240,9 @@ jobs:
           RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
           SMTP_EMAIL: ${{ secrets.SMTP_SENDER_EMAIL }}
           SMTP_PW: ${{ secrets.SMTP_PASSWORD }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+          WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
           : "${JWT_SECRET:?JWT_SECRET is empty}"
@@ -256,6 +265,9 @@ jobs:
             printf 'GitHub__RetrainWorkflowToken=%s\n'         "${RETRAIN_TOKEN:-}"
             printf 'Smtp__SenderEmail=%s\n'                    "${SMTP_EMAIL:-}"
             printf 'Smtp__Password=%s\n'                       "${SMTP_PW:-}"
+            printf 'Groq__ApiKey=%s\n'                         "${GROQ_API_KEY:-}"
+            printf 'Meta__WhatsApp__PhoneNumberId=%s\n'        "${WHATSAPP_PHONE_NUMBER_ID:-}"
+            printf 'Meta__WhatsApp__AccessToken=%s\n'          "${WHATSAPP_ACCESS_TOKEN:-}"
           } > "$ENVFILE"
 
       - name: Copy prod.env to Prod VM
