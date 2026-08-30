@@ -18,12 +18,17 @@ public class GroqSalesAiService : IGroqSalesAiService
     private readonly HttpClient _httpClient;
     private const string ModelName = "llama-3.3-70b-versatile";
 
+    private string? _apiKey;
+
     public GroqSalesAiService(HttpClient httpClient, IConfiguration config)
     {
         _httpClient = httpClient;
-        var apiKey = config["Groq:ApiKey"] ?? throw new InvalidOperationException("Groq API Key missing");
+        _apiKey = config["Groq:ApiKey"];
         _httpClient.BaseAddress = new Uri("https://api.groq.com/openai/v1/");
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+        if (!string.IsNullOrWhiteSpace(_apiKey))
+        {
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
+        }
     }
 
     public async Task<LeadEnrichmentResult> ScoreAndEnrichLeadAsync(string facilityName, string facilityType, int beds, string city, string rawInquiry, CancellationToken ct = default)
@@ -92,6 +97,11 @@ public class GroqSalesAiService : IGroqSalesAiService
 
     private async Task<string> ExecuteGroqAsync(string prompt, bool jsonMode, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(_apiKey))
+        {
+            throw new InvalidOperationException("Groq API Key is not configured.");
+        }
+
         var requestBody = new
         {
             model = ModelName,

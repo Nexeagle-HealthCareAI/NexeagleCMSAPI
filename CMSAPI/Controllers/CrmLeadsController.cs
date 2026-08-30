@@ -65,30 +65,37 @@ public class CrmLeadsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetLeads(CancellationToken ct)
     {
-        var leads = await _db.CrmLeads
-            .OrderByDescending(l => l.CreatedAt)
-            .Select(l => new 
-            {
-                id = l.Id,
-                leadNumber = l.LeadNumber,
-                contactName = l.ContactName,
-                facilityName = l.FacilityName,
-                facilityType = l.FacilityType,
-                bedCount = l.BedCount,
-                city = l.City,
-                state = "Unknown", // Assuming mapping logic here
-                phoneNumber = l.PhoneNumber,
-                sourceChannel = l.SourceChannel,
-                status = l.Status,
-                aiIntentScore = l.AiIntentScore,
-                aiPersonaSummary = l.AiPersonaSummary,
-                dealValue = l.BedCount * 2500, // Dummy calculation for deal value
-                createdAt = l.CreatedAt,
-                updatedAt = l.UpdatedAt
-            })
-            .ToListAsync(ct);
-            
-        return Ok(leads);
+        try
+        {
+            var leads = await _db.CrmLeads
+                .OrderByDescending(l => l.CreatedAt)
+                .Select(l => new 
+                {
+                    id = l.Id,
+                    leadNumber = l.LeadNumber,
+                    contactName = l.ContactName,
+                    facilityName = l.FacilityName,
+                    facilityType = l.FacilityType,
+                    bedCount = l.BedCount,
+                    city = l.City,
+                    state = "Unknown", // Assuming mapping logic here
+                    phoneNumber = l.PhoneNumber,
+                    sourceChannel = l.SourceChannel,
+                    status = l.Status,
+                    aiIntentScore = l.AiIntentScore,
+                    aiPersonaSummary = l.AiPersonaSummary,
+                    dealValue = l.BedCount * 2500, // Dummy calculation for deal value
+                    createdAt = l.CreatedAt,
+                    updatedAt = l.UpdatedAt
+                })
+                .ToListAsync(ct);
+                
+            return Ok(leads);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message, inner = ex.InnerException?.Message });
+        }
     }
 
     [HttpPatch("{id}/stage")]

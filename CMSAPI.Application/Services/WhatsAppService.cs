@@ -21,11 +21,14 @@ public class WhatsAppService : IWhatsAppService
     public WhatsAppService(HttpClient httpClient, IConfiguration config)
     {
         _httpClient = httpClient;
-        _phoneNumberId = config["Meta:WhatsApp:PhoneNumberId"] ?? throw new InvalidOperationException("WhatsApp PhoneNumberId missing");
-        _accessToken = config["Meta:WhatsApp:AccessToken"] ?? throw new InvalidOperationException("WhatsApp AccessToken missing");
+        _phoneNumberId = config["Meta:WhatsApp:PhoneNumberId"] ?? string.Empty;
+        _accessToken = config["Meta:WhatsApp:AccessToken"] ?? string.Empty;
         
-        _httpClient.BaseAddress = new Uri($"https://graph.facebook.com/v19.0/{_phoneNumberId}/");
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        if (!string.IsNullOrWhiteSpace(_phoneNumberId) && !string.IsNullOrWhiteSpace(_accessToken))
+        {
+            _httpClient.BaseAddress = new Uri($"https://graph.facebook.com/v19.0/{_phoneNumberId}/");
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        }
     }
 
     public async Task<bool> SendTemplateMessageAsync(string toPhoneNumber, string templateName, string language = "en", CancellationToken ct = default)
@@ -75,6 +78,12 @@ public class WhatsAppService : IWhatsAppService
 
     private async Task<bool> SendWhatsAppRequestAsync(object payload, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(_phoneNumberId) || string.IsNullOrWhiteSpace(_accessToken))
+        {
+            Console.WriteLine("WhatsApp API Error: Configuration missing");
+            return false;
+        }
+
         var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         var response = await _httpClient.PostAsync("messages", content, ct);
         
