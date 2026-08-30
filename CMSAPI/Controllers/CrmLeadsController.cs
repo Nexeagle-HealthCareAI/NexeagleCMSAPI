@@ -121,8 +121,7 @@ public class CrmLeadsController : ControllerBase
         if (req.ContactName != null) lead.ContactName = req.ContactName;
         if (req.Mobile != null) lead.PhoneNumber = req.Mobile;
         if (req.City != null) lead.City = req.City;
-        // Assume mapping of state/email to CrmLeads is available or added later if needed.
-        // CrmLead currently has FacilityName, ContactName, PhoneNumber, City, etc.
+        if (req.Stage != null) lead.Status = req.Stage;
 
         lead.UpdatedAt = DateTime.UtcNow;
 
@@ -130,12 +129,54 @@ public class CrmLeadsController : ControllerBase
 
         return Ok(new
         {
-            id = lead.Id,
+            leadId = lead.Id,
             hospitalName = lead.FacilityName,
             contactName = lead.ContactName,
             mobile = lead.PhoneNumber,
             city = lead.City,
             stage = lead.Status
+        });
+    }
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetLead(Guid id, CancellationToken ct)
+    {
+        var lead = await _db.CrmLeads.FirstOrDefaultAsync(l => l.Id == id, ct);
+        if (lead == null) return NotFound("Lead not found");
+
+        return Ok(new
+        {
+            leadId = lead.Id,
+            leadNumber = lead.LeadNumber,
+            contactName = lead.ContactName,
+            hospitalName = lead.FacilityName,
+            facilityType = lead.FacilityType,
+            bedCount = lead.BedCount,
+            city = lead.City,
+            state = "Unknown",
+            mobile = lead.PhoneNumber,
+            sourceChannel = lead.SourceChannel,
+            stage = lead.Status,
+            priority = "Medium", // Or fetch from DB if available
+            aiIntentScore = lead.AiIntentScore,
+            aiPersonaSummary = lead.AiPersonaSummary,
+            createdAt = lead.CreatedAt,
+            updatedAt = lead.UpdatedAt,
+            followUps = new List<object>() // Empty for now, can implement later
+        });
+    }
+
+    [HttpPost("{id}/followups")]
+    public async Task<IActionResult> AddFollowUp(Guid id, [FromBody] AddFollowUpRequest req, CancellationToken ct)
+    {
+        // Mock implementation to prevent 404
+        return Ok(new
+        {
+            followUpId = Guid.NewGuid(),
+            activityType = req.ActivityType,
+            notes = req.Notes,
+            authorName = "Current User",
+            createdAt = DateTime.UtcNow
         });
     }
 }
@@ -156,6 +197,12 @@ public class UpdateLeadRequest
     public string? Stage { get; set; }
     public string? Priority { get; set; }
     public Guid? AssignedToUserId { get; set; }
+}
+
+public class AddFollowUpRequest
+{
+    public string ActivityType { get; set; } = string.Empty;
+    public string Notes { get; set; } = string.Empty;
 }
 
 public class QuickAddLeadRequest
