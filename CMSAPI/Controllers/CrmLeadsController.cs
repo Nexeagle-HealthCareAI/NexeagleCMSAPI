@@ -110,52 +110,11 @@ public class CrmLeadsController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(new { success = true });
     }
-
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateLead(Guid id, [FromBody] UpdateLeadRequest req, CancellationToken ct)
-    {
-        var lead = await _db.CrmLeads.FirstOrDefaultAsync(l => l.Id == id, ct);
-        if (lead == null) return NotFound("Lead not found");
-
-        if (!string.IsNullOrWhiteSpace(req.HospitalName)) lead.FacilityName = req.HospitalName;
-        if (req.ContactName != null) lead.ContactName = req.ContactName;
-        if (req.Mobile != null) lead.PhoneNumber = req.Mobile;
-        if (req.City != null) lead.City = req.City;
-        // Assume mapping of state/email to CrmLeads is available or added later if needed.
-        // CrmLead currently has FacilityName, ContactName, PhoneNumber, City, etc.
-
-        lead.UpdatedAt = DateTime.UtcNow;
-
-        await _db.SaveChangesAsync(ct);
-
-        return Ok(new
-        {
-            id = lead.Id,
-            hospitalName = lead.FacilityName,
-            contactName = lead.ContactName,
-            mobile = lead.PhoneNumber,
-            city = lead.City,
-            stage = lead.Status
-        });
-    }
 }
 
 public class UpdateLeadStageRequest
 {
     public string Stage { get; set; } = string.Empty;
-}
-
-public class UpdateLeadRequest
-{
-    public string? HospitalName { get; set; }
-    public string? ContactName { get; set; }
-    public string? Mobile { get; set; }
-    public string? Email { get; set; }
-    public string? City { get; set; }
-    public string? State { get; set; }
-    public string? Stage { get; set; }
-    public string? Priority { get; set; }
-    public Guid? AssignedToUserId { get; set; }
 }
 
 public class QuickAddLeadRequest
