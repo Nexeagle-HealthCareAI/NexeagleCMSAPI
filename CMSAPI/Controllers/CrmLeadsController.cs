@@ -12,11 +12,13 @@ public class CrmLeadsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IGroqSalesAiService _aiService;
+    private readonly IWhatsAppService _waService;
 
-    public CrmLeadsController(AppDbContext db, IGroqSalesAiService aiService)
+    public CrmLeadsController(AppDbContext db, IGroqSalesAiService aiService, IWhatsAppService waService)
     {
         _db = db;
         _aiService = aiService;
+        _waService = waService;
     }
 
     [HttpPost("quick-add")]
@@ -110,6 +112,69 @@ public class CrmLeadsController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(new { success = true });
     }
+
+    [HttpPost("{id}/whatsapp-template")]
+    public async Task<IActionResult> SendWhatsAppTemplate(Guid id, [FromBody] SendTemplateRequest req, CancellationToken ct)
+    {
+        var lead = await _db.CrmLeads.FirstOrDefaultAsync(l => l.Id == id, ct);
+        if (lead == null) return NotFound("Lead not found");
+
+        if (string.IsNullOrWhiteSpace(lead.PhoneNumber))
+            return BadRequest("Lead has no phone number");
+
+        // Format components based on template
+        object[]? components = null;
+        if (req.TemplateName == "day1_intro_pitch")
+        {
+            components = new[]
+            {
+                new
+                {
+                    type = "header",
+                    parameters = new[]
+                    {
+                        new { type = "video", video = new { link = "https://1hms.nexeagle.com/assets/video_pitch.mp4" } }
+                    }
+                }
+            };
+        }
+        else if (req.TemplateName == "day3_roi_case_study")
+        {
+            components = new[]
+            {
+                new
+                {
+                    type = "header",
+                    parameters = new[]
+                    {
+                        new { type = "document", document = new { link = "https://1hms.nexeagle.com/assets/case_study.pdf", filename = "CaseStudy.pdf" } }
+                    }
+                }
+            };
+        }
+
+        var success = await _waService.SendTemplateMessageAsync(lead.PhoneNumber, req.TemplateName, components: components, ct: ct);
+        
+        if (success)
+        {
+            var activity = new CrmLeadActivity
+            {
+                LeadId = lead.Id,
+                ActivityType = "WhatsApp",
+                Direction = "OUTBOUND",
+                MessageBody = $"Sent Meta Template: {req.TemplateName}",
+                TemplateName = req.TemplateName,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.CrmLeadActivities.Add(activity);
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { success = true });
+        }
+        else
+        {
+            return StatusCode(500, new { error = "WhatsApp API failed to send the template." });
+        }
+    }
 }
 
 public class UpdateLeadStageRequest
@@ -125,4 +190,9 @@ public class QuickAddLeadRequest
     public int BedCount { get; set; }
     public string City { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
+}
+
+public class SendTemplateRequest
+{
+    public string TemplateName { get; set; } = string.Empty;
 }

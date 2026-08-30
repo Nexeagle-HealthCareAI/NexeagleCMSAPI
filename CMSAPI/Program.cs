@@ -392,6 +392,7 @@ try
     // =============================
     app.MapControllers();
     app.MapHub<CMSAPI.Hubs.ChatHub>("/chathub").RequireRateLimiting("login").AllowAnonymous();
+    app.MapHub<CMSAPI.Hubs.CrmHub>("/hubs/crm").AllowAnonymous();
 
     app.MapHealthChecks("/health")
         .AllowAnonymous();

@@ -3,6 +3,8 @@ using System.Text.Json;
 using CMSAPI.Domain.Entities;
 using CMSAPI.Data;
 using CMSAPI.Application.Services;
+using Microsoft.AspNetCore.SignalR;
+using CMSAPI.Hubs;
 
 namespace CMSAPI.Controllers;
 
@@ -13,12 +15,14 @@ public class CrmWebhookController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IGroqSalesAiService _aiService;
     private readonly IConfiguration _config;
+    private readonly IHubContext<CrmHub> _hubContext;
 
-    public CrmWebhookController(AppDbContext db, IGroqSalesAiService aiService, IConfiguration config)
+    public CrmWebhookController(AppDbContext db, IGroqSalesAiService aiService, IConfiguration config, IHubContext<CrmHub> hubContext)
     {
         _db = db;
         _aiService = aiService;
         _config = config;
+        _hubContext = hubContext;
     }
 
     [HttpGet("meta")]
@@ -72,6 +76,12 @@ public class CrmWebhookController : ControllerBase
 
             _db.CrmLeads.Add(lead);
             await _db.SaveChangesAsync(ct);
+
+            // SignalR Live Alert
+            if (lead.AiIntentScore >= 80)
+            {
+                await _hubContext.Clients.All.SendAsync("ReceiveHotLead", lead, cancellationToken: ct);
+            }
 
             return Ok(new { success = true, leadId = lead.Id });
         }

@@ -8,7 +8,7 @@ namespace CMSAPI.Application.Services;
 
 public interface IWhatsAppService
 {
-    Task<bool> SendTemplateMessageAsync(string toPhoneNumber, string templateName, string language = "en", CancellationToken ct = default);
+    Task<bool> SendTemplateMessageAsync(string toPhoneNumber, string templateName, string language = "en", object[]? components = null, CancellationToken ct = default);
     Task<bool> SendInteractiveMessageAsync(string toPhoneNumber, string body, string buttonText, CancellationToken ct = default);
 }
 
@@ -31,7 +31,7 @@ public class WhatsAppService : IWhatsAppService
         }
     }
 
-    public async Task<bool> SendTemplateMessageAsync(string toPhoneNumber, string templateName, string language = "en", CancellationToken ct = default)
+    public async Task<bool> SendTemplateMessageAsync(string toPhoneNumber, string templateName, string language = "en", object[]? components = null, CancellationToken ct = default)
     {
         var payload = new
         {
@@ -41,7 +41,8 @@ public class WhatsAppService : IWhatsAppService
             template = new
             {
                 name = templateName,
-                language = new { code = language }
+                language = new { code = language },
+                components = components
             }
         };
 
