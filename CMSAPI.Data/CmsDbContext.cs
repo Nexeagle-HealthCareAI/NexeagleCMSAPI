@@ -29,6 +29,8 @@ public class CmsDbContext : DbContext
     public DbSet<MigrationBatch> MigrationBatches => Set<MigrationBatch>();
     public DbSet<MigrationBatchRow> MigrationBatchRows => Set<MigrationBatchRow>();
     public DbSet<MigrationDoctorMap> MigrationDoctorMaps => Set<MigrationDoctorMap>();
+    public DbSet<CmsSalesLead> CmsSalesLeads => Set<CmsSalesLead>();
+    public DbSet<CmsSalesLeadFollowUp> CmsSalesLeadFollowUps => Set<CmsSalesLeadFollowUp>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CmsPartner>(e =>
@@ -206,6 +208,40 @@ public class CmsDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.BatchId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<CmsSalesLead>(e =>
+        {
+            e.ToTable("CmsSalesLeads");
+            e.HasKey(x => x.LeadId);
+            e.Property(x => x.LeadId).ValueGeneratedNever();
+            e.Property(x => x.HospitalName).HasMaxLength(200).IsRequired();
+            e.Property(x => x.ContactName).HasMaxLength(150);
+            e.Property(x => x.Mobile).HasMaxLength(20);
+            e.Property(x => x.Email).HasMaxLength(256);
+            e.Property(x => x.City).HasMaxLength(100);
+            e.Property(x => x.State).HasMaxLength(100);
+            e.Property(x => x.Source).HasMaxLength(50).IsRequired();
+            e.Property(x => x.Stage).HasMaxLength(50).IsRequired();
+            e.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            e.HasOne(x => x.AssignedTo)
+                .WithMany()
+                .HasForeignKey(x => x.AssignedToUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.FollowUps)
+                .WithOne(f => f.Lead)
+                .HasForeignKey(f => f.LeadId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<CmsSalesLeadFollowUp>(e =>
+        {
+            e.ToTable("CmsSalesLeadFollowUps");
+            e.HasKey(x => x.FollowUpId);
+            e.Property(x => x.FollowUpId).ValueGeneratedNever();
+            e.Property(x => x.ActivityType).HasMaxLength(50).IsRequired();
+            e.Property(x => x.AuthorName).HasMaxLength(150);
+            e.Property(x => x.Notes).IsRequired();
         });
     }
 }

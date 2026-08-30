@@ -75,6 +75,7 @@ builder.Services.AddScoped<IHospitalService, HospitalService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IInsightsService, InsightsService>();
 builder.Services.AddScoped<IMarketingService, MarketingService>();
+builder.Services.AddScoped<ISalesLeadService, SalesLeadService>();
 // Typed HttpClient (not just AddScoped) -- SymptomRouterService calls out to the NLP router
 // and GitHub's API, so it needs an injected HttpClient the DI container manages properly.
 builder.Services.AddHttpClient<ISymptomRouterService, SymptomRouterService>();
@@ -91,6 +92,7 @@ builder.Services.AddScoped<IHospitalRepository, HospitalRepository>();
 builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
 builder.Services.AddScoped<IInsightsRepository, InsightsRepository>();
 builder.Services.AddScoped<IMarketingRepository, MarketingRepository>();
+builder.Services.AddScoped<ISalesLeadRepository, SalesLeadRepository>();
 builder.Services.AddScoped<ISymptomRouterRepository, SymptomRouterRepository>();
 builder.Services.AddScoped<IDataMigrationRepository, DataMigrationRepository>();
 
