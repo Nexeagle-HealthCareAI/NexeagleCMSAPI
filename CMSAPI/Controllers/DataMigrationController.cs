@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -12,7 +13,8 @@ namespace CMSAPI.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/v1/data-migration")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/data-migration")]
 public class DataMigrationController : ControllerBase
 {
     private readonly IDataMigrationService _service;

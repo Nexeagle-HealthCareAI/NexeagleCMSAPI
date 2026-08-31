@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Services;
@@ -8,7 +9,8 @@ namespace CMSAPI.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/v1/crm/ai")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/crm/ai")]
 public class CrmAiController : ControllerBase
 {
     private readonly IGroqSalesAiService _aiService;

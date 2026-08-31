@@ -85,16 +85,24 @@ public class WhatsAppService : IWhatsAppService
             return false;
         }
 
-        var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync("messages", content, ct);
-        
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            var error = await response.Content.ReadAsStringAsync(ct);
-            Console.WriteLine($"WhatsApp API Error: {error}");
+            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("messages", content, ct);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(ct);
+                Console.WriteLine($"WhatsApp API Error: {error}");
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WhatsApp API Exception: {ex.Message}");
             return false;
         }
-
-        return true;
     }
 }

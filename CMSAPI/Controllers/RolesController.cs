@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
 using CMSAPI.Authorization;
@@ -6,7 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace CMSAPI.Controllers;
 
 [ApiController]
-[Route("api/v1/roles")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/roles")]
 public class RolesController : ControllerBase
 {
     private readonly ICmsAdminService _admin;

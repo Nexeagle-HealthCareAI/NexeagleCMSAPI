@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
@@ -14,7 +15,8 @@ namespace CMSAPI.Controllers;
 // that would need its own CMSDatabase seed.
 [Authorize]
 [ApiController]
-[Route("api/v1/doctors")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/doctors")]
 public class DoctorsController : ControllerBase
 {
     private readonly IDoctorService _service;

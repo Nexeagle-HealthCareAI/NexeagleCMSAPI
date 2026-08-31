@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using CMSAPI.Data;
 using CMSAPI.Data.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +10,8 @@ namespace CMSAPI.Controllers
     // Dedicated EasyHMS plan catalog -- see EasyHmsSubscriptionPlan for why this isn't just the
     // shared (1Rad) SubscriptionPlansController with an ApplicationName filter.
     [ApiController]
-    [Route("api/v1/[controller]")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize] // CMS admin auth required
     public class EasyHmsSubscriptionPlansController : ControllerBase
     {

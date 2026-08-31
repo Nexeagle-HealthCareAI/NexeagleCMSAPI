@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
 using System.Text;
@@ -12,7 +13,8 @@ using Microsoft.AspNetCore.SignalR;
 namespace CMSAPI.Controllers;
 
 [ApiController]
-[Route("api/v1/crm/webhooks")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/crm/webhooks")]
 public class CrmWebhookController : ControllerBase
 {
     private readonly ISalesLeadService _salesLeadService;

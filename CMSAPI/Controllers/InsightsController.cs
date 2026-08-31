@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Authorization;
@@ -10,7 +11,8 @@ namespace CMSAPI.Controllers;
 // the CMS. One permission covers all three sub-reports — they're read together as one feature.
 [Authorize]
 [ApiController]
-[Route("api/v1/insights")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/insights")]
 public class InsightsController : ControllerBase
 {
     private readonly IInsightsService _service;

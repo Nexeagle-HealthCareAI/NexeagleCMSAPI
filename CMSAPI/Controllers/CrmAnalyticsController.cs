@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Authorization;
@@ -10,7 +11,8 @@ namespace CMSAPI.Controllers;
 [Authorize]
 [HasPermission("marketing.view")]
 [ApiController]
-[Route("api/v1/crm/analytics")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/crm/analytics")]
 public class CrmAnalyticsController : ControllerBase
 {
     private readonly CmsDbContext _db;

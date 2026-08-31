@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
@@ -10,7 +11,8 @@ namespace CMSAPI.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/v1/hospitals")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/hospitals")]
 public class HospitalsController : ControllerBase
 {
     private readonly IHospitalService _service;

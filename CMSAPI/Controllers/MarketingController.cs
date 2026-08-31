@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
@@ -13,20 +14,23 @@ namespace CMSAPI.Controllers;
 // ── Section 2: Sales Leads  — manual B2B prospecting pipeline stored in CmsSalesLeads.
 [Authorize]
 [ApiController]
-[Route("api/v1/marketing")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/marketing")]
 public class MarketingController : ControllerBase
 {
     private readonly IMarketingService _marketing;
     private readonly ISalesLeadService _leads;
     private readonly IGroqSalesAiService _aiService;
     private readonly IWhatsAppService _waService;
+    private readonly IConfiguration _config;
 
-    public MarketingController(IMarketingService marketing, ISalesLeadService leads, IGroqSalesAiService aiService, IWhatsAppService waService)
+    public MarketingController(IMarketingService marketing, ISalesLeadService leads, IGroqSalesAiService aiService, IWhatsAppService waService, IConfiguration config)
     {
         _marketing = marketing;
         _leads = leads;
         _aiService = aiService;
         _waService = waService;
+        _config = config;
     }
 
     // ── Demo Logins ───────────────────────────────────────────────────────
@@ -152,7 +156,7 @@ public class MarketingController : ControllerBase
                     type = "header",
                     parameters = new[]
                     {
-                        new { type = "video", video = new { link = "https://1hms.nexeagle.com/assets/video_pitch.mp4" } }
+                        new { type = "video", video = new { link = _config["WhatsApp:Assets:VideoPitchUrl"] ?? "https://1hms.nexeagle.com/assets/video_pitch.mp4" } }
                     }
                 }
             };
@@ -166,7 +170,7 @@ public class MarketingController : ControllerBase
                     type = "header",
                     parameters = new[]
                     {
-                        new { type = "document", document = new { link = "https://1hms.nexeagle.com/assets/case_study.pdf", filename = "CaseStudy.pdf" } }
+                        new { type = "document", document = new { link = _config["WhatsApp:Assets:CaseStudyUrl"] ?? "https://1hms.nexeagle.com/assets/case_study.pdf", filename = "CaseStudy.pdf" } }
                     }
                 }
             };

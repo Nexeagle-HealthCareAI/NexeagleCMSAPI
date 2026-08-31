@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Services;
 using CMSAPI.Data;
@@ -9,7 +10,8 @@ using CMSAPI.Application.Models;
 namespace CMSAPI.Controllers;
 
 [ApiController]
-[Route("api/v1/crm/whatsapp")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/crm/whatsapp")]
 public class CrmWhatsAppController : ControllerBase
 {
     private readonly ISalesLeadService _leads;
