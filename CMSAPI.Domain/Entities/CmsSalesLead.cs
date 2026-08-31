@@ -49,6 +49,17 @@ public class CmsSalesLead
     public Guid? AssignedToUserId { get; set; }
     public Guid? CreatedByUserId { get; set; }
 
+    // Opt-out / DND
+    /// <summary>
+    /// When true the lead has opted out of all automated WhatsApp messages (e.g. replied "STOP").
+    /// The drip worker skips any lead with this flag set.
+    /// </summary>
+    public bool IsDndEnabled { get; set; } = false;
+
+    // Soft delete — preserves follow-up audit trail
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

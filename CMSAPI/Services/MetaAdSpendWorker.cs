@@ -115,6 +115,9 @@ public class MetaAdSpendWorker : BackgroundService
             {
                 _logger.LogError(ex, $"Failed to process campaign '{campaign.ExternalCampaignId}'");
             }
+            
+            // Wait 200ms between calls to avoid Meta API rate limiting
+            await Task.Delay(200, stoppingToken);
         }
         
         await db.SaveChangesAsync(stoppingToken);

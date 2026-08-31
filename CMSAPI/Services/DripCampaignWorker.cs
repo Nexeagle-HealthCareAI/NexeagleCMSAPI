@@ -49,7 +49,10 @@ public class DripCampaignWorker : BackgroundService
         var fourteenDaysAgo = DateTime.UtcNow.AddDays(-14);
         var leads = await db.CmsSalesLeads
             .Include(l => l.FollowUps)
-            .Where(l => (l.Stage == "New" || l.Stage == "Contacted") && l.CreatedAt >= fourteenDaysAgo)
+            .Where(l => !l.IsDeleted
+                     && !l.IsDndEnabled
+                     && (l.Stage == "New" || l.Stage == "Contacted")
+                     && l.CreatedAt >= fourteenDaysAgo)
             .ToListAsync(ct);
 
         foreach (var lead in leads)
@@ -58,6 +61,12 @@ public class DripCampaignWorker : BackgroundService
             bool hasInboundActivity = lead.FollowUps.Any(a => a.Direction == "INBOUND");
             if (hasInboundActivity)
             {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(lead.Mobile))
+            {
+                _logger.LogDebug("Skipping lead {LeadId}: no mobile number.", lead.LeadId);
                 continue;
             }
 
@@ -82,20 +91,24 @@ public class DripCampaignWorker : BackgroundService
                 if (!alreadySent)
                 {
                     _logger.LogInformation("Sending {Template} to Lead {LeadId}", templateToRun, lead.LeadId);
-                    var success = await waService.SendTemplateMessageAsync(lead.Mobile ?? "", templateToRun, ct: ct);
+                    var success = await waService.SendTemplateMessageAsync(lead.Mobile!, templateToRun, ct: ct);
                     if (success)
                     {
                         db.CmsSalesLeadFollowUps.Add(new Domain.Entities.CmsSalesLeadFollowUp
                         {
-                            FollowUpId = Guid.NewGuid(),
-                            LeadId = lead.LeadId,
+                            FollowUpId   = Guid.NewGuid(),
+                            LeadId       = lead.LeadId,
                             ActivityType = "WHATSAPP_DRIP",
-                            Direction = "OUTBOUND",
+                            Direction    = "OUTBOUND",
                             TemplateName = templateToRun,
-                            Notes = $"Drip Campaign: {templateToRun}",
-                            Status = "SENT",
-                            CreatedAt = DateTime.UtcNow
+                            Notes        = $"Drip Campaign: {templateToRun}",
+                            Status       = "SENT",
+                            CreatedAt    = DateTime.UtcNow
                         });
+                    }
+                    else
+                    {
+                        _logger.LogWarning("WhatsApp send failed for lead {LeadId}, template {Template}.", lead.LeadId, templateToRun);
                     }
                 }
             }

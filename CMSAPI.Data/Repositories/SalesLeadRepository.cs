@@ -23,6 +23,7 @@ public class SalesLeadRepository : ISalesLeadRepository
         var query = _db.CmsSalesLeads
             .Include(l => l.AssignedTo)
             .Include(l => l.FollowUps)
+            .Where(l => !l.IsDeleted)
             .AsNoTracking()
             .AsQueryable();
 
@@ -60,7 +61,7 @@ public class SalesLeadRepository : ISalesLeadRepository
         return await _db.CmsSalesLeads
             .Include(l => l.AssignedTo)
             .Include(l => l.FollowUps.OrderByDescending(f => f.CreatedAt))
-            .FirstOrDefaultAsync(l => l.LeadId == leadId);
+            .FirstOrDefaultAsync(l => l.LeadId == leadId && !l.IsDeleted);
     }
 
     public async Task<CmsSalesLead?> GetByMobileAsync(string mobile)
@@ -68,7 +69,7 @@ public class SalesLeadRepository : ISalesLeadRepository
         return await _db.CmsSalesLeads
             .Include(l => l.AssignedTo)
             .Include(l => l.FollowUps.OrderByDescending(f => f.CreatedAt))
-            .FirstOrDefaultAsync(l => l.Mobile == mobile);
+            .FirstOrDefaultAsync(l => l.Mobile == mobile && !l.IsDeleted);
     }
 
     public async Task<CmsSalesLead> CreateAsync(CmsSalesLead lead)
@@ -92,8 +93,13 @@ public class SalesLeadRepository : ISalesLeadRepository
     public async Task<bool> DeleteAsync(Guid leadId)
     {
         var lead = await _db.CmsSalesLeads.FindAsync(leadId);
-        if (lead == null) return false;
-        _db.CmsSalesLeads.Remove(lead);
+        if (lead == null || lead.IsDeleted) return false;
+        
+        lead.IsDeleted = true;
+        lead.DeletedAt = DateTime.UtcNow;
+        lead.UpdatedAt = DateTime.UtcNow;
+        
+        _db.CmsSalesLeads.Update(lead);
         await _db.SaveChangesAsync();
         return true;
     }

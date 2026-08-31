@@ -81,7 +81,7 @@ public class MarketingController : ControllerBase
         return Ok(lead);
     }
 
-    [HasPermission("marketing.view")]
+    [HasPermission("marketing.manage")]
     [HttpPost("leads")]
     public async Task<IActionResult> CreateLead([FromBody] CreateSalesLeadRequest req, CancellationToken ct)
     {
@@ -101,7 +101,7 @@ public class MarketingController : ControllerBase
         return CreatedAtAction(nameof(GetLead), new { id = lead.LeadId }, lead);
     }
 
-    [HasPermission("marketing.view")]
+    [HasPermission("marketing.manage")]
     [HttpPut("leads/{id:guid}")]
     public async Task<IActionResult> UpdateLead(Guid id, [FromBody] UpdateSalesLeadRequest req)
     {
@@ -110,7 +110,7 @@ public class MarketingController : ControllerBase
         return Ok(lead);
     }
 
-    [HasPermission("marketing.view")]
+    [HasPermission("marketing.manage")]
     [HttpDelete("leads/{id:guid}")]
     public async Task<IActionResult> DeleteLead(Guid id)
     {
@@ -119,7 +119,7 @@ public class MarketingController : ControllerBase
         return NoContent();
     }
 
-    [HasPermission("marketing.view")]
+    [HasPermission("marketing.manage")]
     [HttpPost("leads/{id:guid}/followups")]
     public async Task<IActionResult> AddFollowUp(Guid id, [FromBody] AddFollowUpRequest req)
     {
@@ -131,7 +131,7 @@ public class MarketingController : ControllerBase
         return Ok(followUp);
     }
 
-    [HasPermission("marketing.view")]
+    [HasPermission("marketing.manage")]
     [HttpPost("leads/{id:guid}/whatsapp-template")]
     public async Task<IActionResult> SendWhatsAppTemplate(Guid id, [FromBody] SendTemplateRequest req, CancellationToken ct)
     {
