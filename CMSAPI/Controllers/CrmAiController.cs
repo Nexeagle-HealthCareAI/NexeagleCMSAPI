@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Services;
 using CMSAPI.Application.Interfaces;
+using CMSAPI.Application.Models;
 
 namespace CMSAPI.Controllers;
 
@@ -70,21 +71,4 @@ public class CrmAiController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
-}
-
-public class AiPitchRequest
-{
-    public Guid LeadId { get; set; }
-}
-
-public class AiObjectionRequest
-{
-    public Guid LeadId { get; set; }
-    public string Objection { get; set; } = string.Empty;
-}
-
-public class AiSocialRequest
-{
-    public string Topic { get; set; } = string.Empty;
-    public string TargetAudience { get; set; } = "Hospital Owners";
 }

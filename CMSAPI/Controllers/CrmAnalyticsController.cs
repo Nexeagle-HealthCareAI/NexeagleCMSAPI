@@ -35,12 +35,13 @@ public class CrmAnalyticsController : ControllerBase
             .Where(l => l.AiIntentScore >= 50)
             .CountAsync(ct);
 
-        var closedWonLeads = await _db.CmsSalesLeads
+        var totalCustomers = await _db.CmsSalesLeads
             .Where(l => l.Stage == "Closed Won")
-            .ToListAsync(ct);
+            .CountAsync(ct);
 
-        var totalCustomers = closedWonLeads.Count;
-        var totalRevenue = closedWonLeads.Sum(l => l.DealValue);
+        var totalRevenue = await _db.CmsSalesLeads
+            .Where(l => l.Stage == "Closed Won")
+            .SumAsync(l => l.DealValue, ct);
 
         var dto = new FinancialAttributionDto
         {

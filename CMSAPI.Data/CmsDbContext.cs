@@ -261,8 +261,8 @@ public class CmsDbContext : DbContext
         b.Entity<CmsCampaign>(e =>
         {
             e.ToTable("CmsCampaigns");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasKey(x => x.CampaignId);
+            e.Property(x => x.CampaignId).ValueGeneratedNever();
         });
 
         b.Entity<CmsSocialPost>(e =>

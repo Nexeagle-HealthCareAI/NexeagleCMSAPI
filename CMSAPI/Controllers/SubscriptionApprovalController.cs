@@ -4,6 +4,7 @@ using CMSAPI.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using CMSAPI.Application.Models;
 
 namespace CMSAPI.Controllers
 {
@@ -114,10 +115,17 @@ namespace CMSAPI.Controllers
         // the audit trail behind "pending", sourced from the same append-only table the hospital's
         // own Payment History view reads from.
         [HttpGet("history")]
-        public async Task<IActionResult> GetApprovalHistory()
+        public async Task<IActionResult> GetApprovalHistory([FromQuery] int page = 1, [FromQuery] int limit = 50)
         {
-            var payments = await _appDb.HospitalSubscriptionPayments
-                .OrderByDescending(p => p.SubmittedAt)
+            var query = _appDb.HospitalSubscriptionPayments
+                .OrderByDescending(p => p.SubmittedAt);
+
+            var totalItems = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling(totalItems / (double)limit);
+
+            var payments = await query
+                .Skip((page - 1) * limit)
+                .Take(limit)
                 .Select(p => new
                 {
                     p.PaymentId,
@@ -192,7 +200,13 @@ namespace CMSAPI.Controllers
                 };
             }).ToList();
 
-            return Ok(result);
+            return Ok(new
+            {
+                Data = result,
+                TotalItems = totalItems,
+                TotalPages = totalPages,
+                CurrentPage = page
+            });
         }
 
         [HasPermission("subscriptions.approve")]
@@ -369,10 +383,5 @@ namespace CMSAPI.Controllers
 
             return Ok(new { message = "Payment rejected." });
         }
-    }
-
-    public class RejectPaymentRequest
-    {
-        public string Reason { get; set; } = string.Empty;
     }
 }
