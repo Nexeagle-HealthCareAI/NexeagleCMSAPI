@@ -1,17 +1,23 @@
+using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CMSAPI.Authorization;
 using CMSAPI.Data;
 using Microsoft.EntityFrameworkCore;
 using CMSAPI.Application.Models;
 
 namespace CMSAPI.Controllers;
 
+[Authorize]
+[HasPermission("marketing.view")]
 [ApiController]
-[Route("api/v1/crm/analytics")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/crm/analytics")]
 public class CrmAnalyticsController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly CmsDbContext _db;
 
-    public CrmAnalyticsController(AppDbContext db)
+    public CrmAnalyticsController(CmsDbContext db)
     {
         _db = db;
     }
@@ -20,23 +26,24 @@ public class CrmAnalyticsController : ControllerBase
     public async Task<ActionResult<FinancialAttributionDto>> GetFinancialAttribution(CancellationToken ct)
     {
         // Total Ad Spend from Campaigns
-        var totalSpend = await _db.CrmCampaigns
+        var totalSpend = await _db.CmsCampaigns
             .Where(c => c.IsActive)
             .SumAsync(c => c.ActualSpend, ct);
 
         // Leads metrics
-        var totalLeads = await _db.CrmLeads.CountAsync(ct);
+        var totalLeads = await _db.CmsSalesLeads.CountAsync(ct);
         
-        var totalQualifiedLeads = await _db.CrmLeads
+        var totalQualifiedLeads = await _db.CmsSalesLeads
             .Where(l => l.AiIntentScore >= 50)
             .CountAsync(ct);
 
-        var closedWonLeads = await _db.CrmLeads
-            .Where(l => l.Status == "CLOSED_WON")
-            .ToListAsync(ct);
+        var totalCustomers = await _db.CmsSalesLeads
+            .Where(l => l.Stage == "Closed Won")
+            .CountAsync(ct);
 
-        var totalCustomers = closedWonLeads.Count;
-        var totalRevenue = closedWonLeads.Sum(l => l.DealValue);
+        var totalRevenue = await _db.CmsSalesLeads
+            .Where(l => l.Stage == "Closed Won")
+            .SumAsync(l => l.DealValue, ct);
 
         var dto = new FinancialAttributionDto
         {

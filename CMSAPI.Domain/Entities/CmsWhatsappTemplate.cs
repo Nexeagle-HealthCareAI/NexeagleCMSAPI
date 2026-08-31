@@ -1,6 +1,6 @@
 namespace CMSAPI.Domain.Entities;
 
-public class CrmWhatsappTemplate
+public class CmsWhatsappTemplate
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string TemplateName { get; set; } = string.Empty;

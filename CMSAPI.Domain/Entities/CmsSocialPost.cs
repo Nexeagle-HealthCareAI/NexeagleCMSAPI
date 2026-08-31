@@ -1,6 +1,6 @@
 namespace CMSAPI.Domain.Entities;
 
-public class CrmSocialPost
+public class CmsSocialPost
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid? CampaignId { get; set; }
@@ -15,5 +15,5 @@ public class CrmSocialPost
     public Guid? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public virtual CrmCampaign? Campaign { get; set; }
+    public virtual CmsCampaign? Campaign { get; set; }
 }

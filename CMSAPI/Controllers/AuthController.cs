@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Security.Claims;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
@@ -8,7 +9,8 @@ using Microsoft.Extensions.Options;
 namespace CMSAPI.Controllers;
 
 [ApiController]
-[Route("api/v1/auth")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/auth")]
 public class AuthController : ControllerBase
 {
     private const string RefreshCookieName = "cms_rt";

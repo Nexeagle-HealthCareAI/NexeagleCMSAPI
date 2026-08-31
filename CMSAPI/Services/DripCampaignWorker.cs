@@ -42,22 +42,31 @@ public class DripCampaignWorker : BackgroundService
     private async Task ProcessDripCampaignsAsync(CancellationToken ct)
     {
         using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<CmsDbContext>();
         var waService = scope.ServiceProvider.GetRequiredService<IWhatsAppService>();
 
         // Find leads in "NEW" or "CONTACTED" state created within last 14 days
         var fourteenDaysAgo = DateTime.UtcNow.AddDays(-14);
-        var leads = await db.CrmLeads
-            .Include(l => l.Activities)
-            .Where(l => (l.Status == "NEW" || l.Status == "CONTACTED") && l.CreatedAt >= fourteenDaysAgo)
+        var leads = await db.CmsSalesLeads
+            .Include(l => l.FollowUps)
+            .Where(l => !l.IsDeleted
+                     && !l.IsDndEnabled
+                     && (l.Stage == "New" || l.Stage == "Contacted")
+                     && l.CreatedAt >= fourteenDaysAgo)
             .ToListAsync(ct);
 
         foreach (var lead in leads)
         {
             // Halt drip sequence if the lead has responded
-            bool hasInboundActivity = lead.Activities.Any(a => a.Direction == "INBOUND");
+            bool hasInboundActivity = lead.FollowUps.Any(a => a.Direction == "INBOUND");
             if (hasInboundActivity)
             {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(lead.Mobile))
+            {
+                _logger.LogDebug("Skipping lead {LeadId}: no mobile number.", lead.LeadId);
                 continue;
             }
 
@@ -76,24 +85,30 @@ public class DripCampaignWorker : BackgroundService
             if (templateToRun != null)
             {
                 // check if already sent this template
-                var alreadySent = lead.Activities
+                var alreadySent = lead.FollowUps
                     .Any(a => a.TemplateName == templateToRun);
 
                 if (!alreadySent)
                 {
-                    _logger.LogInformation("Sending {Template} to Lead {LeadId}", templateToRun, lead.Id);
-                    var success = await waService.SendTemplateMessageAsync(lead.PhoneNumber, templateToRun, ct: ct);
+                    _logger.LogInformation("Sending {Template} to Lead {LeadId}", templateToRun, lead.LeadId);
+                    var success = await waService.SendTemplateMessageAsync(lead.Mobile!, templateToRun, ct: ct);
                     if (success)
                     {
-                        db.CrmLeadActivities.Add(new Domain.Entities.CrmLeadActivity
+                        db.CmsSalesLeadFollowUps.Add(new Domain.Entities.CmsSalesLeadFollowUp
                         {
-                            LeadId = lead.Id,
+                            FollowUpId   = Guid.NewGuid(),
+                            LeadId       = lead.LeadId,
                             ActivityType = "WHATSAPP_DRIP",
-                            Direction = "OUTBOUND",
+                            Direction    = "OUTBOUND",
                             TemplateName = templateToRun,
-                            MessageBody = $"Drip Campaign: {templateToRun}",
-                            Status = "SENT"
+                            Notes        = $"Drip Campaign: {templateToRun}",
+                            Status       = "SENT",
+                            CreatedAt    = DateTime.UtcNow
                         });
+                    }
+                    else
+                    {
+                        _logger.LogWarning("WhatsApp send failed for lead {LeadId}, template {Template}.", lead.LeadId, templateToRun);
                     }
                 }
             }

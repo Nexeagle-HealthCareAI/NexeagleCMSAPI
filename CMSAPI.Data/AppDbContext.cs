@@ -39,11 +39,7 @@ public class AppDbContext : DbContext
     public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; } = null!;
     public DbSet<HospitalLead> HospitalLeads { get; set; } = null!;
     public DbSet<SymptomTrainingExample> SymptomTrainingExamples { get; set; } = null!;
-    public DbSet<CrmLead> CrmLeads { get; set; } = null!;
-    public DbSet<CrmLeadActivity> CrmLeadActivities { get; set; } = null!;
-    public DbSet<CrmCampaign> CrmCampaigns { get; set; } = null!;
-    public DbSet<CrmSocialPost> CrmSocialPosts { get; set; } = null!;
-    public DbSet<CrmWhatsappTemplate> CrmWhatsappTemplates { get; set; } = null!;
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -85,44 +81,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
         });
 
-        modelBuilder.Entity<CrmLead>(entity =>
-        {
-            entity.ToTable("CrmLeads");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasDefaultValueSql("newid()");
-            entity.HasMany(e => e.Activities)
-                  .WithOne(a => a.Lead)
-                  .HasForeignKey(a => a.LeadId)
-                  .OnDelete(DeleteBehavior.Cascade);
-        });
 
-        modelBuilder.Entity<CrmLeadActivity>(entity =>
-        {
-            entity.ToTable("CrmLeadActivities");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasDefaultValueSql("newid()");
-        });
-
-        modelBuilder.Entity<CrmCampaign>(entity =>
-        {
-            entity.ToTable("CrmCampaigns");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasDefaultValueSql("newid()");
-        });
-
-        modelBuilder.Entity<CrmSocialPost>(entity =>
-        {
-            entity.ToTable("CrmSocialPosts");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasDefaultValueSql("newid()");
-        });
-
-        modelBuilder.Entity<CrmWhatsappTemplate>(entity =>
-        {
-            entity.ToTable("CrmWhatsappTemplates");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasDefaultValueSql("newid()");
-        });
 
         modelBuilder.Entity<Hospital>(entity =>
         {

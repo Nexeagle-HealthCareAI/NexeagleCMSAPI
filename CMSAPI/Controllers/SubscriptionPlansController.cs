@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using CMSAPI.Data;
 using CMSAPI.Data.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +8,8 @@ using Microsoft.EntityFrameworkCore;
 namespace CMSAPI.Controllers
 {
     [ApiController]
-    [Route("api/v1/[controller]")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize] // Assuming CMS admin auth is required
     public class SubscriptionPlansController : ControllerBase
     {

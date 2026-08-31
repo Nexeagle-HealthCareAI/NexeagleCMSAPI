@@ -99,7 +99,7 @@ public class GroqSalesAiService : IGroqSalesAiService
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
-            throw new InvalidOperationException("Groq API Key is not configured.");
+            return jsonMode ? "{}" : "";
         }
 
         var requestBody = new
@@ -111,13 +111,23 @@ public class GroqSalesAiService : IGroqSalesAiService
             max_tokens = 800
         };
 
-        var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync("chat/completions", content, ct);
-        response.EnsureSuccessStatusCode();
+        try
+        {
+            var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("chat/completions", content, ct);
+            response.EnsureSuccessStatusCode();
 
-        var resContent = await response.Content.ReadAsStringAsync(ct);
-        using var doc = JsonDocument.Parse(resContent);
-        return doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+            var resContent = await response.Content.ReadAsStringAsync(ct);
+            using var doc = JsonDocument.Parse(resContent);
+            return doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+        }
+        catch (Exception)
+        {
+            // Graceful degradation when AI API is down or times out.
+            // Returning an empty JSON object for jsonMode ensures deserialization doesn't crash,
+            // and an empty string for plain text means the caller can fallback appropriately.
+            return jsonMode ? "{}" : "";
+        }
     }
 }
 

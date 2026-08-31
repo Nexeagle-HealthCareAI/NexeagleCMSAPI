@@ -88,7 +88,7 @@ public class DashboardRepository : IDashboardRepository
 
             return resp;
         }
-        catch(Exception ex)
+        catch(Exception)
         {
             throw; // Let global handler handle it, or rethrow
         }

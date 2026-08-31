@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Authorization;
 using CMSAPI.Application.Models;

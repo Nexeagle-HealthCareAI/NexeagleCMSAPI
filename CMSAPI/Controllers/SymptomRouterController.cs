@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
@@ -13,7 +14,8 @@ namespace CMSAPI.Controllers;
 // feature; split into its own permission later if finer-grained access control is needed.
 [Authorize]
 [ApiController]
-[Route("api/v1/symptom-router")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/symptom-router")]
 public class SymptomRouterController : ControllerBase
 {
     private readonly ISymptomRouterService _service;

@@ -20,6 +20,13 @@ public class CmsSalesLeadFollowUp
     public string ActivityType { get; set; } = "Note";
 
     public string Notes { get; set; } = string.Empty;
+
+    public string Direction { get; set; } = "OUTBOUND";
+    public string? TemplateName { get; set; }
+    public string? MediaUrl { get; set; }
+    public string? WhatsappMessageId { get; set; }
+    public string Status { get; set; } = "DELIVERED";
+
     public DateTime CreatedAt { get; set; }
 
     // Navigation

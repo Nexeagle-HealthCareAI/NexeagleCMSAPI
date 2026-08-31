@@ -39,6 +39,12 @@ public class SalesLeadService : ISalesLeadService
         return lead == null ? null : ToDetail(lead);
     }
 
+    public async Task<SalesLeadDetail?> GetLeadByMobileAsync(string mobile)
+    {
+        var lead = await _repo.GetByMobileAsync(mobile);
+        return lead == null ? null : ToDetail(lead);
+    }
+
     public async Task<SalesLeadDetail> CreateLeadAsync(CreateSalesLeadRequest req, Guid currentUserId, string currentUserName)
     {
         var lead = new CmsSalesLead
@@ -53,6 +59,17 @@ public class SalesLeadService : ISalesLeadService
             Stage          = req.Stage,
             Priority       = req.Priority,
             Notes          = req.Notes,
+            LeadNumber     = req.LeadNumber,
+            FacilityType   = req.FacilityType ?? "HOSPITAL",
+            BedCount       = req.BedCount,
+            UtmSource      = req.UtmSource,
+            UtmMedium      = req.UtmMedium,
+            UtmCampaign    = req.UtmCampaign,
+            UtmAdId        = req.UtmAdId,
+            AiIntentScore  = req.AiIntentScore,
+            AiPersonaSummary = req.AiPersonaSummary,
+            DealValue      = req.DealValue,
+            LostReason     = req.LostReason,
             AssignedToUserId = req.AssignedToUserId,
             CreatedByUserId  = currentUserId,
         };
@@ -79,6 +96,12 @@ public class SalesLeadService : ISalesLeadService
         if (req.Stage        != null) lead.Stage        = req.Stage;
         if (req.Priority     != null) lead.Priority     = req.Priority;
         if (req.Notes        != null) lead.Notes        = req.Notes;
+        if (req.FacilityType != null) lead.FacilityType = req.FacilityType;
+        if (req.BedCount.HasValue) lead.BedCount = req.BedCount.Value;
+        if (req.AiIntentScore.HasValue) lead.AiIntentScore = req.AiIntentScore.Value;
+        if (req.AiPersonaSummary != null) lead.AiPersonaSummary = req.AiPersonaSummary;
+        if (req.DealValue.HasValue) lead.DealValue = req.DealValue.Value;
+        if (req.LostReason != null) lead.LostReason = req.LostReason;
         if (req.AssignedToUserId.HasValue) lead.AssignedToUserId = req.AssignedToUserId;
 
         await _repo.UpdateAsync(lead);
@@ -102,6 +125,9 @@ public class SalesLeadService : ISalesLeadService
             AuthorName   = currentUserName,
             ActivityType = req.ActivityType,
             Notes        = req.Notes,
+            Direction    = req.Direction,
+            TemplateName = req.TemplateName,
+            MediaUrl     = req.MediaUrl,
         };
 
         var saved = await _repo.AddFollowUpAsync(followUp);
@@ -127,6 +153,9 @@ public class SalesLeadService : ISalesLeadService
         LastFollowUpAt   = l.FollowUps?.OrderByDescending(f => f.CreatedAt).FirstOrDefault()?.CreatedAt,
         CreatedAt        = l.CreatedAt,
         UpdatedAt        = l.UpdatedAt,
+        LeadNumber       = l.LeadNumber,
+        AiIntentScore    = l.AiIntentScore,
+        DealValue        = l.DealValue,
     };
 
     private static SalesLeadDetail ToDetail(CmsSalesLead l)
@@ -152,6 +181,14 @@ public class SalesLeadService : ISalesLeadService
             Email            = l.Email,
             Notes            = l.Notes,
             CreatedByUserId  = l.CreatedByUserId?.ToString(),
+            FacilityType     = l.FacilityType,
+            BedCount         = l.BedCount,
+            UtmSource        = l.UtmSource,
+            UtmMedium        = l.UtmMedium,
+            UtmCampaign      = l.UtmCampaign,
+            UtmAdId          = l.UtmAdId,
+            AiPersonaSummary = l.AiPersonaSummary,
+            LostReason       = l.LostReason,
             FollowUps        = l.FollowUps?.Select(ToFollowUpDto).ToList() ?? new(),
         };
     }
@@ -162,6 +199,11 @@ public class SalesLeadService : ISalesLeadService
         ActivityType = f.ActivityType,
         Notes        = f.Notes,
         AuthorName   = f.AuthorName,
+        Direction    = f.Direction,
+        TemplateName = f.TemplateName,
+        MediaUrl     = f.MediaUrl,
+        WhatsappMessageId = f.WhatsappMessageId,
+        Status       = f.Status,
         CreatedAt    = f.CreatedAt,
     };
 }

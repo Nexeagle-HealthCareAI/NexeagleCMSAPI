@@ -23,6 +23,7 @@ var builder = WebApplication.CreateBuilder(args);
 // =============================
 builder.Services.AddHostedService<CMSAPI.Services.ScheduledHealthCheck>();
 builder.Services.AddHostedService<CMSAPI.Services.DripCampaignWorker>();
+builder.Services.AddHostedService<CMSAPI.Services.MetaAdSpendWorker>();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -42,6 +43,13 @@ builder.Logging.AddDebug();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
+
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new Asp.Versioning.ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
+}).AddMvc();
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 64 * 1024; // 64 KB – prevent oversized payloads
@@ -77,6 +85,7 @@ builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IInsightsService, InsightsService>();
 builder.Services.AddScoped<IMarketingService, MarketingService>();
 builder.Services.AddScoped<ISalesLeadService, SalesLeadService>();
+builder.Services.AddScoped<ISubscriptionApprovalService, CMSAPI.Services.SubscriptionApprovalService>();
 // Typed HttpClient (not just AddScoped) -- SymptomRouterService calls out to the NLP router
 // and GitHub's API, so it needs an injected HttpClient the DI container manages properly.
 builder.Services.AddHttpClient<ISymptomRouterService, SymptomRouterService>();

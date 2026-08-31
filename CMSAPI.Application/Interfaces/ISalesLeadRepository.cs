@@ -9,6 +9,7 @@ public interface ISalesLeadRepository
 {
     Task<(List<CmsSalesLead> Items, int TotalCount)> GetLeadsPagedAsync(SalesLeadFilter filter);
     Task<CmsSalesLead?> GetByIdAsync(Guid leadId);
+    Task<CmsSalesLead?> GetByMobileAsync(string mobile);
     Task<CmsSalesLead> CreateAsync(CmsSalesLead lead);
     Task<CmsSalesLead?> UpdateAsync(CmsSalesLead lead);
     Task<bool> DeleteAsync(Guid leadId);

@@ -1,8 +1,8 @@
 namespace CMSAPI.Domain.Entities;
 
-public class CrmCampaign
+public class CmsCampaign
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid CampaignId { get; set; } = Guid.NewGuid();
     public string CampaignName { get; set; } = string.Empty;
     public string Platform { get; set; } = string.Empty;
     public string? ExternalCampaignId { get; set; }

@@ -1,21 +1,31 @@
+using Asp.Versioning;
+using CMSAPI.Authorization;
 using CMSAPI.Data;
 using CMSAPI.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using CMSAPI.Application.Models;
+using CMSAPI.Application.Services;
 
 namespace CMSAPI.Controllers
 {
     [ApiController]
-    [Route("api/v1/[controller]")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize] // Assuming CMS admin auth is required
     public class SubscriptionApprovalController : ControllerBase
     {
-        private readonly AppDbContext _appDb;
-        private readonly CmsDbContext _cmsDb;
+        private readonly ISubscriptionApprovalService _approvalService;
+        private readonly AppDbContext _appDb; // Needed for GetPendingApprovals/GetApprovalHistory
+        private readonly CmsDbContext _cmsDb; // Needed for GetPendingApprovals/GetApprovalHistory
 
-        public SubscriptionApprovalController(AppDbContext appDb, CmsDbContext cmsDb)
+        public SubscriptionApprovalController(
+            ISubscriptionApprovalService approvalService,
+            AppDbContext appDb, 
+            CmsDbContext cmsDb)
         {
+            _approvalService = approvalService;
             _appDb = appDb;
             _cmsDb = cmsDb;
         }
@@ -113,10 +123,17 @@ namespace CMSAPI.Controllers
         // the audit trail behind "pending", sourced from the same append-only table the hospital's
         // own Payment History view reads from.
         [HttpGet("history")]
-        public async Task<IActionResult> GetApprovalHistory()
+        public async Task<IActionResult> GetApprovalHistory([FromQuery] int page = 1, [FromQuery] int limit = 50)
         {
-            var payments = await _appDb.HospitalSubscriptionPayments
-                .OrderByDescending(p => p.SubmittedAt)
+            var query = _appDb.HospitalSubscriptionPayments
+                .OrderByDescending(p => p.SubmittedAt);
+
+            var totalItems = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling(totalItems / (double)limit);
+
+            var payments = await query
+                .Skip((page - 1) * limit)
+                .Take(limit)
                 .Select(p => new
                 {
                     p.PaymentId,
@@ -191,185 +208,43 @@ namespace CMSAPI.Controllers
                 };
             }).ToList();
 
-            return Ok(result);
+            return Ok(new
+            {
+                Data = result,
+                TotalItems = totalItems,
+                TotalPages = totalPages,
+                CurrentPage = page
+            });
         }
 
+        [HasPermission("subscriptions.approve")]
         [HttpPost("{hospitalId}/approve")]
         public async Task<IActionResult> ApprovePayment(Guid hospitalId)
         {
-            var sub = await _appDb.HospitalSubscriptions.FirstOrDefaultAsync(hs => hs.HospitalId == hospitalId);
-            if (sub == null) return NotFound("Hospital subscription not found.");
-
-            if (!sub.PlanId.HasValue)
-                return BadRequest("Hospital has not selected a plan.");
-
-            if (sub.Status != "PendingApproval")
-                return BadRequest($"There is no pending payment to approve for this hospital (current status: {sub.Status}).");
-
-            // Prefer the dedicated EasyHMS catalog; fall back to the legacy shared (1Rad) one for
-            // any older rows created before the split.
-            var easyHmsPlan = await _cmsDb.EasyHmsSubscriptionPlans.FirstOrDefaultAsync(p => p.PlanId == sub.PlanId.Value);
-            var legacyPlan = easyHmsPlan == null
-                ? await _cmsDb.SubscriptionPlans.FirstOrDefaultAsync(p => p.PlanId == sub.PlanId.Value)
-                : null;
-
-            if (easyHmsPlan == null && legacyPlan == null)
-                return BadRequest("Invalid plan selected by hospital.");
-
-            // A downgrade (new plan's limits below what the hospital already has) would leave the
-            // hospital permanently over its own cap the moment this activates. Block it up front
-            // rather than silently activating and letting easyHMSAPI's enforcement only catch the
-            // *next* doctor/bed the hospital tries to add. Legacy (1Rad) plans have no doctor/bed
-            // concept at all, so there's nothing to check for those.
-            if (easyHmsPlan != null && (easyHmsPlan.MaxDoctors.HasValue || easyHmsPlan.MaxBeds.HasValue))
+            var result = await _approvalService.ApprovePaymentAsync(hospitalId);
+            if (!result.Success)
             {
-                var overLimitIssues = new List<string>();
-
-                if (easyHmsPlan.MaxDoctors.HasValue)
-                {
-                    // Doctor has no active/inactive flag of its own — exclude revoked user
-                    // accounts the same way easyHMSAPI's SubscriptionLimitHelper does.
-                    var currentDoctorCount = await _appDb.Doctors
-                        .Where(d => d.HospitalID == hospitalId)
-                        .Join(_appDb.Users, d => d.UserID, u => u.UserID, (d, u) => u)
-                        .CountAsync(u => u.UserStatusId != 3); // 3 = UserStatusEnum.Revoked
-
-                    if (currentDoctorCount > easyHmsPlan.MaxDoctors.Value)
-                        overLimitIssues.Add($"{currentDoctorCount} doctors (this plan allows {easyHmsPlan.MaxDoctors.Value})");
-                }
-
-                if (easyHmsPlan.MaxBeds.HasValue)
-                {
-                    var currentBedCount = await _appDb.BedMaster.CountAsync(b => b.HospitalId == hospitalId && b.IsActive);
-                    if (currentBedCount > easyHmsPlan.MaxBeds.Value)
-                        overLimitIssues.Add($"{currentBedCount} beds (this plan allows {easyHmsPlan.MaxBeds.Value})");
-                }
-
-                if (overLimitIssues.Count > 0)
-                {
-                    return BadRequest(new
-                    {
-                        message = $"Cannot activate this plan — the hospital currently has {string.Join(" and ", overLimitIssues)}. " +
-                                   "Ask them to reduce their count first, or choose a higher tier."
-                    });
-                }
+                if (result.ErrorMessage == "Hospital subscription not found.")
+                    return NotFound(result.ErrorMessage);
+                return BadRequest(result.ErrorMessage);
             }
 
-            var billingCycle = easyHmsPlan?.BillingCycle ?? legacyPlan!.BillingCycle;
-
-            // Activate subscription
-            sub.Status = "Active";
-            sub.SubscriptionStartDate = DateTime.UtcNow;
-
-            sub.SubscriptionEndDate = billingCycle.ToLowerInvariant() switch
-            {
-                "yearly" => DateTime.UtcNow.AddYears(1),
-                "half-yearly" => DateTime.UtcNow.AddMonths(6),
-                "quarterly" => DateTime.UtcNow.AddMonths(3),
-                _ => DateTime.UtcNow.AddMonths(1) // Monthly, and any unrecognized legacy value
-            };
-
-            sub.NextBillingDate = sub.SubscriptionEndDate;
-            // Denormalize the plan's limits onto the subscription row so easyHMSAPI can enforce
-            // doctor/bed limits with a local lookup — NULL (Enterprise, or a legacy plan with no
-            // concept of limits) carries through as NULL, meaning unlimited.
-            sub.MaxDoctors = easyHmsPlan?.MaxDoctors;
-            sub.MaxBeds = easyHmsPlan?.MaxBeds;
-            sub.RejectionReason = null;
-            sub.RejectedAt = null;
-            sub.UpdatedAt = DateTime.UtcNow;
-
-            // Referral code reward: lands only once, only on a Yearly plan. A PercentageOff reward
-            // already reduced what the hospital paid (applied client-side when the price was
-            // quoted) -- nothing further to do for that kind here. ExtraMonths extends the end date
-            // just computed above. ReferralCodeRedeemedAt is the idempotency guard against
-            // re-applying this on a retried/duplicate approval; the CMSDatabase-side ReferralCode
-            // row's own RedeemedByHospitalId is the global single-use guard across hospitals.
-            ReferralCode? referralCode = null;
-            if (billingCycle.Equals("yearly", StringComparison.OrdinalIgnoreCase)
-                && !string.IsNullOrEmpty(sub.ReferralCode)
-                && sub.ReferralCodeRedeemedAt == null)
-            {
-                referralCode = await _cmsDb.ReferralCodes.FirstOrDefaultAsync(r => r.Code == sub.ReferralCode);
-                if (referralCode != null && (referralCode.RedeemedByHospitalId == null || referralCode.RedeemedByHospitalId == hospitalId))
-                {
-                    if (string.Equals(sub.ReferralCodeRewardKind, "ExtraMonths", StringComparison.OrdinalIgnoreCase) && sub.ReferralCodeRewardValue.HasValue)
-                    {
-                        sub.SubscriptionEndDate = sub.SubscriptionEndDate!.Value.AddMonths((int)sub.ReferralCodeRewardValue.Value);
-                        sub.NextBillingDate = sub.SubscriptionEndDate;
-                    }
-                    sub.ReferralCodeRedeemedAt = DateTime.UtcNow;
-                }
-                else
-                {
-                    referralCode = null; // already claimed by a different hospital -- nothing to redeem
-                }
-            }
-
-            var planName = easyHmsPlan?.Name ?? legacyPlan?.Name;
-            var latestPayment = await _appDb.HospitalSubscriptionPayments
-                .Where(p => p.HospitalId == hospitalId && p.Status == "PendingApproval")
-                .OrderByDescending(p => p.SubmittedAt)
-                .FirstOrDefaultAsync();
-            if (latestPayment != null)
-            {
-                latestPayment.Status = "Approved";
-                latestPayment.ReviewedAt = DateTime.UtcNow;
-                latestPayment.PlanName = planName;
-            }
-
-            await _appDb.SaveChangesAsync();
-
-            // Only mark the code globally redeemed once the subscription activation above has
-            // actually committed -- this codebase has no cross-database transaction spanning
-            // AppDbContext (easyHMSDatabase) and CmsDbContext (CMSDatabase), so this order avoids
-            // ever marking a code spent for an activation that didn't happen.
-            if (referralCode != null && sub.ReferralCodeRedeemedAt != null && referralCode.RedeemedByHospitalId == null)
-            {
-                referralCode.RedeemedByHospitalId = hospitalId;
-                referralCode.RedeemedAt = sub.ReferralCodeRedeemedAt;
-                await _cmsDb.SaveChangesAsync();
-            }
-
-            return Ok(new { message = "Subscription activated successfully.", sub.SubscriptionEndDate });
+            return Ok(new { message = "Subscription activated successfully.", result.SubscriptionEndDate });
         }
 
+        [HasPermission("subscriptions.approve")]
         [HttpPost("{hospitalId}/reject")]
         public async Task<IActionResult> RejectPayment(Guid hospitalId, [FromBody] RejectPaymentRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.Reason))
-                return BadRequest("A reason is required to reject a payment.");
-
-            var sub = await _appDb.HospitalSubscriptions.FirstOrDefaultAsync(hs => hs.HospitalId == hospitalId);
-            if (sub == null) return NotFound("Hospital subscription not found.");
-
-            if (sub.Status != "PendingApproval")
-                return BadRequest($"There is no pending payment to reject for this hospital (current status: {sub.Status}).");
-
-            sub.Status = "Rejected";
-            sub.RejectionReason = request.Reason.Trim();
-            sub.RejectedAt = DateTime.UtcNow;
-            sub.UpdatedAt = DateTime.UtcNow;
-
-            var latestPayment = await _appDb.HospitalSubscriptionPayments
-                .Where(p => p.HospitalId == hospitalId && p.Status == "PendingApproval")
-                .OrderByDescending(p => p.SubmittedAt)
-                .FirstOrDefaultAsync();
-            if (latestPayment != null)
+            var result = await _approvalService.RejectPaymentAsync(hospitalId, request.Reason);
+            if (!result.Success)
             {
-                latestPayment.Status = "Rejected";
-                latestPayment.ReviewedAt = DateTime.UtcNow;
-                latestPayment.RejectionReason = request.Reason.Trim();
+                if (result.ErrorMessage == "Hospital subscription not found.")
+                    return NotFound(result.ErrorMessage);
+                return BadRequest(result.ErrorMessage);
             }
-
-            await _appDb.SaveChangesAsync();
 
             return Ok(new { message = "Payment rejected." });
         }
-    }
-
-    public class RejectPaymentRequest
-    {
-        public string Reason { get; set; } = string.Empty;
     }
 }

@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
 using CMSAPI.Authorization;
@@ -8,7 +9,8 @@ namespace CMSAPI.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/v1/dashboard")]
+[ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/dashboard")]
 public class DashboardController : ControllerBase
 {
     private readonly IDashboardService _service;
