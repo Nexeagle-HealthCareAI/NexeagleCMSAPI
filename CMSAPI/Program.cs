@@ -23,6 +23,7 @@ var builder = WebApplication.CreateBuilder(args);
 // =============================
 builder.Services.AddHostedService<CMSAPI.Services.ScheduledHealthCheck>();
 builder.Services.AddHostedService<CMSAPI.Services.DripCampaignWorker>();
+builder.Services.AddHostedService<CMSAPI.Services.MetaAdSpendWorker>();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)

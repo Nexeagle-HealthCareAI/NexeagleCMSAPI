@@ -63,6 +63,14 @@ public class SalesLeadRepository : ISalesLeadRepository
             .FirstOrDefaultAsync(l => l.LeadId == leadId);
     }
 
+    public async Task<CmsSalesLead?> GetByMobileAsync(string mobile)
+    {
+        return await _db.CmsSalesLeads
+            .Include(l => l.AssignedTo)
+            .Include(l => l.FollowUps.OrderByDescending(f => f.CreatedAt))
+            .FirstOrDefaultAsync(l => l.Mobile == mobile);
+    }
+
     public async Task<CmsSalesLead> CreateAsync(CmsSalesLead lead)
     {
         lead.LeadId = Guid.NewGuid();

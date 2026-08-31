@@ -4,6 +4,7 @@ using CMSAPI.Application.Models;
 using CMSAPI.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using CMSAPI.Application.Services;
 
 namespace CMSAPI.Controllers;
 
@@ -17,11 +18,15 @@ public class MarketingController : ControllerBase
 {
     private readonly IMarketingService _marketing;
     private readonly ISalesLeadService _leads;
+    private readonly IGroqSalesAiService _aiService;
+    private readonly IWhatsAppService _waService;
 
-    public MarketingController(IMarketingService marketing, ISalesLeadService leads)
+    public MarketingController(IMarketingService marketing, ISalesLeadService leads, IGroqSalesAiService aiService, IWhatsAppService waService)
     {
         _marketing = marketing;
         _leads = leads;
+        _aiService = aiService;
+        _waService = waService;
     }
 
     // ── Demo Logins ───────────────────────────────────────────────────────
@@ -78,10 +83,19 @@ public class MarketingController : ControllerBase
 
     [HasPermission("marketing.view")]
     [HttpPost("leads")]
-    public async Task<IActionResult> CreateLead([FromBody] CreateSalesLeadRequest req)
+    public async Task<IActionResult> CreateLead([FromBody] CreateSalesLeadRequest req, CancellationToken ct)
     {
         var (userId, userName) = GetCurrentUser();
         if (userId == Guid.Empty) return Unauthorized();
+
+        // AI Scoring
+        var aiAnalysis = await _aiService.ScoreAndEnrichLeadAsync(
+            req.HospitalName, req.FacilityType ?? "HOSPITAL", req.BedCount, req.City ?? "Unknown", "Manual Lead Addition", ct);
+
+        req.AiIntentScore = aiAnalysis.IntentScore;
+        req.AiPersonaSummary = $"{aiAnalysis.BuyerPersona} | Hook: {aiAnalysis.RecommendedHook}";
+        if (string.IsNullOrEmpty(req.LeadNumber)) 
+            req.LeadNumber = $"LEAD-{DateTime.UtcNow:MMdd}-{Random.Shared.Next(1000, 9999)}";
 
         var lead = await _leads.CreateLeadAsync(req, userId, userName);
         return CreatedAtAction(nameof(GetLead), new { id = lead.LeadId }, lead);
@@ -115,6 +129,68 @@ public class MarketingController : ControllerBase
         var followUp = await _leads.AddFollowUpAsync(id, req, userId, userName);
         if (followUp == null) return NotFound();
         return Ok(followUp);
+    }
+
+    [HasPermission("marketing.view")]
+    [HttpPost("leads/{id:guid}/whatsapp-template")]
+    public async Task<IActionResult> SendWhatsAppTemplate(Guid id, [FromBody] SendTemplateRequest req, CancellationToken ct)
+    {
+        var lead = await _leads.GetLeadDetailAsync(id);
+        if (lead == null) return NotFound("Lead not found");
+
+        if (string.IsNullOrWhiteSpace(lead.Mobile))
+            return BadRequest("Lead has no phone number (Mobile)");
+
+        // Format components based on template
+        object[]? components = null;
+        if (req.TemplateName == "day1_intro_pitch")
+        {
+            components = new[]
+            {
+                new
+                {
+                    type = "header",
+                    parameters = new[]
+                    {
+                        new { type = "video", video = new { link = "https://1hms.nexeagle.com/assets/video_pitch.mp4" } }
+                    }
+                }
+            };
+        }
+        else if (req.TemplateName == "day3_roi_case_study")
+        {
+            components = new[]
+            {
+                new
+                {
+                    type = "header",
+                    parameters = new[]
+                    {
+                        new { type = "document", document = new { link = "https://1hms.nexeagle.com/assets/case_study.pdf", filename = "CaseStudy.pdf" } }
+                    }
+                }
+            };
+        }
+
+        var success = await _waService.SendTemplateMessageAsync(lead.Mobile, req.TemplateName, components: components, ct: ct);
+        
+        if (success)
+        {
+            var (userId, userName) = GetCurrentUser();
+            var followUpReq = new AddFollowUpRequest
+            {
+                ActivityType = "WhatsApp",
+                Direction = "OUTBOUND",
+                Notes = $"Sent Meta Template: {req.TemplateName}",
+                TemplateName = req.TemplateName
+            };
+            await _leads.AddFollowUpAsync(id, followUpReq, userId, userName);
+            return Ok(new { success = true });
+        }
+        else
+        {
+            return StatusCode(500, new { error = "WhatsApp API failed to send the template." });
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

@@ -9,9 +9,9 @@ namespace CMSAPI.Controllers;
 [Route("api/v1/crm/analytics")]
 public class CrmAnalyticsController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly CmsDbContext _db;
 
-    public CrmAnalyticsController(AppDbContext db)
+    public CrmAnalyticsController(CmsDbContext db)
     {
         _db = db;
     }
@@ -20,19 +20,19 @@ public class CrmAnalyticsController : ControllerBase
     public async Task<ActionResult<FinancialAttributionDto>> GetFinancialAttribution(CancellationToken ct)
     {
         // Total Ad Spend from Campaigns
-        var totalSpend = await _db.CrmCampaigns
+        var totalSpend = await _db.CmsCampaigns
             .Where(c => c.IsActive)
             .SumAsync(c => c.ActualSpend, ct);
 
         // Leads metrics
-        var totalLeads = await _db.CrmLeads.CountAsync(ct);
+        var totalLeads = await _db.CmsSalesLeads.CountAsync(ct);
         
-        var totalQualifiedLeads = await _db.CrmLeads
+        var totalQualifiedLeads = await _db.CmsSalesLeads
             .Where(l => l.AiIntentScore >= 50)
             .CountAsync(ct);
 
-        var closedWonLeads = await _db.CrmLeads
-            .Where(l => l.Status == "CLOSED_WON")
+        var closedWonLeads = await _db.CmsSalesLeads
+            .Where(l => l.Stage == "Closed Won")
             .ToListAsync(ct);
 
         var totalCustomers = closedWonLeads.Count;

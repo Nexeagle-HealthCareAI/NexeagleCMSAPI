@@ -5,9 +5,20 @@ using Microsoft.EntityFrameworkCore;
 namespace CMSAPI.Data;
 
 /// <summary>
-/// EF context for CMSDatabase (identity + RBAC). The schema is owned by the
-/// CMSDatabase SQL repo; EF is a runtime mapper only (no migrations). GUID keys
-/// are assigned in application code, hence ValueGeneratedNever.
+/// EF Core DbContext for CMSDatabase (identity + RBAC + CRM).
+///
+/// ⚠ SCHEMA OWNERSHIP: The schema is exclusively owned by the CMSDatabase SQL
+/// repository (CMSDatabase/schema/*.sql). EF is used purely as a runtime ORM
+/// mapper — it NEVER owns or manages the database schema.
+///
+/// ❌ DO NOT run `dotnet ef migrations add` on this context.
+/// ❌ DO NOT call context.Database.Migrate() or EnsureCreated() at startup.
+///
+/// To make a schema change, add a new numbered SQL script to CMSDatabase/schema/
+/// and apply it to the server manually or via the deployment pipeline.
+///
+/// GUID PKs are assigned in application code, hence ValueGeneratedNever on all
+/// identity-key properties.
 /// </summary>
 public class CmsDbContext : DbContext
 {
@@ -31,6 +42,9 @@ public class CmsDbContext : DbContext
     public DbSet<MigrationDoctorMap> MigrationDoctorMaps => Set<MigrationDoctorMap>();
     public DbSet<CmsSalesLead> CmsSalesLeads => Set<CmsSalesLead>();
     public DbSet<CmsSalesLeadFollowUp> CmsSalesLeadFollowUps => Set<CmsSalesLeadFollowUp>();
+    public DbSet<CmsCampaign> CmsCampaigns => Set<CmsCampaign>();
+    public DbSet<CmsSocialPost> CmsSocialPosts => Set<CmsSocialPost>();
+    public DbSet<CmsWhatsappTemplate> CmsWhatsappTemplates => Set<CmsWhatsappTemplate>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CmsPartner>(e =>
@@ -242,6 +256,27 @@ public class CmsDbContext : DbContext
             e.Property(x => x.ActivityType).HasMaxLength(50).IsRequired();
             e.Property(x => x.AuthorName).HasMaxLength(150);
             e.Property(x => x.Notes).IsRequired();
+        });
+
+        b.Entity<CmsCampaign>(e =>
+        {
+            e.ToTable("CmsCampaigns");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<CmsSocialPost>(e =>
+        {
+            e.ToTable("CmsSocialPosts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<CmsWhatsappTemplate>(e =>
+        {
+            e.ToTable("CmsWhatsappTemplates");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
         });
     }
 }
