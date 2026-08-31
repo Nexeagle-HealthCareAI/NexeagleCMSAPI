@@ -1,3 +1,4 @@
+using CMSAPI.Authorization;
 using CMSAPI.Data;
 using CMSAPI.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -194,6 +195,7 @@ namespace CMSAPI.Controllers
             return Ok(result);
         }
 
+        [HasPermission("subscriptions.approve")]
         [HttpPost("{hospitalId}/approve")]
         public async Task<IActionResult> ApprovePayment(Guid hospitalId)
         {
@@ -334,6 +336,7 @@ namespace CMSAPI.Controllers
             return Ok(new { message = "Subscription activated successfully.", sub.SubscriptionEndDate });
         }
 
+        [HasPermission("subscriptions.approve")]
         [HttpPost("{hospitalId}/reject")]
         public async Task<IActionResult> RejectPayment(Guid hospitalId, [FromBody] RejectPaymentRequest request)
         {

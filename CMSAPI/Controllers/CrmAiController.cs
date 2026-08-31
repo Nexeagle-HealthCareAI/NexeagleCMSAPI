@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Services;
 using CMSAPI.Application.Interfaces;
 
 namespace CMSAPI.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/v1/crm/ai")]
 public class CrmAiController : ControllerBase

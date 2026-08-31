@@ -1,10 +1,14 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CMSAPI.Authorization;
 using CMSAPI.Data;
 using Microsoft.EntityFrameworkCore;
 using CMSAPI.Application.Models;
 
 namespace CMSAPI.Controllers;
 
+[Authorize]
+[HasPermission("marketing.view")]
 [ApiController]
 [Route("api/v1/crm/analytics")]
 public class CrmAnalyticsController : ControllerBase
