@@ -271,6 +271,7 @@ namespace CMSAPI.Data.Repositories
             if (doctor == null)
                 return new UpdateDoctorMarketingResult { Success = false, Message = "Doctor not found." };
 
+            doctor.IsPubliclyListed = request.IsPubliclyListed;
             doctor.IsFeatured = request.IsFeatured;
             doctor.IsDelistedByAdmin = request.IsDelistedByAdmin;
             doctor.DiscountPercent = request.DiscountPercent;
@@ -313,6 +314,7 @@ namespace CMSAPI.Data.Repositories
 
             foreach (var doctor in doctors)
             {
+                if (request.IsPubliclyListed.HasValue) doctor.IsPubliclyListed = request.IsPubliclyListed.Value;
                 if (request.IsFeatured.HasValue) doctor.IsFeatured = request.IsFeatured.Value;
                 if (request.IsDelistedByAdmin.HasValue) doctor.IsDelistedByAdmin = request.IsDelistedByAdmin.Value;
                 if (request.UpdateDiscount)
