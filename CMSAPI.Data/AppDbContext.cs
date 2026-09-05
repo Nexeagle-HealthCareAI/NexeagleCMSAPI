@@ -39,6 +39,8 @@ public class AppDbContext : DbContext
     public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; } = null!;
     public DbSet<HospitalLead> HospitalLeads { get; set; } = null!;
     public DbSet<SymptomTrainingExample> SymptomTrainingExamples { get; set; } = null!;
+    public DbSet<PlatformSetting> PlatformSettings { get; set; } = null!;
+    public DbSet<HospitalFreeTierLimit> HospitalFreeTierLimits { get; set; } = null!;
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -488,6 +490,24 @@ public class AppDbContext : DbContext
             entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             entity.Property(e => e.ProratedCreditAmount).HasPrecision(18, 2);
             entity.Property(e => e.IsProratedSwitch).HasDefaultValue(false);
+        });
+
+        modelBuilder.Entity<PlatformSetting>(entity =>
+        {
+            entity.ToTable("PlatformSetting");
+            entity.HasKey(e => e.SettingKey);
+            entity.Property(e => e.SettingKey).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.SettingValue).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            entity.Property(e => e.UpdatedBy).HasMaxLength(200).IsRequired(false);
+        });
+
+        modelBuilder.Entity<HospitalFreeTierLimit>(entity =>
+        {
+            entity.ToTable("HospitalFreeTierLimit");
+            entity.HasKey(e => e.HospitalId);
+            entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            entity.Property(e => e.UpdatedBy).HasMaxLength(200).IsRequired(false);
         });
 
         base.OnModelCreating(modelBuilder);
