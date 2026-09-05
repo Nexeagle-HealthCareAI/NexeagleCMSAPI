@@ -33,6 +33,10 @@ public class DoctorListItem
 // has no way to express "clear this field."
 public class UpdateDoctorMarketingRequest
 {
+    // Lets a CMS admin list a doctor directly, without waiting for the hospital to opt in from
+    // easyHMSWeb -- previously this flag was CMS-readable but not CMS-settable, so an admin could
+    // only delist an already-listed doctor, never list one in the first place.
+    public bool IsPubliclyListed { get; set; }
     public bool IsFeatured { get; set; }
     public bool IsDelistedByAdmin { get; set; }
     // Full-replace like the two booleans above, but RegistrationVerifiedAt/ByUserId are only
@@ -58,6 +62,8 @@ public class BulkUpdateDoctorMarketingRequest
 {
     public List<Guid> DoctorIds { get; set; } = new();
 
+    // null = leave IsPubliclyListed untouched for all selected doctors.
+    public bool? IsPubliclyListed { get; set; }
     // null = leave IsFeatured untouched for all selected doctors.
     public bool? IsFeatured { get; set; }
     // null = leave IsDelistedByAdmin untouched for all selected doctors.
