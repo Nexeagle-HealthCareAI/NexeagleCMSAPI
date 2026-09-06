@@ -33,7 +33,7 @@ namespace CMSAPI.Data.Repositories
                     ISNULL(pharm.InvoiceCount, 0) AS PharmacyInvoiceCount,
                     ISNULL(pharm.Revenue, 0) AS PharmacyRevenue,
                     ISNULL(appt.Cnt, 0) AS OnlineAppointmentsCount
-                FROM dbo.Hospital h
+                FROM dbo.Hospitals h
                 LEFT JOIN (
                     SELECT HospitalId, COUNT(*) AS Cnt
                     FROM dbo.Admission
@@ -57,7 +57,7 @@ namespace CMSAPI.Data.Repositories
                 ) pharm ON pharm.HospitalId = h.HospitalID
                 LEFT JOIN (
                     SELECT HospitalID, COUNT(*) AS Cnt
-                    FROM dbo.Appointment
+                    FROM dbo.Appointments
                     WHERE BookingSource = 'NEXEAGLE_PUBLIC' AND CreatedAt >= @fromDate AND CreatedAt < @toDate
                     GROUP BY HospitalID
                 ) appt ON appt.HospitalID = h.HospitalID
