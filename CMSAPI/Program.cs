@@ -80,6 +80,8 @@ builder.Services.Configure<TokenSettings>(
 // Register Application Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IHospitalOperationsService, HospitalOperationsService>();
+builder.Services.AddScoped<IFreeTierSettingsService, FreeTierSettingsService>();
 builder.Services.AddScoped<IHospitalService, HospitalService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IInsightsService, InsightsService>();
@@ -100,6 +102,8 @@ builder.Services.AddHttpClient<IWhatsAppService, WhatsAppService>();
 
 // Register Data Repositories
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
+builder.Services.AddScoped<IHospitalOperationsRepository, HospitalOperationsRepository>();
+builder.Services.AddScoped<IFreeTierSettingsRepository, FreeTierSettingsRepository>();
 builder.Services.AddScoped<IHospitalRepository, HospitalRepository>();
 builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
 builder.Services.AddScoped<IInsightsRepository, InsightsRepository>();
