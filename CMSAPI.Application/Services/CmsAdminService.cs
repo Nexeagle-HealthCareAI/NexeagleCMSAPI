@@ -189,6 +189,12 @@ public class CmsAdminService : ICmsAdminService
 
         user.PasswordHash = _hasher.Hash(newPassword!);
         user.MustChangePassword = true;
+        // A password reset must also clear any lockout from failed attempts on the OLD password --
+        // otherwise a user whose account got locked out (5 failed attempts, 15-minute lockout in
+        // AuthService.LoginAsync) keeps failing to log in with the correct NEW password until the
+        // old lockout window happens to expire on its own.
+        user.FailedLoginAttempts = 0;
+        user.LockoutEnd = null;
         user.UpdatedAt = DateTime.UtcNow;
         await _repo.SaveChangesAsync();
 
