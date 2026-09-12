@@ -246,5 +246,26 @@ namespace CMSAPI.Controllers
 
             return Ok(new { message = "Payment rejected." });
         }
+
+        // CMS-initiated renewal — works on any subscription status (Active/Expired/Blocked/Trial),
+        // unlike /approve which only acts on a hospital-submitted PendingApproval payment. Used for
+        // offline payments and manual corrections; gated separately by subscriptions.manage so it's
+        // audit-distinguishable from rubber-stamping a submitted payment.
+        [HasPermission("subscriptions.manage")]
+        [HttpPost("{hospitalId}/renew")]
+        public async Task<IActionResult> RenewSubscription(Guid hospitalId, [FromBody] RenewSubscriptionRequest request)
+        {
+            var result = await _approvalService.RenewSubscriptionAsync(hospitalId, request);
+            if (!result.Success)
+            {
+                if (result.RequiresOverrideConfirmation)
+                    return Conflict(new { message = result.ErrorMessage, overLimit = true, details = result.OverLimitDetails });
+                if (result.ErrorMessage == "Hospital subscription not found.")
+                    return NotFound(result.ErrorMessage);
+                return BadRequest(result.ErrorMessage);
+            }
+
+            return Ok(new { message = "Subscription renewed successfully.", result.SubscriptionEndDate });
+        }
     }
 }
