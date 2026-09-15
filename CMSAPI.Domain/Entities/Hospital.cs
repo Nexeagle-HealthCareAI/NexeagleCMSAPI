@@ -18,6 +18,11 @@ public class Hospital
     public string Country { get; set; } = string.Empty;
     public string Pincode { get; set; } = string.Empty;
     public string? TimeZone { get; set; }
+    // GPS pin set by the hospital via easyHMSWeb's HospitalBrandingConfig.tsx -- same
+    // Hospitals.Latitude/Longitude columns easyHMSAPI's own Hospital entity maps. CMS is
+    // read-only on these (no admin write path here), just surfacing them in HospitalDetails.tsx.
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
     public string RegistrationNumber { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     // Soft-delete: distinct from IsActive, which this repository already uses to mean

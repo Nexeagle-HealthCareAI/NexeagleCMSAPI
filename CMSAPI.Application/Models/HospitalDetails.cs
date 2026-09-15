@@ -14,6 +14,10 @@ public class HospitalDetails
     public string Address { get; set; } = string.Empty;
     public string City { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
+    // GPS pin, when the hospital has set one via easyHMSWeb -- null otherwise. Powers a
+    // read-only location map on the CMS detail page (see HospitalDetails.tsx).
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
     public int TotalPatients { get; set; }
     public DateTime RegisteredOn { get; set; }
     public string Status { get; set; } = "Active";
