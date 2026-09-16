@@ -293,6 +293,8 @@ namespace CMSAPI.Data.Repositories
                 Address = h.Location,
                 City = h.City,
                 State = h.State,
+                Latitude = h.Latitude,
+                Longitude = h.Longitude,
                 TotalPatients = await _db.PatientRegistrations.CountAsync(pr => pr.HospitalID == h.HospitalID),
                 RegisteredOn = h.CreatedAt,
                 // "Pending", not "Inactive" -- must match GetHospitalsAsync's list-view label
