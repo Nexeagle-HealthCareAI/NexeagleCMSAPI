@@ -2,25 +2,23 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
-using CMSAPI.Domain.Entities;
+using Microsoft.Extensions.Logging;
+using CMSAPI.Application.Interfaces;
 
 namespace CMSAPI.Application.Services;
 
-public interface IWhatsAppService
-{
-    Task<bool> SendTemplateMessageAsync(string toPhoneNumber, string templateName, string language = "en", object[]? components = null, CancellationToken ct = default);
-    Task<bool> SendInteractiveMessageAsync(string toPhoneNumber, string body, string buttonText, CancellationToken ct = default);
-}
-
+// IWhatsAppService is defined in CMSAPI.Application.Interfaces/IWhatsAppService.cs
 public class WhatsAppService : IWhatsAppService
 {
     private readonly HttpClient _httpClient;
     private readonly string _phoneNumberId;
     private readonly string _accessToken;
+    private readonly ILogger<WhatsAppService> _logger;
 
-    public WhatsAppService(HttpClient httpClient, IConfiguration config)
+    public WhatsAppService(HttpClient httpClient, IConfiguration config, ILogger<WhatsAppService> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
         _phoneNumberId = config["Meta:WhatsApp:PhoneNumberId"] ?? string.Empty;
         _accessToken = config["Meta:WhatsApp:AccessToken"] ?? string.Empty;
         
@@ -81,7 +79,7 @@ public class WhatsAppService : IWhatsAppService
     {
         if (string.IsNullOrWhiteSpace(_phoneNumberId) || string.IsNullOrWhiteSpace(_accessToken))
         {
-            Console.WriteLine("WhatsApp API Error: Configuration missing");
+            _logger.LogWarning("WhatsApp API is not configured (Meta:WhatsApp:PhoneNumberId or AccessToken missing). Message not sent.");
             return false;
         }
 
@@ -93,7 +91,7 @@ public class WhatsAppService : IWhatsAppService
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync(ct);
-                Console.WriteLine($"WhatsApp API Error: {error}");
+                _logger.LogError("WhatsApp API returned {StatusCode}: {Error}", (int)response.StatusCode, error);
                 return false;
             }
 
@@ -101,7 +99,7 @@ public class WhatsAppService : IWhatsAppService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"WhatsApp API Exception: {ex.Message}");
+            _logger.LogError(ex, "WhatsApp API request failed.");
             return false;
         }
     }

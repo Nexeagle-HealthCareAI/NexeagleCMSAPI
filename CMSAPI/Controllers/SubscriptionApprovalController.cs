@@ -30,6 +30,7 @@ namespace CMSAPI.Controllers
             _cmsDb = cmsDb;
         }
 
+        [HasPermission("subscriptions.approve")]
         [HttpGet("pending")]
         public async Task<IActionResult> GetPendingApprovals()
         {
@@ -122,6 +123,7 @@ namespace CMSAPI.Controllers
         // Every payment ever submitted (PendingApproval/Approved/Rejected) across all hospitals —
         // the audit trail behind "pending", sourced from the same append-only table the hospital's
         // own Payment History view reads from.
+        [HasPermission("subscriptions.approve")]
         [HttpGet("history")]
         public async Task<IActionResult> GetApprovalHistory([FromQuery] int page = 1, [FromQuery] int limit = 50)
         {

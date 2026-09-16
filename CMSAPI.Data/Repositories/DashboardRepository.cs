@@ -20,77 +20,70 @@ public class DashboardRepository : IDashboardRepository
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var now = DateTime.UtcNow;
-            
-            // --- Helper to get date range counts ---
-            // We need raw dates for charts
-            
-            // 1. Hospitals
-            var hospitals = await _db.Hospitals
-                .Select(h => new { h.HospitalID, h.CreatedAt })
-                .ToListAsync();
 
-            // 2. Patients
-            // RegistrationId (the real PK, one row per registration) -- NOT PatientID (a business
-            // identifier a patient can share across multiple registrations/hospitals), so this
-            // total matches a plain row count, consistent with every other metric here and with
-            // HospitalRepository's per-hospital "Total Patients" (also an undeduped row count).
-            var patients = await _db.PatientRegistrations
-                .Select(p => new { p.RegistrationId, p.RegisteredAt })
-                .ToListAsync();
-
-            // 3. Doctors (Joined via UserProfile for date)
-            // Note: If Doctor.UserID is null, we can't determine date easily. Ignoring those for
-            // the week-over-week trend and charts below, which both need a CreatedAt to bucket by
-            // -- but NOT for the headline total (see totalDoctorsCount), which must count every
-            // doctor regardless of whether a linked UserProfile row exists.
-            var totalDoctorsCount = await _db.Doctors.Select(d => d.DoctorID).Distinct().CountAsync();
-            var doctors = await (from d in _db.Doctors
-                                     join u in _db.UserProfiles on d.UserID equals u.UserID
-                                     select new { d.DoctorID, u.CreatedAt })
-                                     .ToListAsync();
-
-            // 4. Users (UserAuth)
-            var users = await _db.UserAuths
-                .Select(u => new { u.UserID, u.CreatedAt })
-                .ToListAsync();
-
-            // --- Metrics Calculation (This Week vs Last Week) ---
+            // Date boundaries for the this-week / last-week metric comparison
             var startOfThisWeek = now.AddDays(-7);
             var startOfLastWeek = now.AddDays(-14);
 
+            // Chart window: GenerateChartData shows at most 5 years of history.
+            // Loading rows older than that wastes memory; filter them out at the DB level.
+            var fiveYearsAgo = now.AddYears(-5);
+
+            // ── Metrics: SQL COUNT queries (no full-table load) ───────────────────────
+            var totalHospitals  = await _db.Hospitals.CountAsync();
+            var hospThisWeek    = await _db.Hospitals.CountAsync(h => h.CreatedAt >= startOfThisWeek);
+            var hospLastWeek    = await _db.Hospitals.CountAsync(h => h.CreatedAt >= startOfLastWeek && h.CreatedAt < startOfThisWeek);
+
+            var totalDoctorsCount = await _db.Doctors.Select(d => d.DoctorID).Distinct().CountAsync();
+            var docThisWeek  = await (from d in _db.Doctors join u in _db.UserProfiles on d.UserID equals u.UserID
+                                      where u.CreatedAt >= startOfThisWeek select d.DoctorID).CountAsync();
+            var docLastWeek  = await (from d in _db.Doctors join u in _db.UserProfiles on d.UserID equals u.UserID
+                                      where u.CreatedAt >= startOfLastWeek && u.CreatedAt < startOfThisWeek select d.DoctorID).CountAsync();
+
+            var totalPatients = await _db.PatientRegistrations.Select(p => p.RegistrationId).Distinct().CountAsync();
+            var patThisWeek   = await _db.PatientRegistrations.CountAsync(p => p.RegisteredAt >= startOfThisWeek);
+            var patLastWeek   = await _db.PatientRegistrations.CountAsync(p => p.RegisteredAt >= startOfLastWeek && p.RegisteredAt < startOfThisWeek);
+
+            var totalUsers   = await _db.UserAuths.Select(u => u.UserID).Distinct().CountAsync();
+            var userThisWeek = await _db.UserAuths.CountAsync(u => u.CreatedAt >= startOfThisWeek);
+            var userLastWeek = await _db.UserAuths.CountAsync(u => u.CreatedAt >= startOfLastWeek && u.CreatedAt < startOfThisWeek);
+
+            // ── Chart data: load only the date column, only for the last 5 years ──────
+            var hospitalDates = await _db.Hospitals
+                .Where(h => h.CreatedAt >= fiveYearsAgo)
+                .Select(h => h.CreatedAt).ToListAsync();
+
+            var doctorDates = await (from d in _db.Doctors
+                                     join u in _db.UserProfiles on d.UserID equals u.UserID
+                                     where u.CreatedAt >= fiveYearsAgo
+                                     select u.CreatedAt).ToListAsync();
+
+            var patientDates = await _db.PatientRegistrations
+                .Where(p => p.RegisteredAt >= fiveYearsAgo)
+                .Select(p => p.RegisteredAt).ToListAsync();
+
+            var userDates = await _db.UserAuths
+                .Where(u => u.CreatedAt >= fiveYearsAgo)
+                .Select(u => u.CreatedAt).ToListAsync();
+
+            // ── Assemble response ─────────────────────────────────────────────────────
             var resp = new DashboardResponse();
 
-            // Hospitals Metric
-            var hospThisWeek = hospitals.Count(h => h.CreatedAt >= startOfThisWeek);
-            var hospLastWeek = hospitals.Count(h => h.CreatedAt >= startOfLastWeek && h.CreatedAt < startOfThisWeek);
-            resp.TotalHospitals = CalculateMetric(hospitals.Select(h => h.HospitalID).Distinct().Count(), hospThisWeek, hospLastWeek, "this week");
+            resp.TotalHospitals = CalculateMetric(totalHospitals, hospThisWeek, hospLastWeek, "this week");
+            resp.TotalDoctors   = CalculateMetric(totalDoctorsCount, docThisWeek, docLastWeek, "this week");
+            resp.TotalPatients  = CalculateMetric(totalPatients, patThisWeek, patLastWeek, "overall");
+            resp.TotalUsers     = CalculateMetric(totalUsers, userThisWeek, userLastWeek, "this week");
 
-            // Doctors Metric
-            var docThisWeek = doctors.Count(d => d.CreatedAt >= startOfThisWeek);
-            var docLastWeek = doctors.Count(d => d.CreatedAt >= startOfLastWeek && d.CreatedAt < startOfThisWeek);
-            resp.TotalDoctors = CalculateMetric(totalDoctorsCount, docThisWeek, docLastWeek, "this week");
-
-            // Patients Metric ("overall" period in example, but calculation same)
-            var patThisWeek = patients.Count(p => p.RegisteredAt >= startOfThisWeek);
-            var patLastWeek = patients.Count(p => p.RegisteredAt >= startOfLastWeek && p.RegisteredAt < startOfThisWeek);
-            resp.TotalPatients = CalculateMetric(patients.Select(p => p.RegistrationId).Distinct().Count(), patThisWeek, patLastWeek, "overall");
-
-            // Users Metric
-            var userThisWeek = users.Count(u => u.CreatedAt >= startOfThisWeek);
-            var userLastWeek = users.Count(u => u.CreatedAt >= startOfLastWeek && u.CreatedAt < startOfThisWeek);
-            resp.TotalUsers = CalculateMetric(users.Select(u => u.UserID).Distinct().Count(), userThisWeek, userLastWeek, "this week");
-
-            // --- Charts Generation ---
-            resp.Charts.Hospitals = GenerateChartData(hospitals.Select(h => h.CreatedAt).ToList(), today);
-            resp.Charts.Doctors = GenerateChartData(doctors.Select(d => d.CreatedAt).ToList(), today);
-            resp.Charts.Patients = GenerateChartData(patients.Select(p => p.RegisteredAt).ToList(), today);
-            resp.Charts.Users = GenerateChartData(users.Select(u => u.CreatedAt).ToList(), today);
+            resp.Charts.Hospitals = GenerateChartData(hospitalDates, today);
+            resp.Charts.Doctors   = GenerateChartData(doctorDates,   today);
+            resp.Charts.Patients  = GenerateChartData(patientDates,   today);
+            resp.Charts.Users     = GenerateChartData(userDates,      today);
 
             return resp;
         }
-        catch(Exception)
+        catch (Exception)
         {
-            throw; // Let global handler handle it, or rethrow
+            throw;
         }
     }
 

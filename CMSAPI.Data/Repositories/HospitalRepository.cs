@@ -95,9 +95,22 @@ namespace CMSAPI.Data.Repositories
                              && ds.Specialization.HospitalID == h.HospitalID)
                 .ToListAsync();
 
-            var allDoctorAppointments = await _db.Appointments
+            // Load doctor appointment data pre-aggregated at the SQL level — count per (doctor, date)
+            // and distinct-patient count per (doctor, date) — instead of fetching every raw row into
+            // memory and counting in C#. For busy hospitals this avoids loading tens of thousands of
+            // rows just to call .Count and .Distinct().Count() on subsets of them.
+            var docApptCounts = await _db.Appointments
+                .Where(a => doctorIds.Contains(a.DoctorID) && a.HospitalID == h.HospitalID)
+                .GroupBy(a => new { a.DoctorID, a.ApptDate })
+                .Select(g => new { g.Key.DoctorID, g.Key.ApptDate, Count = g.Count() })
+                .ToListAsync();
+
+            var docUniquePatientCounts = await _db.Appointments
                 .Where(a => doctorIds.Contains(a.DoctorID) && a.HospitalID == h.HospitalID)
                 .Select(a => new { a.DoctorID, a.ApptDate, a.PatientID })
+                .Distinct()
+                .GroupBy(a => new { a.DoctorID, a.ApptDate })
+                .Select(g => new { g.Key.DoctorID, g.Key.ApptDate, Count = g.Count() })
                 .ToListAsync();
 
             var doctorUserIds = doctors.Select(d => d.UserID).ToList();
@@ -122,25 +135,25 @@ namespace CMSAPI.Data.Repositories
                     .Where(n => n.Length > 0)
                     .ToList();
 
-                var doctorAppointments = allDoctorAppointments
-                    .Where(a => a.DoctorID == doc.DoctorID)
-                    .ToList();
+                // Aggregate appointment and unique-patient counts for this doctor from the
+                // pre-grouped SQL results — no per-doctor DB round-trips needed.
+                var docAppts  = docApptCounts.Where(x => x.DoctorID == doc.DoctorID).ToList();
+                var docUnique = docUniquePatientCounts.Where(x => x.DoctorID == doc.DoctorID).ToList();
 
-                // Daily: Today's appointments
-                var dailyAppts = doctorAppointments.Where(a => a.ApptDate == todayDate).ToList();
-
-                // Weekly: Current calendar week (Monday to Sunday)
-                var docWeekStart = todayDate.AddDays(-(int)todayDate.DayOfWeek);
-                var docWeekEnd = docWeekStart.AddDays(6);
-                var weeklyAppts = doctorAppointments.Where(a => a.ApptDate >= docWeekStart && a.ApptDate <= docWeekEnd).ToList();
-
-                // Monthly: Current calendar month
+                var docWeekStart  = todayDate.AddDays(-(int)todayDate.DayOfWeek);
+                var docWeekEnd    = docWeekStart.AddDays(6);
                 var docMonthStart = new DateOnly(todayDate.Year, todayDate.Month, 1);
-                var docMonthEnd = docMonthStart.AddMonths(1).AddDays(-1);
-                var monthlyAppts = doctorAppointments.Where(a => a.ApptDate >= docMonthStart && a.ApptDate <= docMonthEnd).ToList();
+                var docMonthEnd   = docMonthStart.AddMonths(1).AddDays(-1);
 
-                // Yearly: Current calendar year
-                var yearlyAppts = doctorAppointments.Where(a => a.ApptDate.Year == todayDate.Year).ToList();
+                int dailyApptCount   = docAppts.Where(x => x.ApptDate == todayDate).Sum(x => x.Count);
+                int weeklyApptCount  = docAppts.Where(x => x.ApptDate >= docWeekStart && x.ApptDate <= docWeekEnd).Sum(x => x.Count);
+                int monthlyApptCount = docAppts.Where(x => x.ApptDate.Year == todayDate.Year && x.ApptDate.Month == todayDate.Month).Sum(x => x.Count);
+                int yearlyApptCount  = docAppts.Where(x => x.ApptDate.Year == todayDate.Year).Sum(x => x.Count);
+
+                int dailyUniqueCount   = docUnique.Where(x => x.ApptDate == todayDate).Sum(x => x.Count);
+                int weeklyUniqueCount  = docUnique.Where(x => x.ApptDate >= docWeekStart && x.ApptDate <= docWeekEnd).Sum(x => x.Count);
+                int monthlyUniqueCount = docUnique.Where(x => x.ApptDate.Year == todayDate.Year && x.ApptDate.Month == todayDate.Month).Sum(x => x.Count);
+                int yearlyUniqueCount  = docUnique.Where(x => x.ApptDate.Year == todayDate.Year).Sum(x => x.Count);
 
                 // Get doctor name from pre-loaded UserProfile dictionary.
                 allDoctorProfiles.TryGetValue(doc.UserID, out var userProfile);
@@ -155,19 +168,19 @@ namespace CMSAPI.Data.Repositories
                     Degree = doc.Qualification ?? string.Empty,
                     RegistrationNumber = doc.LicenseNumber ?? string.Empty,
                     RegisteredOn = doc.RegistrationYear.HasValue ? new DateTime(doc.RegistrationYear.Value, 1, 1) : DateTime.MinValue,
-                    Appointments = new AppointmentCounts 
-                    { 
-                        Daily = dailyAppts.Count, 
-                        Weekly = weeklyAppts.Count, 
-                        Monthly = monthlyAppts.Count, 
-                        Yearly = yearlyAppts.Count 
+                    Appointments = new AppointmentCounts
+                    {
+                        Daily   = dailyApptCount,
+                        Weekly  = weeklyApptCount,
+                        Monthly = monthlyApptCount,
+                        Yearly  = yearlyApptCount
                     },
-                    UniquePatients = new AppointmentCounts 
-                    { 
-                        Daily = dailyAppts.Select(x => x.PatientID).Distinct().Count(),
-                        Weekly = weeklyAppts.Select(x => x.PatientID).Distinct().Count(),
-                        Monthly = monthlyAppts.Select(x => x.PatientID).Distinct().Count(),
-                        Yearly = yearlyAppts.Select(x => x.PatientID).Distinct().Count()
+                    UniquePatients = new AppointmentCounts
+                    {
+                        Daily   = dailyUniqueCount,
+                        Weekly  = weeklyUniqueCount,
+                        Monthly = monthlyUniqueCount,
+                        Yearly  = yearlyUniqueCount
                     }
                 });
             }
@@ -175,21 +188,31 @@ namespace CMSAPI.Data.Repositories
             var hospitalStats = new HospitalStats();
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-            // Fetch raw data from appointments table
-            var appointments = await _db.Appointments
+            // SQL-level aggregation: one row per date (not one row per appointment).
+            // For a hospital with years of data, this drops the in-process memory from
+            // O(appointments) to O(unique_dates), typically orders of magnitude smaller.
+            var apptCountByDate = await _db.Appointments
+                .Where(a => a.HospitalID == id)
+                .GroupBy(a => a.ApptDate)
+                .Select(g => new { Date = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.Date, x => x.Count);
+
+            // Distinct (date, patient) pairs grouped by date — equivalent to COUNT(DISTINCT PatientID) per date.
+            var uniquePatientByDate = await _db.Appointments
                 .Where(a => a.HospitalID == id)
                 .Select(a => new { a.ApptDate, a.PatientID })
-                .ToListAsync();
+                .Distinct()
+                .GroupBy(a => a.ApptDate)
+                .Select(g => new { Date = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.Date, x => x.Count);
 
             // Daily (Last 7 days including today)
             for (int i = 6; i >= 0; i--)
             {
                 var d = today.AddDays(-i);
-                var dayAppts = appointments.Where(a => a.ApptDate == d).ToList();
                 var label = d.DayOfWeek.ToString().Substring(0, 3);
-
-                hospitalStats.Appointments.Daily.Add(new StatPoint { Label = label, Value = dayAppts.Count });
-                hospitalStats.UniquePatients.Daily.Add(new StatPoint { Label = label, Value = dayAppts.Select(x => x.PatientID).Distinct().Count() });
+                hospitalStats.Appointments.Daily.Add(new StatPoint   { Label = label, Value = apptCountByDate.GetValueOrDefault(d) });
+                hospitalStats.UniquePatients.Daily.Add(new StatPoint  { Label = label, Value = uniquePatientByDate.GetValueOrDefault(d) });
             }
 
             // Weekly (Current week + next 3 weeks)
@@ -197,12 +220,10 @@ namespace CMSAPI.Data.Repositories
             for (int i = 0; i < 4; i++)
             {
                 var start = weekStart.AddDays(i * 7);
-                var end = start.AddDays(6);
-                var weekAppts = appointments.Where(a => a.ApptDate >= start && a.ApptDate <= end).ToList();
-                var label = $"Week {i+1}";
-
-                hospitalStats.Appointments.Weekly.Add(new StatPoint { Label = label, Value = weekAppts.Count });
-                hospitalStats.UniquePatients.Weekly.Add(new StatPoint { Label = label, Value = weekAppts.Select(x => x.PatientID).Distinct().Count() });
+                var end   = start.AddDays(6);
+                var label = $"Week {i + 1}";
+                hospitalStats.Appointments.Weekly.Add(new StatPoint   { Label = label, Value = apptCountByDate.Where(kvp => kvp.Key >= start && kvp.Key <= end).Sum(kvp => kvp.Value) });
+                hospitalStats.UniquePatients.Weekly.Add(new StatPoint  { Label = label, Value = uniquePatientByDate.Where(kvp => kvp.Key >= start && kvp.Key <= end).Sum(kvp => kvp.Value) });
             }
 
             // Monthly (Current month + next 11 months)
@@ -210,13 +231,10 @@ namespace CMSAPI.Data.Repositories
             for (int i = 0; i < 12; i++)
             {
                 var currentMonthStart = monthStart.AddMonths(i);
-                var currentMonthEnd = currentMonthStart.AddMonths(1).AddDays(-1);
-
-                var monthAppts = appointments.Where(a => a.ApptDate >= currentMonthStart && a.ApptDate <= currentMonthEnd).ToList();
+                var currentMonthEnd   = currentMonthStart.AddMonths(1).AddDays(-1);
                 var label = currentMonthStart.ToString("MMM");
-
-                hospitalStats.Appointments.Monthly.Add(new StatPoint { Label = label, Value = monthAppts.Count });
-                hospitalStats.UniquePatients.Monthly.Add(new StatPoint { Label = label, Value = monthAppts.Select(x => x.PatientID).Distinct().Count() });
+                hospitalStats.Appointments.Monthly.Add(new StatPoint   { Label = label, Value = apptCountByDate.Where(kvp => kvp.Key >= currentMonthStart && kvp.Key <= currentMonthEnd).Sum(kvp => kvp.Value) });
+                hospitalStats.UniquePatients.Monthly.Add(new StatPoint  { Label = label, Value = uniquePatientByDate.Where(kvp => kvp.Key >= currentMonthStart && kvp.Key <= currentMonthEnd).Sum(kvp => kvp.Value) });
             }
 
             // Yearly (Current year + next 4 years)
@@ -224,10 +242,8 @@ namespace CMSAPI.Data.Repositories
             for (int i = 0; i < 5; i++)
             {
                 var y = currentYear + i;
-                var yearAppts = appointments.Where(a => a.ApptDate.Year == y).ToList();
-
-                hospitalStats.Appointments.Yearly.Add(new StatPoint { Label = y.ToString(), Value = yearAppts.Count });
-                hospitalStats.UniquePatients.Yearly.Add(new StatPoint { Label = y.ToString(), Value = yearAppts.Select(x => x.PatientID).Distinct().Count() });
+                hospitalStats.Appointments.Yearly.Add(new StatPoint   { Label = y.ToString(), Value = apptCountByDate.Where(kvp => kvp.Key.Year == y).Sum(kvp => kvp.Value) });
+                hospitalStats.UniquePatients.Yearly.Add(new StatPoint  { Label = y.ToString(), Value = uniquePatientByDate.Where(kvp => kvp.Key.Year == y).Sum(kvp => kvp.Value) });
             }
 
             // Subscription summary + full payment ledger for this hospital.
@@ -370,12 +386,111 @@ namespace CMSAPI.Data.Repositories
                 query = query.Where(h => h.IsActive == isActive);
             }
 
-            // Subscription effective status, doctor counts, and non-doctor user counts are all
-            // computed values (not plain columns), so filtering/sorting by them can't happen at the
-            // SQL level. Materialize every hospital matching the DB-level filters above (search +
-            // status — an admin console's hospital count is small enough for this) and do
-            // subscriptionStatus filtering + all sorting in memory, same as the detail endpoint
-            // already computes these per-hospital.
+            // ── Fast path: DB-sortable column + no subscriptionStatus filter ────────────
+            // Sort and paginate at the SQL level so only one page of hospital rows is
+            // loaded instead of the entire table. Computed fields (TotalDoctors,
+            // TotalNonDoctorUsers, SubscriptionStatus) can't be sorted/filtered at the
+            // SQL level, so those fall through to the slow path below.
+            var dbSortColumns = new[] { "name", "registeredon", "city", "contactnumber", "status", null, "" };
+            bool useSqlPagination = string.IsNullOrWhiteSpace(subscriptionStatus) &&
+                                    dbSortColumns.Contains(sortBy?.ToLowerInvariant());
+
+            if (useSqlPagination)
+            {
+                var isAscFast = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
+                IOrderedQueryable<Hospital> orderedQuery = sortBy?.ToLowerInvariant() switch
+                {
+                    "name"          => isAscFast ? query.OrderBy(h => h.Name)       : query.OrderByDescending(h => h.Name),
+                    "city"          => isAscFast ? query.OrderBy(h => h.City)        : query.OrderByDescending(h => h.City),
+                    "contactnumber" => isAscFast ? query.OrderBy(h => h.Contact)     : query.OrderByDescending(h => h.Contact),
+                    "status"        => isAscFast ? query.OrderBy(h => h.IsActive)    : query.OrderByDescending(h => h.IsActive),
+                    "registeredon"  => isAscFast ? query.OrderBy(h => h.CreatedAt)   : query.OrderByDescending(h => h.CreatedAt),
+                    _               => query.OrderByDescending(h => h.CreatedAt)
+                };
+
+                var totalItems = await orderedQuery.CountAsync();
+                var pageHospitals = await orderedQuery
+                    .Skip((page - 1) * limit)
+                    .Take(limit)
+                    .ToListAsync();
+
+                var pageIds = pageHospitals.Select(h => h.HospitalID).ToList();
+
+                var subsByPage = await _db.HospitalSubscriptions.AsNoTracking()
+                    .Where(s => pageIds.Contains(s.HospitalId))
+                    .ToDictionaryAsync(s => s.HospitalId);
+                var pagePlanIds = subsByPage.Values.Where(s => s.PlanId.HasValue).Select(s => s.PlanId!.Value);
+                var pagePlanNames = await ResolvePlanNamesAsync(pagePlanIds);
+                var enterprisePlanIdsFast = await _cmsDb.EasyHmsSubscriptionPlans.Where(p => p.IsEnterprise).Select(p => p.PlanId).ToListAsync();
+                var utcNowFast = DateTime.UtcNow;
+
+                var patientCountsFast = await _db.PatientRegistrations
+                    .Where(pr => pageIds.Contains(pr.HospitalID))
+                    .GroupBy(pr => pr.HospitalID)
+                    .Select(g => new { HospitalId = g.Key, Count = g.Count() })
+                    .ToDictionaryAsync(x => x.HospitalId, x => x.Count);
+
+                var doctorPairsFast = await _db.DoctorDepartments
+                    .Where(dd => pageIds.Contains(dd.HospitalID))
+                    .Select(dd => new { dd.HospitalID, dd.DoctorID })
+                    .Distinct().ToListAsync();
+                var doctorIdsByHospitalFast = doctorPairsFast
+                    .GroupBy(p => p.HospitalID)
+                    .ToDictionary(g => g.Key, g => g.Select(p => p.DoctorID).ToHashSet());
+                var allDoctorIdsFast = doctorPairsFast.Select(p => p.DoctorID).Distinct().ToList();
+                var doctorUserIdByDoctorIdFast = await _db.Doctors
+                    .Where(d => allDoctorIdsFast.Contains(d.DoctorID))
+                    .ToDictionaryAsync(d => d.DoctorID, d => d.UserID);
+
+                var hospitalUserPairsFast = await _db.HospitalUsers
+                    .Where(hu => pageIds.Contains(hu.HospitalID))
+                    .Select(hu => new { hu.HospitalID, hu.UserID })
+                    .ToListAsync();
+                var userIdsByHospitalFast = hospitalUserPairsFast
+                    .GroupBy(p => p.HospitalID)
+                    .ToDictionary(g => g.Key, g => g.Select(p => p.UserID).ToHashSet());
+
+                var pageItems = pageHospitals.Select(h =>
+                {
+                    subsByPage.TryGetValue(h.HospitalID, out var sub);
+                    string? subStatus = null; string? subPlanName = null; int? subDaysRemaining = null; var subIsEnterprise = false;
+                    if (sub != null)
+                    {
+                        subStatus = sub.GetEffectiveStatus(utcNowFast);
+                        if (sub.PlanId.HasValue) { pagePlanNames.TryGetValue(sub.PlanId.Value, out subPlanName); subIsEnterprise = enterprisePlanIdsFast.Contains(sub.PlanId.Value); }
+                        if (subStatus == "Trial" && sub.TrialEndDate.HasValue) subDaysRemaining = Math.Max(0, (sub.TrialEndDate.Value - utcNowFast).Days);
+                        else if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue) subDaysRemaining = Math.Max(0, (sub.SubscriptionEndDate.Value - utcNowFast).Days);
+                    }
+                    doctorIdsByHospitalFast.TryGetValue(h.HospitalID, out var doctorIdSet); doctorIdSet ??= new HashSet<Guid>();
+                    var doctorUserIds = doctorIdSet.Select(did => doctorUserIdByDoctorIdFast.TryGetValue(did, out var uid) ? uid : Guid.Empty).ToHashSet();
+                    userIdsByHospitalFast.TryGetValue(h.HospitalID, out var userIdSet); userIdSet ??= new HashSet<Guid>();
+                    patientCountsFast.TryGetValue(h.HospitalID, out var patientCount);
+
+                    return new HospitalListItem
+                    {
+                        Id = h.HospitalID, PartnerName = string.Empty, Name = h.Name, ContactNumber = h.Contact,
+                        Email = h.Email, Address = h.Location, City = h.City, State = h.State,
+                        TotalPatients = patientCount, TotalDoctors = doctorIdSet.Count,
+                        TotalNonDoctorUsers = userIdSet.Count(uid => !doctorUserIds.Contains(uid)),
+                        RegisteredOn = h.CreatedAt, Status = h.IsActive ? "Active" : "Pending",
+                        IsArchived = h.IsArchived, ArchivedAt = h.ArchivedAt,
+                        SubscriptionPlanName = subPlanName, SubscriptionStatus = subStatus,
+                        SubscriptionDaysRemaining = subDaysRemaining, SubscriptionIsEnterprise = subIsEnterprise
+                    };
+                }).ToList();
+
+                return new PagedResult<HospitalListItem>
+                {
+                    Data = pageItems,
+                    Pagination = new PaginationInfo { CurrentPage = page, TotalPages = (int)Math.Ceiling(totalItems / (double)limit), TotalItems = totalItems, ItemsPerPage = limit }
+                };
+            }
+
+            // ── Slow path: subscriptionStatus filter or computed-column sort ──────────
+            // Subscription effective status, doctor counts, and non-doctor user counts are
+            // computed values — not plain columns — so filtering/sorting by them can't happen
+            // at the SQL level. Materialize every hospital matching the DB-level filters and
+            // do computed filtering + sorting in memory.
             var matchingHospitals = await query.ToListAsync();
             var hospitalIds = matchingHospitals.Select(h => h.HospitalID).ToList();
 

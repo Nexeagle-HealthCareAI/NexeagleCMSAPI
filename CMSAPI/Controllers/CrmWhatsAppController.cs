@@ -1,6 +1,8 @@
 using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Services;
+using CMSAPI.Authorization;
 using CMSAPI.Data;
 using Microsoft.EntityFrameworkCore;
 using CMSAPI.Domain.Entities;
@@ -9,6 +11,7 @@ using CMSAPI.Application.Models;
 
 namespace CMSAPI.Controllers;
 
+[Authorize]
 [ApiController]
 [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/crm/whatsapp")]
@@ -23,6 +26,7 @@ public class CrmWhatsAppController : ControllerBase
         _waService = waService;
     }
 
+    [HasPermission("marketing.manage")]
     [HttpPost("dispatch-template")]
     public async Task<IActionResult> DispatchTemplate([FromBody] DispatchTemplateRequest req, CancellationToken ct)
     {

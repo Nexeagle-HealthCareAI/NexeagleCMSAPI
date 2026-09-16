@@ -13,6 +13,7 @@ namespace CMSAPI.Controllers
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/[controller]")]
+    [Authorize]
     public class ReferralCodesController : ControllerBase
     {
         private readonly IReferralCodeService _referralCodeService;

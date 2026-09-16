@@ -30,19 +30,19 @@ public class CrmAnalyticsController : ControllerBase
             .Where(c => c.IsActive)
             .SumAsync(c => c.ActualSpend, ct);
 
-        // Leads metrics
-        var totalLeads = await _db.CmsSalesLeads.CountAsync(ct);
+        // Leads metrics — filter IsDeleted so soft-deleted leads are not counted (matches SalesLeadRepository)
+        var totalLeads = await _db.CmsSalesLeads.Where(l => !l.IsDeleted).CountAsync(ct);
         
         var totalQualifiedLeads = await _db.CmsSalesLeads
-            .Where(l => l.AiIntentScore >= 50)
+            .Where(l => !l.IsDeleted && l.AiIntentScore >= 50)
             .CountAsync(ct);
 
         var totalCustomers = await _db.CmsSalesLeads
-            .Where(l => l.Stage == "Closed Won")
+            .Where(l => !l.IsDeleted && l.Stage == "Closed Won")
             .CountAsync(ct);
 
         var totalRevenue = await _db.CmsSalesLeads
-            .Where(l => l.Stage == "Closed Won")
+            .Where(l => !l.IsDeleted && l.Stage == "Closed Won")
             .SumAsync(l => l.DealValue, ct);
 
         var dto = new FinancialAttributionDto

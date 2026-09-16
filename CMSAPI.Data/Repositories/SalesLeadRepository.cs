@@ -38,11 +38,14 @@ public class SalesLeadRepository : ISalesLeadRepository
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            var s = filter.Search.Trim().ToLower();
+            // EF Core translates .Contains() to SQL LIKE '%value%', which uses the column's collation.
+            // SQL Server's default collation (Latin1_General_CI_AS) is case-insensitive, so ToLower()
+            // is redundant AND harmful — LOWER() prevents the query engine from using column indexes.
+            var s = filter.Search.Trim();
             query = query.Where(l =>
-                l.HospitalName.ToLower().Contains(s) ||
-                (l.City != null && l.City.ToLower().Contains(s)) ||
-                (l.ContactName != null && l.ContactName.ToLower().Contains(s)));
+                l.HospitalName.Contains(s) ||
+                (l.City != null && l.City.Contains(s)) ||
+                (l.ContactName != null && l.ContactName.Contains(s)));
         }
 
         var total = await query.CountAsync();

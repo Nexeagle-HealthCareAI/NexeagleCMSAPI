@@ -168,6 +168,10 @@ builder.Services.AddSwaggerGen(c =>
 // =============================
 var corsOrigins = new List<string>
 {
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://localhost:3000",
+    "https://localhost:3001",
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",

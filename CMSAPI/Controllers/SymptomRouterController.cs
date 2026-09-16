@@ -39,7 +39,7 @@ public class SymptomRouterController : ControllerBase
         return Ok(result);
     }
 
-    [HasPermission("insights.view")]
+    [HasPermission("insights.manage")]
     [HttpPost("training-examples")]
     public async Task<IActionResult> AddTrainingExample([FromBody] UpsertTrainingExampleRequest request)
     {
@@ -49,7 +49,7 @@ public class SymptomRouterController : ControllerBase
         return Ok(result);
     }
 
-    [HasPermission("insights.view")]
+    [HasPermission("insights.manage")]
     [HttpPut("training-examples/{id:guid}")]
     public async Task<IActionResult> UpdateTrainingExample(Guid id, [FromBody] UpsertTrainingExampleRequest request)
     {
@@ -58,7 +58,7 @@ public class SymptomRouterController : ControllerBase
         return Ok(result);
     }
 
-    [HasPermission("insights.view")]
+    [HasPermission("insights.manage")]
     [HttpDelete("training-examples/{id:guid}")]
     public async Task<IActionResult> DeleteTrainingExample(Guid id)
     {
@@ -117,7 +117,7 @@ public class SymptomRouterController : ControllerBase
         return Ok(info);
     }
 
-    [HasPermission("insights.view")]
+    [HasPermission("insights.manage")]
     [HttpPost("retrain")]
     public async Task<IActionResult> TriggerRetrain()
     {

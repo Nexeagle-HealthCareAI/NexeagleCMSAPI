@@ -99,7 +99,7 @@ public class MarketingController : ControllerBase
         req.AiIntentScore = aiAnalysis.IntentScore;
         req.AiPersonaSummary = $"{aiAnalysis.BuyerPersona} | Hook: {aiAnalysis.RecommendedHook}";
         if (string.IsNullOrEmpty(req.LeadNumber)) 
-            req.LeadNumber = $"LEAD-{DateTime.UtcNow:MMdd}-{Random.Shared.Next(1000, 9999)}";
+            req.LeadNumber = $"LEAD-{DateTime.UtcNow:MMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpper()}";
 
         var lead = await _leads.CreateLeadAsync(req, userId, userName);
         return CreatedAtAction(nameof(GetLead), new { id = lead.LeadId }, lead);
@@ -139,6 +139,10 @@ public class MarketingController : ControllerBase
     [HttpPost("leads/{id:guid}/whatsapp-template")]
     public async Task<IActionResult> SendWhatsAppTemplate(Guid id, [FromBody] SendTemplateRequest req, CancellationToken ct)
     {
+        // Resolve the caller first — fail fast before any external I/O if the token has no valid user claim.
+        var (userId, userName) = GetCurrentUser();
+        if (userId == Guid.Empty) return Unauthorized();
+
         var lead = await _leads.GetLeadDetailAsync(id);
         if (lead == null) return NotFound("Lead not found");
 
@@ -180,7 +184,6 @@ public class MarketingController : ControllerBase
         
         if (success)
         {
-            var (userId, userName) = GetCurrentUser();
             var followUpReq = new AddFollowUpRequest
             {
                 ActivityType = "WhatsApp",
