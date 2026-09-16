@@ -25,13 +25,16 @@ public class CmsAdminSeeder
 
     public async Task SeedAsync()
     {
-        var email = _config["CmsSeed:AdminEmail"] ?? Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_EMAIL")?.Trim() ?? "info@nexeagle.com";
-        var password = _config["CmsSeed:AdminPassword"] ?? Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_PASSWORD") ?? "Admin@123";
-        var phone = _config["CmsSeed:AdminPhone"] ?? Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_PHONE")?.Trim() ?? "8074906808";
+        var email    = _config["CmsSeed:AdminEmail"]    ?? Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_EMAIL")?.Trim()  ?? "info@nexeagle.com";
+        var password = _config["CmsSeed:AdminPassword"] ?? Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_PASSWORD");
+        var phone    = _config["CmsSeed:AdminPhone"]    ?? Environment.GetEnvironmentVariable("CMS_SEED_ADMIN_PHONE")?.Trim()  ?? "8074906808";
 
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        // Reject the placeholder string that appsettings.json carries in source control.
+        // If we didn't check, a misconfigured deployment would create admin with the sentinel string.
+        if (string.IsNullOrWhiteSpace(password) || password.StartsWith("<set-via-env"))
         {
-            Console.WriteLine("[CmsAdminSeeder] Email or Password missing — skipping admin seed.");
+            Console.WriteLine("[CmsAdminSeeder] CmsSeed:AdminPassword is not configured (or still shows the placeholder). " +
+                              "Set CMS_SEED_ADMIN_PASSWORD via environment / Azure App Service config. Skipping admin seed.");
             return;
         }
 

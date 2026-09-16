@@ -274,7 +274,9 @@ public class AuthService : IAuthService
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static string GenerateOtpCode() =>
-        Random.Shared.Next(100_000, 1_000_000).ToString();
+        // RandomNumberGenerator is cryptographically secure (CSPRNG), unlike Random.Shared (PRNG).
+        // An attacker who observes multiple OTPs cannot predict future values from a CSPRNG.
+        System.Security.Cryptography.RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
 
     private async Task<LoginResponse> IssueTokensAsync(CmsUser user, string? ipAddress, CmsRefreshToken? rotatedFrom = null)
     {

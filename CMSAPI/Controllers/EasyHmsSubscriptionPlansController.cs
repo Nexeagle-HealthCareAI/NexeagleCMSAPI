@@ -106,9 +106,14 @@ namespace CMSAPI.Controllers
             var plan = await _db.EasyHmsSubscriptionPlans.FindAsync(id);
             if (plan == null) return NotFound("Plan not found.");
 
-            _db.EasyHmsSubscriptionPlans.Remove(plan);
+            // Soft-deactivate rather than hard-delete: HospitalSubscription rows in easyHMSDatabase
+            // reference this plan's PlanId. A hard-delete would make those rows resolve to "Unknown"
+            // in the UI (HospitalRepository falls back to that string for missing plan IDs).
+            // The /service endpoint already filters IsActive=true, so deactivated plans are hidden
+            // from the hospital-facing plan list immediately without breaking existing subscriptions.
+            plan.IsActive = false;
             await _db.SaveChangesAsync();
-            return Ok(new { message = "Plan deleted successfully." });
+            return Ok(new { message = "Plan deactivated successfully. Existing subscriptions are unaffected." });
         }
     }
 }

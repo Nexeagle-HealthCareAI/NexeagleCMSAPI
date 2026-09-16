@@ -23,6 +23,7 @@ public class CrmWebhookController : ControllerBase
     private readonly IHubContext<CrmHub> _hubContext;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CrmWebhookController> _logger;
+    private readonly IWebHostEnvironment _env;
 
     public CrmWebhookController(
         ISalesLeadService salesLeadService,
@@ -30,7 +31,8 @@ public class CrmWebhookController : ControllerBase
         IConfiguration config,
         IHubContext<CrmHub> hubContext,
         IHttpClientFactory httpClientFactory,
-        ILogger<CrmWebhookController> logger)
+        ILogger<CrmWebhookController> logger,
+        IWebHostEnvironment env)
     {
         _salesLeadService = salesLeadService;
         _aiService = aiService;
@@ -38,6 +40,7 @@ public class CrmWebhookController : ControllerBase
         _hubContext = hubContext;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _env = env;
     }
 
     // ── Meta Webhook ──────────────────────────────────────────────────────────
@@ -72,6 +75,13 @@ public class CrmWebhookController : ControllerBase
                 _logger.LogWarning("Meta webhook: invalid HMAC signature. Request rejected.");
                 return Unauthorized(new { error = "Invalid webhook signature." });
             }
+        }
+        else if (!_env.IsDevelopment())
+        {
+            // Fail closed in production: missing AppSecret means we cannot verify the sender.
+            // Accepting unsigned webhooks would allow anyone to inject arbitrary leads.
+            _logger.LogError("Meta:AppSecret is not configured in production — rejecting unsigned webhook to prevent lead injection.");
+            return StatusCode(503, new { error = "Webhook signature validation unavailable. Configure Meta:AppSecret." });
         }
         else
         {
@@ -184,7 +194,9 @@ public class CrmWebhookController : ControllerBase
             if (createdLead.AiIntentScore >= 80)
                 await _hubContext.Clients.All.SendAsync("crm-hot-lead-received", createdLead, cancellationToken: ct);
 
-            return Ok(new { success = true, leadId = createdLead.LeadId });
+            // Meta only checks HTTP 2xx — the body is logged in their developer dashboard,
+            // so don't expose internal IDs in it.
+            return Ok(new { success = true });
         }
         catch (Exception ex)
         {
@@ -225,6 +237,12 @@ public class CrmWebhookController : ControllerBase
                 _logger.LogWarning("WhatsApp webhook: invalid HMAC signature. Request rejected.");
                 return Unauthorized(new { error = "Invalid webhook signature." });
             }
+        }
+        else if (!_env.IsDevelopment())
+        {
+            // Same fail-closed rule as the Meta webhook above.
+            _logger.LogError("WhatsApp:AppSecret is not configured in production — rejecting unsigned webhook.");
+            return StatusCode(503, new { error = "Webhook signature validation unavailable. Configure WhatsApp:AppSecret." });
         }
         else
         {
