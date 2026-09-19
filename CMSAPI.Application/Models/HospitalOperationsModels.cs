@@ -15,11 +15,14 @@ public class HospitalOperationsSummaryItem
     public int AdmissionsCount { get; set; }
     public int PathologyOrdersCount { get; set; }
     public int PharmacyInvoiceCount { get; set; }
-    public decimal PharmacyRevenue { get; set; }
     // Total OPD appointments (any booking source -- walk-in AND online) for the date range,
     // by ApptDate. OnlineAppointmentsCount below is the NEXEAGLE_PUBLIC-only subset of this.
     public int OpdAppointmentsCount { get; set; }
     public int OnlineAppointmentsCount { get; set; }
+    // HospitalSubscriptions.Status ("Trial" or missing row = free tier, subject to the usage
+    // limit; anything else, e.g. "Active", is an unlimited paid plan) -- same fallback
+    // UsageLimitService.IsGatedAsync uses.
+    public string SubscriptionStatus { get; set; } = "Trial";
 }
 
 public class HospitalOperationsSummaryResponse
