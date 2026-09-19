@@ -16,6 +16,9 @@ public class HospitalOperationsSummaryItem
     public int PathologyOrdersCount { get; set; }
     public int PharmacyInvoiceCount { get; set; }
     public decimal PharmacyRevenue { get; set; }
+    // Total OPD appointments (any booking source -- walk-in AND online) for the date range,
+    // by ApptDate. OnlineAppointmentsCount below is the NEXEAGLE_PUBLIC-only subset of this.
+    public int OpdAppointmentsCount { get; set; }
     public int OnlineAppointmentsCount { get; set; }
 }
 
