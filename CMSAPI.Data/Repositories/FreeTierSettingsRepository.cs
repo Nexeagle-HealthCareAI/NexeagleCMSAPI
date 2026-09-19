@@ -63,6 +63,11 @@ public class FreeTierSettingsRepository : IFreeTierSettingsRepository
         var overrides = await _db.HospitalFreeTierLimits.AsNoTracking().ToListAsync();
         var overrideByHospitalId = overrides.ToDictionary(o => o.HospitalId, o => o.MonthlyLimit);
 
+        var subscriptions = await _db.HospitalSubscriptions.AsNoTracking().ToListAsync();
+        var statusByHospitalId = subscriptions
+            .GroupBy(s => s.HospitalId)
+            .ToDictionary(g => g.Key, g => g.First().Status);
+
         var hospitals = await _db.Hospitals
             .AsNoTracking()
             .Where(h => !h.IsArchived)
@@ -70,12 +75,20 @@ public class FreeTierSettingsRepository : IFreeTierSettingsRepository
             .OrderBy(h => h.Name)
             .ToListAsync();
 
-        return hospitals.Select(h => new HospitalFreeTierLimitItem
+        return hospitals.Select(h =>
         {
-            HospitalId = h.HospitalID,
-            HospitalName = h.Name,
-            MonthlyLimit = overrideByHospitalId.TryGetValue(h.HospitalID, out var ov) ? ov : null,
-            EffectiveLimit = overrideByHospitalId.TryGetValue(h.HospitalID, out var ov2) ? ov2 : globalLimit,
+            // Same fallback as UsageLimitService.IsGatedAsync: no row or a blank status means Trial.
+            var status = statusByHospitalId.TryGetValue(h.HospitalID, out var s) && !string.IsNullOrWhiteSpace(s) ? s : "Trial";
+            var isGated = string.Equals(status, "Trial", StringComparison.OrdinalIgnoreCase);
+            return new HospitalFreeTierLimitItem
+            {
+                HospitalId = h.HospitalID,
+                HospitalName = h.Name,
+                MonthlyLimit = overrideByHospitalId.TryGetValue(h.HospitalID, out var ov) ? ov : null,
+                EffectiveLimit = overrideByHospitalId.TryGetValue(h.HospitalID, out var ov2) ? ov2 : globalLimit,
+                SubscriptionStatus = status,
+                IsGated = isGated,
+            };
         }).ToList();
     }
 

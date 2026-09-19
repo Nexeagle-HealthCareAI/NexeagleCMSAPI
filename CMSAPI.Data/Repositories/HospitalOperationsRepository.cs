@@ -31,9 +31,9 @@ namespace CMSAPI.Data.Repositories
                     ISNULL(adm.Cnt, 0) AS AdmissionsCount,
                     ISNULL(path.Cnt, 0) AS PathologyOrdersCount,
                     ISNULL(pharm.InvoiceCount, 0) AS PharmacyInvoiceCount,
-                    ISNULL(pharm.Revenue, 0) AS PharmacyRevenue,
                     ISNULL(opd.Cnt, 0) AS OpdAppointmentsCount,
-                    ISNULL(appt.Cnt, 0) AS OnlineAppointmentsCount
+                    ISNULL(appt.Cnt, 0) AS OnlineAppointmentsCount,
+                    ISNULL(sub.Status, 'Trial') AS SubscriptionStatus
                 FROM dbo.Hospitals h
                 LEFT JOIN (
                     SELECT HospitalId, COUNT(*) AS Cnt
@@ -48,7 +48,7 @@ namespace CMSAPI.Data.Repositories
                     GROUP BY HospitalId
                 ) path ON path.HospitalId = h.HospitalID
                 LEFT JOIN (
-                    SELECT bce.HospitalId, COUNT(DISTINCT bice.InvoiceId) AS InvoiceCount, SUM(bce.NetAmount) AS Revenue
+                    SELECT bce.HospitalId, COUNT(DISTINCT bice.InvoiceId) AS InvoiceCount
                     FROM dbo.BillingChargeEvent bce
                     JOIN dbo.BillingInvoiceChargeEvent bice ON bice.ChargeEventId = bce.ChargeEventId
                     WHERE bce.SourceModule IN ('PHARMACY_COUNTER', 'PHARMACY_IPD')
@@ -72,6 +72,7 @@ namespace CMSAPI.Data.Repositories
                     WHERE BookingSource = 'NEXEAGLE_PUBLIC' AND CreatedAt >= @fromDate AND CreatedAt < @toDate
                     GROUP BY HospitalID
                 ) appt ON appt.HospitalID = h.HospitalID
+                LEFT JOIN dbo.HospitalSubscriptions sub ON sub.HospitalId = h.HospitalID
                 WHERE h.IsArchived = 0
                 ORDER BY h.Name";
 
