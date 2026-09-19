@@ -408,7 +408,7 @@ namespace CMSAPI.Data.Repositories
                     _               => query.OrderByDescending(h => h.CreatedAt)
                 };
 
-                var totalItems = await orderedQuery.CountAsync();
+                var totalItemsFast = await orderedQuery.CountAsync();
                 var pageHospitals = await orderedQuery
                     .Skip((page - 1) * limit)
                     .Take(limit)
@@ -450,7 +450,7 @@ namespace CMSAPI.Data.Repositories
                     .GroupBy(p => p.HospitalID)
                     .ToDictionary(g => g.Key, g => g.Select(p => p.UserID).ToHashSet());
 
-                var pageItems = pageHospitals.Select(h =>
+                var pageItemsFast = pageHospitals.Select(h =>
                 {
                     subsByPage.TryGetValue(h.HospitalID, out var sub);
                     string? subStatus = null; string? subPlanName = null; int? subDaysRemaining = null; var subIsEnterprise = false;
@@ -481,8 +481,8 @@ namespace CMSAPI.Data.Repositories
 
                 return new PagedResult<HospitalListItem>
                 {
-                    Data = pageItems,
-                    Pagination = new PaginationInfo { CurrentPage = page, TotalPages = (int)Math.Ceiling(totalItems / (double)limit), TotalItems = totalItems, ItemsPerPage = limit }
+                    Data = pageItemsFast,
+                    Pagination = new PaginationInfo { CurrentPage = page, TotalPages = (int)Math.Ceiling(totalItemsFast / (double)limit), TotalItems = totalItemsFast, ItemsPerPage = limit }
                 };
             }
 

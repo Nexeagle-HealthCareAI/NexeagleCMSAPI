@@ -5,6 +5,7 @@ using CMSAPI.Data;
 using Microsoft.EntityFrameworkCore;
 
 using CMSAPI.Application.Services;
+using CMSAPI.Application.Interfaces;
 
 namespace CMSAPI.Services;
 
