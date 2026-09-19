@@ -19,6 +19,8 @@ public class HospitalFreeTierLimitItem
     // null = no override -- this hospital uses the global default.
     public int? MonthlyLimit { get; set; }
     public int EffectiveLimit { get; set; }
+    // Current calendar month's usage count -- only meaningful when IsGated is true.
+    public int UsedCount { get; set; }
     // HospitalSubscriptions.Status ("Trial"/missing row, or any paid status e.g. "Active").
     public string SubscriptionStatus { get; set; } = "Trial";
     // Same rule as UsageLimitService.IsGatedAsync -- only a Trial (or subscription-less)

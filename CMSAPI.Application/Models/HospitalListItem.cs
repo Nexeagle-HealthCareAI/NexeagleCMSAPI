@@ -27,6 +27,13 @@ public class HospitalListItem
     // (shouldn't normally happen; every hospital gets a Trial row on registration).
     public string? SubscriptionPlanName { get; set; }
     public string? SubscriptionStatus { get; set; } // Trial, Active, Expired, Blocked, Rejected, Pending, PendingApproval
+    // Only meaningful for an Active (paid) plan's real billing-cycle end date -- Trial has no
+    // calendar expiry any more (see HospitalSubscription.GetEffectiveStatus), so this is null
+    // for Trial/Blocked/Rejected.
     public int? SubscriptionDaysRemaining { get; set; }
     public bool SubscriptionIsEnterprise { get; set; }
+    // Current-month free-tier usage -- only set when SubscriptionStatus == "Trial" (null for a
+    // paid plan, which has no cap at all).
+    public int? FreeTierUsedCount { get; set; }
+    public int? FreeTierLimit { get; set; }
 }

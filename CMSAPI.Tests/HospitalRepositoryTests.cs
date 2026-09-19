@@ -129,7 +129,7 @@ namespace CMSAPI.Tests
             
             await context.SaveChangesAsync();
 
-            var repository = new HospitalRepository(context, cmsContext);
+            var repository = new HospitalRepository(context, cmsContext, new FreeTierSettingsRepository(context));
 
             // Act
             var result = await repository.GetHospitalByIdAsync(hospitalId);
@@ -219,7 +219,7 @@ namespace CMSAPI.Tests
             
             await context.SaveChangesAsync();
 
-            var repository = new HospitalRepository(context, cmsContext);
+            var repository = new HospitalRepository(context, cmsContext, new FreeTierSettingsRepository(context));
 
             // Act
             var result = await repository.GetHospitalByIdAsync(hospitalId);

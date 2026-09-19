@@ -68,6 +68,12 @@ public class FreeTierSettingsRepository : IFreeTierSettingsRepository
             .GroupBy(s => s.HospitalId)
             .ToDictionary(g => g.Key, g => g.First().Status);
 
+        var currentYearMonth = DateTime.UtcNow.ToString("yyyy-MM");
+        var usedCountByHospitalId = await _db.HospitalMonthlyUsages
+            .AsNoTracking()
+            .Where(u => u.YearMonth == currentYearMonth)
+            .ToDictionaryAsync(u => u.HospitalId, u => u.UsedCount);
+
         var hospitals = await _db.Hospitals
             .AsNoTracking()
             .Where(h => !h.IsArchived)
@@ -86,6 +92,7 @@ public class FreeTierSettingsRepository : IFreeTierSettingsRepository
                 HospitalName = h.Name,
                 MonthlyLimit = overrideByHospitalId.TryGetValue(h.HospitalID, out var ov) ? ov : null,
                 EffectiveLimit = overrideByHospitalId.TryGetValue(h.HospitalID, out var ov2) ? ov2 : globalLimit,
+                UsedCount = usedCountByHospitalId.TryGetValue(h.HospitalID, out var used) ? used : 0,
                 SubscriptionStatus = status,
                 IsGated = isGated,
             };

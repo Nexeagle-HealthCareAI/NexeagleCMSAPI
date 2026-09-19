@@ -13,11 +13,40 @@ namespace CMSAPI.Data.Repositories
     {
         private readonly AppDbContext _db;
         private readonly CmsDbContext _cmsDb;
+        private readonly IFreeTierSettingsRepository _freeTierSettings;
 
-        public HospitalRepository(AppDbContext db, CmsDbContext cmsDb)
+        public HospitalRepository(AppDbContext db, CmsDbContext cmsDb, IFreeTierSettingsRepository freeTierSettings)
         {
             _db = db;
             _cmsDb = cmsDb;
+            _freeTierSettings = freeTierSettings;
+        }
+
+        // Batched free-tier usage lookup for a set of hospitals -- only meaningful for hospitals
+        // still on the Trial status (see UsageLimitService.IsGatedAsync); callers should ignore
+        // the result for anything else. Same override-then-global-default resolution as
+        // FreeTierSettingsRepository/UsageLimitService, kept in sync with both.
+        private async Task<Dictionary<Guid, (int UsedCount, int Limit)>> ResolveFreeTierUsageAsync(IEnumerable<Guid> hospitalIds)
+        {
+            var ids = hospitalIds.Distinct().ToList();
+            var yearMonth = DateTime.UtcNow.ToString("yyyy-MM");
+
+            var globalLimit = await _freeTierSettings.GetGlobalMonthlyLimitAsync();
+
+            var overrides = await _db.HospitalFreeTierLimits
+                .AsNoTracking()
+                .Where(o => ids.Contains(o.HospitalId))
+                .ToDictionaryAsync(o => o.HospitalId, o => o.MonthlyLimit);
+
+            var usedCounts = await _db.HospitalMonthlyUsages
+                .AsNoTracking()
+                .Where(u => ids.Contains(u.HospitalId) && u.YearMonth == yearMonth)
+                .ToDictionaryAsync(u => u.HospitalId, u => u.UsedCount);
+
+            return ids.ToDictionary(id => id, id => (
+                UsedCount: usedCounts.TryGetValue(id, out var used) ? used : 0,
+                Limit: overrides.TryGetValue(id, out var ov) ? ov : globalLimit
+            ));
         }
 
         // Resolves plan names for a batch of subscriptions in two queries total (not per-row),
@@ -252,6 +281,8 @@ namespace CMSAPI.Data.Repositories
             string? subStatus = null;
             int? subDaysRemaining = null;
             bool subIsEnterprise = false;
+            int? freeTierUsedCount = null;
+            int? freeTierLimit = null;
             if (sub != null)
             {
                 subStatus = sub.GetEffectiveStatus(DateTime.UtcNow);
@@ -261,11 +292,20 @@ namespace CMSAPI.Data.Repositories
                     subPlanName = names.TryGetValue(sub.PlanId.Value, out var n) ? n : null;
                     subIsEnterprise = await _cmsDb.EasyHmsSubscriptionPlans.AnyAsync(p => p.PlanId == sub.PlanId.Value && p.IsEnterprise);
                 }
-                var utcNow = DateTime.UtcNow;
-                if (subStatus == "Trial" && sub.TrialEndDate.HasValue)
-                    subDaysRemaining = Math.Max(0, (sub.TrialEndDate.Value - utcNow).Days);
-                else if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue)
-                    subDaysRemaining = Math.Max(0, (sub.SubscriptionEndDate.Value - utcNow).Days);
+                // Only a paid (Active) plan has a meaningful days-remaining -- a real billing cycle
+                // end date. Trial has no time limit any more (see HospitalSubscription.GetEffectiveStatus);
+                // its only cap is the free-tier monthly usage count below.
+                if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue)
+                    subDaysRemaining = Math.Max(0, (sub.SubscriptionEndDate.Value - DateTime.UtcNow).Days);
+                else if (subStatus == "Trial")
+                {
+                    var usage = await ResolveFreeTierUsageAsync(new[] { id });
+                    if (usage.TryGetValue(id, out var u))
+                    {
+                        freeTierUsedCount = u.UsedCount;
+                        freeTierLimit = u.Limit;
+                    }
+                }
             }
 
             var paymentRows = await _db.HospitalSubscriptionPayments
@@ -325,10 +365,10 @@ namespace CMSAPI.Data.Repositories
                 SubscriptionStatus = subStatus,
                 SubscriptionDaysRemaining = subDaysRemaining,
                 SubscriptionIsEnterprise = subIsEnterprise,
-                TrialStartDate = sub?.TrialStartDate,
-                TrialEndDate = sub?.TrialEndDate,
                 SubscriptionStartDate = sub?.SubscriptionStartDate,
                 SubscriptionEndDate = sub?.SubscriptionEndDate,
+                FreeTierUsedCount = freeTierUsedCount,
+                FreeTierLimit = freeTierLimit,
                 PaymentHistory = paymentHistory,
                 Users = users,
                 Doctors = doctorInfos,
@@ -450,16 +490,25 @@ namespace CMSAPI.Data.Repositories
                     .GroupBy(p => p.HospitalID)
                     .ToDictionary(g => g.Key, g => g.Select(p => p.UserID).ToHashSet());
 
+                var freeTierUsageFast = await ResolveFreeTierUsageAsync(pageIds);
+
                 var pageItemsFast = pageHospitals.Select(h =>
                 {
                     subsByPage.TryGetValue(h.HospitalID, out var sub);
                     string? subStatus = null; string? subPlanName = null; int? subDaysRemaining = null; var subIsEnterprise = false;
+                    int? freeTierUsedCountFast = null; int? freeTierLimitFast = null;
                     if (sub != null)
                     {
                         subStatus = sub.GetEffectiveStatus(utcNowFast);
                         if (sub.PlanId.HasValue) { pagePlanNames.TryGetValue(sub.PlanId.Value, out subPlanName); subIsEnterprise = enterprisePlanIdsFast.Contains(sub.PlanId.Value); }
-                        if (subStatus == "Trial" && sub.TrialEndDate.HasValue) subDaysRemaining = Math.Max(0, (sub.TrialEndDate.Value - utcNowFast).Days);
-                        else if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue) subDaysRemaining = Math.Max(0, (sub.SubscriptionEndDate.Value - utcNowFast).Days);
+                        // Only a paid (Active) plan has a meaningful days-remaining -- Trial has no
+                        // calendar expiry any more; its only cap is the free-tier usage count below.
+                        if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue) subDaysRemaining = Math.Max(0, (sub.SubscriptionEndDate.Value - utcNowFast).Days);
+                        else if (subStatus == "Trial" && freeTierUsageFast.TryGetValue(h.HospitalID, out var usageFast))
+                        {
+                            freeTierUsedCountFast = usageFast.UsedCount;
+                            freeTierLimitFast = usageFast.Limit;
+                        }
                     }
                     doctorIdsByHospitalFast.TryGetValue(h.HospitalID, out var doctorIdSet); doctorIdSet ??= new HashSet<Guid>();
                     var doctorUserIds = doctorIdSet.Select(did => doctorUserIdByDoctorIdFast.TryGetValue(did, out var uid) ? uid : Guid.Empty).ToHashSet();
@@ -475,7 +524,8 @@ namespace CMSAPI.Data.Repositories
                         RegisteredOn = h.CreatedAt, Status = h.IsActive ? "Active" : "Pending",
                         IsArchived = h.IsArchived, ArchivedAt = h.ArchivedAt,
                         SubscriptionPlanName = subPlanName, SubscriptionStatus = subStatus,
-                        SubscriptionDaysRemaining = subDaysRemaining, SubscriptionIsEnterprise = subIsEnterprise
+                        SubscriptionDaysRemaining = subDaysRemaining, SubscriptionIsEnterprise = subIsEnterprise,
+                        FreeTierUsedCount = freeTierUsedCountFast, FreeTierLimit = freeTierLimitFast
                     };
                 }).ToList();
 
@@ -532,6 +582,8 @@ namespace CMSAPI.Data.Repositories
                 .GroupBy(p => p.HospitalID)
                 .ToDictionary(g => g.Key, g => g.Select(p => p.UserID).ToHashSet());
 
+            var freeTierUsageSlow = await ResolveFreeTierUsageAsync(hospitalIds);
+
             var projected = matchingHospitals.Select(h =>
             {
                 subsByHospital.TryGetValue(h.HospitalID, out var sub);
@@ -539,6 +591,8 @@ namespace CMSAPI.Data.Repositories
                 string? subPlanName = null;
                 int? subDaysRemaining = null;
                 var subIsEnterprise = false;
+                int? freeTierUsedCountSlow = null;
+                int? freeTierLimitSlow = null;
                 if (sub != null)
                 {
                     subStatus = sub.GetEffectiveStatus(utcNow);
@@ -547,10 +601,15 @@ namespace CMSAPI.Data.Repositories
                         allPlanNames.TryGetValue(sub.PlanId.Value, out subPlanName);
                         subIsEnterprise = enterprisePlanIds.Contains(sub.PlanId.Value);
                     }
-                    if (subStatus == "Trial" && sub.TrialEndDate.HasValue)
-                        subDaysRemaining = Math.Max(0, (sub.TrialEndDate.Value - utcNow).Days);
-                    else if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue)
+                    // Only a paid (Active) plan has a meaningful days-remaining -- Trial has no
+                    // calendar expiry any more; its only cap is the free-tier usage count below.
+                    if (subStatus == "Active" && sub.SubscriptionEndDate.HasValue)
                         subDaysRemaining = Math.Max(0, (sub.SubscriptionEndDate.Value - utcNow).Days);
+                    else if (subStatus == "Trial" && freeTierUsageSlow.TryGetValue(h.HospitalID, out var usageSlow))
+                    {
+                        freeTierUsedCountSlow = usageSlow.UsedCount;
+                        freeTierLimitSlow = usageSlow.Limit;
+                    }
                 }
 
                 doctorIdsByHospital.TryGetValue(h.HospitalID, out var doctorIdSet);
@@ -585,7 +644,9 @@ namespace CMSAPI.Data.Repositories
                     SubscriptionPlanName = subPlanName,
                     SubscriptionStatus = subStatus,
                     SubscriptionDaysRemaining = subDaysRemaining,
-                    SubscriptionIsEnterprise = subIsEnterprise
+                    SubscriptionIsEnterprise = subIsEnterprise,
+                    FreeTierUsedCount = freeTierUsedCountSlow,
+                    FreeTierLimit = freeTierLimitSlow
                 };
             });
 

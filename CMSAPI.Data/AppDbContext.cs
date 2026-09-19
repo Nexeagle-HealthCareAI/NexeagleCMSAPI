@@ -41,6 +41,7 @@ public class AppDbContext : DbContext
     public DbSet<SymptomTrainingExample> SymptomTrainingExamples { get; set; } = null!;
     public DbSet<PlatformSetting> PlatformSettings { get; set; } = null!;
     public DbSet<HospitalFreeTierLimit> HospitalFreeTierLimits { get; set; } = null!;
+    public DbSet<HospitalMonthlyUsage> HospitalMonthlyUsages { get; set; } = null!;
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -510,6 +511,14 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.HospitalId);
             entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             entity.Property(e => e.UpdatedBy).HasMaxLength(200).IsRequired(false);
+        });
+
+        modelBuilder.Entity<HospitalMonthlyUsage>(entity =>
+        {
+            entity.ToTable("HospitalMonthlyUsage");
+            entity.HasKey(e => new { e.HospitalId, e.YearMonth });
+            entity.Property(e => e.YearMonth).HasColumnType("char(7)").IsRequired();
+            entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
         });
 
         base.OnModelCreating(modelBuilder);

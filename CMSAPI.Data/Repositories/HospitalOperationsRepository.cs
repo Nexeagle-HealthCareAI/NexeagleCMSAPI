@@ -16,14 +16,19 @@ namespace CMSAPI.Data.Repositories
     public class HospitalOperationsRepository : IHospitalOperationsRepository
     {
         private readonly AppDbContext _db;
+        private readonly IFreeTierSettingsRepository _freeTierSettings;
 
-        public HospitalOperationsRepository(AppDbContext db)
+        public HospitalOperationsRepository(AppDbContext db, IFreeTierSettingsRepository freeTierSettings)
         {
             _db = db;
+            _freeTierSettings = freeTierSettings;
         }
 
         public async Task<List<HospitalOperationsSummaryItem>> GetSummaryAsync(DateTime fromDate, DateTime toDateExclusive)
         {
+            var globalLimit = await _freeTierSettings.GetGlobalMonthlyLimitAsync();
+            var yearMonth = DateTime.UtcNow.ToString("yyyy-MM");
+
             const string sql = @"
                 SELECT
                     h.HospitalID AS HospitalId,
@@ -33,7 +38,9 @@ namespace CMSAPI.Data.Repositories
                     ISNULL(pharm.InvoiceCount, 0) AS PharmacyInvoiceCount,
                     ISNULL(opd.Cnt, 0) AS OpdAppointmentsCount,
                     ISNULL(appt.Cnt, 0) AS OnlineAppointmentsCount,
-                    ISNULL(sub.Status, 'Trial') AS SubscriptionStatus
+                    ISNULL(sub.Status, 'Trial') AS SubscriptionStatus,
+                    CASE WHEN ISNULL(sub.Status, 'Trial') = 'Trial' THEN ISNULL(usage.UsedCount, 0) ELSE NULL END AS FreeTierUsedCount,
+                    CASE WHEN ISNULL(sub.Status, 'Trial') = 'Trial' THEN ISNULL(ftl.MonthlyLimit, @globalLimit) ELSE NULL END AS FreeTierLimit
                 FROM dbo.Hospitals h
                 LEFT JOIN (
                     SELECT HospitalId, COUNT(*) AS Cnt
@@ -73,14 +80,18 @@ namespace CMSAPI.Data.Repositories
                     GROUP BY HospitalID
                 ) appt ON appt.HospitalID = h.HospitalID
                 LEFT JOIN dbo.HospitalSubscriptions sub ON sub.HospitalId = h.HospitalID
+                LEFT JOIN dbo.HospitalMonthlyUsage usage ON usage.HospitalId = h.HospitalID AND usage.YearMonth = @yearMonth
+                LEFT JOIN dbo.HospitalFreeTierLimit ftl ON ftl.HospitalId = h.HospitalID
                 WHERE h.IsArchived = 0
                 ORDER BY h.Name";
 
             var fromParam = new SqlParameter("@fromDate", fromDate);
             var toParam = new SqlParameter("@toDate", toDateExclusive);
+            var yearMonthParam = new SqlParameter("@yearMonth", yearMonth);
+            var globalLimitParam = new SqlParameter("@globalLimit", globalLimit);
 
             return await _db.Database
-                .SqlQueryRaw<HospitalOperationsSummaryItem>(sql, fromParam, toParam)
+                .SqlQueryRaw<HospitalOperationsSummaryItem>(sql, fromParam, toParam, yearMonthParam, globalLimitParam)
                 .ToListAsync();
         }
     }
