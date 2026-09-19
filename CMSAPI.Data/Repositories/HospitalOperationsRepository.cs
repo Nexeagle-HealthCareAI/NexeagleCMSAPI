@@ -32,6 +32,7 @@ namespace CMSAPI.Data.Repositories
                     ISNULL(path.Cnt, 0) AS PathologyOrdersCount,
                     ISNULL(pharm.InvoiceCount, 0) AS PharmacyInvoiceCount,
                     ISNULL(pharm.Revenue, 0) AS PharmacyRevenue,
+                    ISNULL(opd.Cnt, 0) AS OpdAppointmentsCount,
                     ISNULL(appt.Cnt, 0) AS OnlineAppointmentsCount
                 FROM dbo.Hospitals h
                 LEFT JOIN (
@@ -55,6 +56,16 @@ namespace CMSAPI.Data.Repositories
                         AND bce.ServiceDate >= @fromDate AND bce.ServiceDate < @toDate
                     GROUP BY bce.HospitalId
                 ) pharm ON pharm.HospitalId = h.HospitalID
+                LEFT JOIN (
+                    -- Total OPD activity for the day (any booking source: walk-in AND online),
+                    -- by the actual appointment date -- matches how Admissions/PathologyOrder
+                    -- below are counted by their own activity date, not when the record was
+                    -- created. dbo.Appointments is OPD-only; IPD lives in dbo.Admission above.
+                    SELECT HospitalId, COUNT(*) AS Cnt
+                    FROM dbo.Appointments
+                    WHERE ApptDate >= @fromDate AND ApptDate < @toDate AND CurrentStatusCode <> 'CANCELLED'
+                    GROUP BY HospitalId
+                ) opd ON opd.HospitalId = h.HospitalID
                 LEFT JOIN (
                     SELECT HospitalID, COUNT(*) AS Cnt
                     FROM dbo.Appointments
