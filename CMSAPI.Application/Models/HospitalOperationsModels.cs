@@ -23,6 +23,10 @@ public class HospitalOperationsSummaryItem
     // limit; anything else, e.g. "Active", is an unlimited paid plan) -- same fallback
     // UsageLimitService.IsGatedAsync uses.
     public string SubscriptionStatus { get; set; } = "Trial";
+    // Current-month free-tier usage -- only set when SubscriptionStatus == "Trial" (null for a
+    // paid plan, which has no cap at all).
+    public int? FreeTierUsedCount { get; set; }
+    public int? FreeTierLimit { get; set; }
 }
 
 public class HospitalOperationsSummaryResponse

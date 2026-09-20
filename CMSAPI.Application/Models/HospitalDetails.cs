@@ -31,12 +31,17 @@ public class HospitalDetails
     // this specific hospital.
     public string? SubscriptionPlanName { get; set; }
     public string? SubscriptionStatus { get; set; }
+    // Only meaningful for an Active (paid) plan's real billing-cycle end date -- Trial has no
+    // calendar expiry any more (see HospitalSubscription.GetEffectiveStatus), so this is null
+    // for Trial/Blocked/Rejected.
     public int? SubscriptionDaysRemaining { get; set; }
     public bool SubscriptionIsEnterprise { get; set; }
-    public DateTime? TrialStartDate { get; set; }
-    public DateTime? TrialEndDate { get; set; }
     public DateTime? SubscriptionStartDate { get; set; }
     public DateTime? SubscriptionEndDate { get; set; }
+    // Current-month free-tier usage -- only set when SubscriptionStatus == "Trial" (null for a
+    // paid plan, which has no cap at all).
+    public int? FreeTierUsedCount { get; set; }
+    public int? FreeTierLimit { get; set; }
     public List<HospitalPaymentHistoryItem> PaymentHistory { get; set; } = new();
 
     public List<HospitalUserInfo> Users { get; set; } = new();
