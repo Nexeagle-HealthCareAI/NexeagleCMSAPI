@@ -100,6 +100,7 @@ builder.Services.AddHttpClient<IDataMigrationService, DataMigrationService>(c =>
 });
 builder.Services.AddHttpClient<IGroqSalesAiService, GroqSalesAiService>();
 builder.Services.AddHttpClient<IWhatsAppService, WhatsAppService>();
+builder.Services.AddHttpClient<IRadHospitalsService, RadHospitalsService>();
 
 // Register Data Repositories
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
