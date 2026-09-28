@@ -42,6 +42,8 @@ public class AppDbContext : DbContext
     public DbSet<PlatformSetting> PlatformSettings { get; set; } = null!;
     public DbSet<HospitalFreeTierLimit> HospitalFreeTierLimits { get; set; } = null!;
     public DbSet<HospitalMonthlyUsage> HospitalMonthlyUsages { get; set; } = null!;
+    public DbSet<JobSetting> JobSettings { get; set; } = null!;
+    public DbSet<NightJobRun> NightJobRuns { get; set; } = null!;
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -511,6 +513,29 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.HospitalId);
             entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             entity.Property(e => e.UpdatedBy).HasMaxLength(200).IsRequired(false);
+        });
+
+        modelBuilder.Entity<JobSetting>(entity =>
+        {
+            entity.ToTable("JobSettings");
+            entity.HasKey(e => e.JobId);
+            entity.Property(e => e.JobName).HasMaxLength(200).IsRequired(false);
+            entity.Property(e => e.LastExecutionDateUTC).HasColumnType("datetime2(3)");
+            entity.Property(e => e.CreatedAtUtc).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            entity.Property(e => e.UpdatedAtUtc).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+        });
+
+        modelBuilder.Entity<NightJobRun>(entity =>
+        {
+            entity.ToTable("NightJobRuns");
+            entity.HasKey(e => e.RunId);
+            entity.Property(e => e.StartedAtUtc).HasColumnType("datetime2(3)");
+            entity.Property(e => e.CompletedAtUtc).HasColumnType("datetime2(3)");
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.MachineName).HasMaxLength(256).IsRequired(false);
+            entity.Property(e => e.Environment).HasMaxLength(100).IsRequired(false);
+            entity.Property(e => e.Summary).HasMaxLength(2000).IsRequired(false);
+            entity.Property(e => e.Error).HasMaxLength(4000).IsRequired(false);
         });
 
         modelBuilder.Entity<HospitalMonthlyUsage>(entity =>
