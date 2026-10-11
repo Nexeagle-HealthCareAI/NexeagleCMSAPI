@@ -101,6 +101,12 @@ builder.Services.AddHttpClient<IDataMigrationService, DataMigrationService>(c =>
 builder.Services.AddHttpClient<IGroqSalesAiService, GroqSalesAiService>();
 builder.Services.AddHttpClient<IWhatsAppService, WhatsAppService>();
 builder.Services.AddHttpClient<IRadHospitalsService, RadHospitalsService>();
+// The Health Wiki's data is in 1HMSAPI's database; this reaches it over HTTP with a shared key (see HealthWikiService). A longer timeout
+// than the default so an image upload through two servers is not cut off.
+builder.Services.AddHttpClient<IHealthWikiService, HealthWikiService>(c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(60);
+});
 
 // Register Data Repositories
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
