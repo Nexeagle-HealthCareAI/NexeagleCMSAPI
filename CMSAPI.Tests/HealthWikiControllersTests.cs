@@ -203,4 +203,18 @@ public class HealthWikiControllersTests
         Assert.Equal(201, result.StatusCode);
         Assert.Contains("https://x/a.png", JsonSerializer.Serialize(result.Value));
     }
+
+    [Fact]
+    public async Task Accept_PassesTheWriterChoiceOn_ToTheEasyHmsApi()
+    {
+        JsonElement? sent = null;
+        _service.Setup(s => s.SendAsync(It.IsAny<HttpMethod>(), It.IsAny<string>(), It.IsAny<JsonElement?>(), It.IsAny<string>(), It.IsAny<HealthWikiShape>()))
+            .Callback<HttpMethod, string, JsonElement?, string, HealthWikiShape>((_, _, b, _, _) => sent = b).ReturnsAsync(Ok);
+        var body = JsonDocument.Parse("{\"contentTeam\":true}").RootElement;
+
+        await Wiki().Accept(Guid.NewGuid(), body);
+
+        Assert.True(sent.HasValue);
+        Assert.True(sent.Value.GetProperty("contentTeam").GetBoolean());
+    }
 }

@@ -9,6 +9,7 @@ using CMSAPI.Application.Models;
 using CMSAPI.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace CMSAPI.Controllers;
 
@@ -75,10 +76,11 @@ public class HealthWikiController : HealthWikiControllerBase
     public async Task<IActionResult> TopicRequest(Guid id) =>
         Reply(await _service.GetAsync($"internal/health-wiki/topic-requests/{id}", null, Actor));
 
-    // Creates a draft for the contributor to write.
+    // Creates a draft for the contributor to write. For a doctor who asked for a writer, the optional body says who writes it:
+    // { writerContributorId } or { contentTeam: true }.
     [HttpPost("topic-requests/{id:guid}/accept")]
-    public async Task<IActionResult> Accept(Guid id) =>
-        Reply(await _service.SendAsync(HttpMethod.Post, $"internal/health-wiki/topic-requests/{id}/accept", null, Actor, HealthWikiShape.Whole));
+    public async Task<IActionResult> Accept(Guid id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JsonElement? body = null) =>
+        Reply(await _service.SendAsync(HttpMethod.Post, $"internal/health-wiki/topic-requests/{id}/accept", body, Actor, HealthWikiShape.Whole));
 
     // { reason } is required.
     [HttpPost("topic-requests/{id:guid}/decline")]
