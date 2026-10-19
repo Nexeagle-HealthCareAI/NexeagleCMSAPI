@@ -65,7 +65,8 @@ public class OnlineAppointmentItem
     public bool IsLoggedIn { get; set; }
     public string? BookedByMobileMasked { get; set; }
 
-    public string? IpAddress { get; set; }
+    // No IpAddress here on purpose: the CMS never displays it, and every GET is cached in the admin's
+    // browser, so returning a visitor's raw IP only spread it further.
     public string? ReferrerUrl { get; set; }
     public string? UtmCampaign { get; set; }
 }

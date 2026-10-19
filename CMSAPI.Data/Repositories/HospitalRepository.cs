@@ -388,10 +388,9 @@ namespace CMSAPI.Data.Repositories
             if (from.HasValue) query = query.Where(a => a.ApptDate >= from.Value);
             if (to.HasValue) query = query.Where(a => a.ApptDate <= to.Value);
 
-            var bookingSources = await query.Select(a => a.BookingSource).ToListAsync();
-
-            var online = bookingSources.Count(s => s == "NEXEAGLE_PUBLIC");
-            var total = bookingSources.Count;
+            // Two COUNTs in SQL instead of pulling every BookingSource string into memory.
+            var total = await query.CountAsync();
+            var online = await query.CountAsync(a => a.BookingSource == "NEXEAGLE_PUBLIC");
 
             return new HospitalAppointmentSourceStats
             {
@@ -541,7 +540,9 @@ namespace CMSAPI.Data.Repositories
             // computed values — not plain columns — so filtering/sorting by them can't happen
             // at the SQL level. Materialize every hospital matching the DB-level filters and
             // do computed filtering + sorting in memory.
-            var matchingHospitals = await query.ToListAsync();
+            // Read-only: no change tracking for what can be every hospital row. Fully moving this path
+            // into SQL needs subscription status as a database view (it is computed in C# today).
+            var matchingHospitals = await query.AsNoTracking().ToListAsync();
             var hospitalIds = matchingHospitals.Select(h => h.HospitalID).ToList();
 
             var subsByHospital = await _db.HospitalSubscriptions

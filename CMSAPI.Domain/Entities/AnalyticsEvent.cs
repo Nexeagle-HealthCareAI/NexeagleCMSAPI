@@ -11,7 +11,9 @@ public class AnalyticsEvent
     public DateTime OccurredAt { get; set; }
 
     public string? SessionId { get; set; }
+    // Masked copy (98XXXXXX10) since 2026-10; MobileHash = HMAC of the number (see TrackingPrivacy).
     public string? Mobile { get; set; }
+    public string? MobileHash { get; set; }
     public Guid? DoctorId { get; set; }
     public string? SpecialtyId { get; set; }
 

@@ -41,6 +41,9 @@ builder.Logging.AddDebug();
 // SERVICES
 // =============================
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache(); // DashboardRepository caches the landing-page stats
+// Same key as EasyHMS Tracking:MobileHashKey: lets Insights find a full mobile number by its hash.
+builder.Services.AddSingleton(new CMSAPI.Application.Models.TrackingHashSettings(builder.Configuration["Tracking:MobileHashKey"]));
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
 
@@ -62,13 +65,27 @@ builder.Services.AddSignalR(options =>
 // =============================
 builder.Services.AddRateLimiter(options =>
 {
-    // Login endpoint: max 10 attempts per IP per minute.
-    options.AddFixedWindowLimiter(policyName: "login", configureOptions: limiter =>
+    // AddFixedWindowLimiter(...) creates ONE shared bucket for every caller, so "10 per minute" was
+    // 10 per minute for everyone together - and /chathub used the same bucket, so a handful of
+    // website visitors opening chat could lock admins out of login (and the reverse). Both
+    // policies are now partitioned per client IP.
+    static string ClientKey(HttpContext ctx) => ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    // Login endpoints: max 10 attempts per IP per minute.
+    options.AddPolicy("login", ctx => RateLimitPartition.GetFixedWindowLimiter(ClientKey(ctx), _ => new FixedWindowRateLimiterOptions
     {
-        limiter.PermitLimit = 10;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueLimit = 0;
-    });
+        PermitLimit = 10,
+        Window = TimeSpan.FromMinutes(1),
+        QueueLimit = 0,
+    }));
+
+    // Live-chat hub: negotiate + connect requests (and long-polling, when WebSockets are blocked).
+    options.AddPolicy("chathub", ctx => RateLimitPartition.GetFixedWindowLimiter(ClientKey(ctx), _ => new FixedWindowRateLimiterOptions
+    {
+        PermitLimit = 60,
+        Window = TimeSpan.FromMinutes(1),
+        QueueLimit = 0,
+    }));
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
@@ -189,7 +206,10 @@ var corsOrigins = new List<string>
     // NexEagleWebsite's actual public domain (the LiveChat widget embedded on its
     // /business, /services, /products, /contact, /careers pages connects to this API's
     // /chathub from here) — was missing entirely, silently breaking live chat in prod.
-    "https://1hms.nexeagle.com"
+    "https://1hms.nexeagle.com",
+    // The dev website and the www host also embed the live-chat widget (it connects to /chathub).
+    "https://www.nexeagle.com",
+    "https://nexeagle-dev.nexeagle.com"
 };
 // Additional origins injected at deploy time (e.g. VM IPs for dev/prod)
 var extraOrigins = builder.Configuration["Cors:AllowedOrigins"];
@@ -203,7 +223,8 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(corsOrigins.ToArray())
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials(); // Required for SignalR
+              .AllowCredentials() // Required for SignalR
+              .WithExposedHeaders(CMSAPI.Services.RequestLoggingMiddleware.HeaderName); // lets the browser read it when reporting an error
     });
 });
 
@@ -241,14 +262,14 @@ builder.Services
         };
 
         // SignalR cannot set Authorization headers on the WebSocket handshake, so the
-        // client passes the JWT as an "access_token" query param. Pick it up for /chathub.
+        // client passes the JWT as an "access_token" query param. Pick it up for the hubs.
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chathub"))
+                if (!string.IsNullOrEmpty(accessToken) && (path.StartsWithSegments("/chathub") || path.StartsWithSegments("/hubs/crm")))
                 {
                     context.Token = accessToken;
                 }
@@ -302,7 +323,11 @@ builder.Services.AddDbContext<CmsDbContext>(options =>
 // HEALTH CHECKS
 // =============================
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<AppDbContext>();
+    .AddDbContextCheck<AppDbContext>("hms-database")
+    .AddDbContextCheck<CmsDbContext>("cms-database")
+    // Degraded, not Unhealthy: the CMS works without the router, so /health stays 200 and the
+    // container is not restarted; /api/v1/health (admins) still shows it.
+    .AddCheck<CMSAPI.Services.NlpRouterHealthCheck>("nlp-router", failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded);
 
 // =============================
 // AUTHORIZATION
@@ -332,12 +357,23 @@ try
     // =============================
     // CRITICAL FIX FOR AZURE
     // =============================
-    app.UseForwardedHeaders(new ForwardedHeadersOptions
+    // Trust X-Forwarded-For only from the reverse proxy on this host / Docker networks. Without this,
+    // only loopback was trusted, so behind Caddy + Docker every visitor showed up as the same bridge IP
+    // and the per-IP rate limits (login, chat) became one shared bucket again. Public callers hitting
+    // the API port directly are still not trusted, so they cannot fake their IP with the header.
+    var forwardedOptions = new ForwardedHeadersOptions
     {
-        ForwardedHeaders =
-            ForwardedHeaders.XForwardedFor |
-            ForwardedHeaders.XForwardedProto
-    });
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    };
+    forwardedOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(System.Net.IPAddress.Parse("10.0.0.0"), 8));
+    forwardedOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(System.Net.IPAddress.Parse("172.16.0.0"), 12));
+    forwardedOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(System.Net.IPAddress.Parse("192.168.0.0"), 16));
+    app.UseForwardedHeaders(forwardedOptions);
+
+    // =============================
+    // REQUEST LOGGING (outermost, so it sees the final status, including 500s from the handler below)
+    // =============================
+    app.UseMiddleware<CMSAPI.Services.RequestLoggingMiddleware>();
 
     // =============================
     // GLOBAL EXCEPTION HANDLER
@@ -417,8 +453,8 @@ try
     // ENDPOINTS
     // =============================
     app.MapControllers();
-    app.MapHub<CMSAPI.Hubs.ChatHub>("/chathub").RequireRateLimiting("login").AllowAnonymous();
-    app.MapHub<CMSAPI.Hubs.CrmHub>("/hubs/crm").AllowAnonymous();
+    app.MapHub<CMSAPI.Hubs.ChatHub>("/chathub").RequireRateLimiting("chathub").AllowAnonymous(); // guests are anonymous; agent methods check live-support.view
+    app.MapHub<CMSAPI.Hubs.CrmHub>("/hubs/crm"); // auth + marketing.view enforced by [HasPermission] on the hub
 
     app.MapHealthChecks("/health")
         .AllowAnonymous();

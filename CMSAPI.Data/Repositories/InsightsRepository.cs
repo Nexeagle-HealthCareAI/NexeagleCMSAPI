@@ -7,6 +7,7 @@ using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
 using CMSAPI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CMSAPI.Data.Repositories
 {
@@ -22,11 +23,29 @@ namespace CMSAPI.Data.Repositories
         private const string EventType_BookingStepReached = "booking_step_reached";
 
         private readonly AppDbContext _db;
+        private readonly ILogger<InsightsRepository> _logger;
 
-        public InsightsRepository(AppDbContext db)
+        private readonly TrackingHashSettings _hashSettings;
+
+        public InsightsRepository(AppDbContext db, ILogger<InsightsRepository> logger, TrackingHashSettings hashSettings)
         {
             _db = db;
+            _logger = logger;
+            _hashSettings = hashSettings;
         }
+
+        // Mobiles in AnalyticsEvents are stored masked + hashed. A full number typed into search is
+        // matched by its hash; anything shorter can only match the visible digits of the masked copy.
+        private string? SearchHash(string search) =>
+            TrackingPrivacy.NormalizeMobile(search) is { Length: 10 } normalized
+                ? TrackingPrivacy.HashMobile(normalized, _hashSettings.MobileHashKey)
+                : null;
+
+        // The paged reports below filter, sort and page in SQL. If EF Core ever fails to translate one
+        // of those queries (InvalidOperationException), the report falls back to the original
+        // in-memory path rather than failing the page, and logs it so the query can be fixed.
+        private void LogFallback(string report, Exception ex) =>
+            _logger.LogWarning(ex, "Insights {Report}: SQL paging could not be translated; used the in-memory fallback", report);
 
         private static IQueryable<AnalyticsEvent> ApplyDateRange(IQueryable<AnalyticsEvent> query, DateOnly? from, DateOnly? to)
         {
@@ -148,6 +167,108 @@ namespace CMSAPI.Data.Repositories
         {
             if (page < 1) page = 1;
             if (limit < 1) limit = 10;
+            try
+            {
+                return await GetOnlineAppointmentsSqlAsync(page, limit, from, to, search, sortBy, sortDir, source);
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogFallback("online-appointments", ex);
+                return await GetOnlineAppointmentsInMemoryAsync(page, limit, from, to, search, sortBy, sortDir, source);
+            }
+        }
+
+        private IQueryable<Appointment> OnlineAppointmentsQuery(DateOnly? from, DateOnly? to, string? source)
+        {
+            var query = _db.Appointments.AsNoTracking().Where(a => a.BookingSource == NexeaglePublicSource);
+            if (from.HasValue) query = query.Where(a => a.ApptDate >= from.Value);
+            if (to.HasValue) query = query.Where(a => a.ApptDate <= to.Value);
+            if (string.Equals(source, "Guest", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(a => a.BookedByMobile == null);
+            else if (string.Equals(source, "LoggedIn", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(a => a.BookedByMobile != null);
+            return query;
+        }
+
+        // One SQL query per page: names come from correlated subqueries, so search, sort, count and
+        // paging all run in the database and only `limit` rows come back.
+        private async Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsSqlAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source)
+        {
+            var rows = OnlineAppointmentsQuery(from, to, source).Select(a => new
+            {
+                a.ApptId,
+                a.CreatedAt,
+                a.ApptDate,
+                a.CurrentStatusCode,
+                a.BookedByMobile,
+                a.BookingReferrerUrl,
+                a.BookingUtmCampaign,
+                PatientName = _db.PatientRegistrations
+                    .Where(p => p.PatientID == a.PatientID && p.HospitalID == a.HospitalID)
+                    .Select(p => p.FullName).FirstOrDefault(),
+                PatientMobile = _db.PatientRegistrations
+                    .Where(p => p.PatientID == a.PatientID && p.HospitalID == a.HospitalID)
+                    .Select(p => p.Mobile).FirstOrDefault(),
+                DoctorName = (from d in _db.Doctors
+                              join u in _db.UserProfiles on d.UserID equals u.UserID
+                              where d.DoctorID == a.DoctorID
+                              select u.FullName).FirstOrDefault(),
+                HospitalName = _db.Hospitals
+                    .Where(h => h.HospitalID == a.HospitalID)
+                    .Select(h => h.Name).FirstOrDefault(),
+            });
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim();
+                rows = rows.Where(r =>
+                    (r.PatientName != null && r.PatientName.Contains(s))
+                    || (r.DoctorName != null && r.DoctorName.Contains(s))
+                    || (r.HospitalName != null && r.HospitalName.Contains(s)));
+            }
+
+            var isAsc = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
+            var ordered = sortBy?.ToLowerInvariant() switch
+            {
+                "apptdate" => isAsc ? rows.OrderBy(r => r.ApptDate) : rows.OrderByDescending(r => r.ApptDate),
+                "patientname" => isAsc ? rows.OrderBy(r => r.PatientName) : rows.OrderByDescending(r => r.PatientName),
+                "doctorname" => isAsc ? rows.OrderBy(r => r.DoctorName) : rows.OrderByDescending(r => r.DoctorName),
+                "hospitalname" => isAsc ? rows.OrderBy(r => r.HospitalName) : rows.OrderByDescending(r => r.HospitalName),
+                "status" => isAsc ? rows.OrderBy(r => r.CurrentStatusCode) : rows.OrderByDescending(r => r.CurrentStatusCode),
+                _ => rows.OrderByDescending(r => r.CreatedAt)
+            };
+
+            var totalItems = await rows.CountAsync();
+            var pageRows = await ordered.ThenBy(r => r.ApptId)
+                .Skip((page - 1) * limit).Take(limit)
+                .ToListAsync();
+
+            return new PagedResult<OnlineAppointmentItem>
+            {
+                Data = pageRows.Select(r => new OnlineAppointmentItem
+                {
+                    ApptId = r.ApptId,
+                    BookedAt = r.CreatedAt,
+                    ApptDate = r.ApptDate,
+                    Status = r.CurrentStatusCode,
+                    PatientName = r.PatientName,
+                    PatientMobileMasked = r.PatientMobile != null ? MaskMobile(r.PatientMobile) : null,
+                    DoctorName = r.DoctorName,
+                    HospitalName = r.HospitalName,
+                    IsLoggedIn = r.BookedByMobile != null,
+                    BookedByMobileMasked = r.BookedByMobile != null ? MaskMobile(r.BookedByMobile) : null,
+                    ReferrerUrl = r.BookingReferrerUrl,
+                    UtmCampaign = r.BookingUtmCampaign,
+                }).ToList(),
+                Pagination = new PaginationInfo { CurrentPage = page, TotalPages = (int)Math.Ceiling(totalItems / (double)limit), TotalItems = totalItems, ItemsPerPage = limit }
+            };
+        }
+
+        // Original implementation, kept only as the fallback described at the top of the class.
+        private async Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsInMemoryAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source)
+        {
+            if (page < 1) page = 1;
+            if (limit < 1) limit = 10;
 
             var query = _db.Appointments.AsNoTracking().Where(a => a.BookingSource == NexeaglePublicSource);
             if (from.HasValue) query = query.Where(a => a.ApptDate >= from.Value);
@@ -161,7 +282,7 @@ namespace CMSAPI.Data.Repositories
                 .Select(a => new
                 {
                     a.ApptId, a.CreatedAt, a.ApptDate, a.CurrentStatusCode, a.PatientID, a.DoctorID, a.HospitalID,
-                    a.BookedByMobile, a.BookingIpAddress, a.BookingReferrerUrl, a.BookingUtmCampaign
+                    a.BookedByMobile, a.BookingReferrerUrl, a.BookingUtmCampaign
                 })
                 .ToListAsync();
 
@@ -204,7 +325,6 @@ namespace CMSAPI.Data.Repositories
                     HospitalName = hospitalNameById.TryGetValue(a.HospitalID, out var hn) ? hn : null,
                     IsLoggedIn = a.BookedByMobile != null,
                     BookedByMobileMasked = a.BookedByMobile != null ? MaskMobile(a.BookedByMobile) : null,
-                    IpAddress = a.BookingIpAddress,
                     ReferrerUrl = a.BookingReferrerUrl,
                     UtmCampaign = a.BookingUtmCampaign,
                 };
@@ -301,7 +421,106 @@ namespace CMSAPI.Data.Repositories
         {
             if (page < 1) page = 1;
             if (limit < 1) limit = 10;
+            try
+            {
+                return await GetAuthFunnelAttemptsSqlAsync(page, limit, from, to, search);
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogFallback("auth-funnel-attempts", ex);
+                return await GetAuthFunnelAttemptsInMemoryAsync(page, limit, from, to, search);
+            }
+        }
 
+        // Sessions are grouped, counted, sorted and paged in SQL; only the events of the sessions on
+        // this page are loaded, then turned into rows by the same rules as before (BuildAttempt).
+        private async Task<PagedResult<AuthFunnelAttemptItem>> GetAuthFunnelAttemptsSqlAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search)
+        {
+            var eventsQuery = ApplyDateRange(
+                _db.AnalyticsEvents.AsNoTracking().Where(e =>
+                    (e.EventType == EventType_OtpSent || e.EventType == EventType_OtpVerified) && e.SessionId != null),
+                from, to);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim();
+                var hash = SearchHash(s);
+                var matchingSessions = hash != null
+                    ? eventsQuery.Where(e => e.MobileHash == hash).Select(e => e.SessionId)
+                    : eventsQuery.Where(e => e.Mobile != null && e.Mobile.Contains(s)).Select(e => e.SessionId);
+                eventsQuery = eventsQuery.Where(e => matchingSessions.Contains(e.SessionId));
+            }
+
+            var sessions = eventsQuery
+                .GroupBy(e => e.SessionId)
+                .Select(g => new
+                {
+                    SessionId = g.Key,
+                    AnyMobile = g.Max(e => e.Mobile),
+                    SentAt = g.Min(e => e.EventType == EventType_OtpSent ? (DateTime?)e.OccurredAt : null),
+                    VerifiedAt = g.Min(e => e.EventType == EventType_OtpVerified ? (DateTime?)e.OccurredAt : null),
+                })
+                .Where(x => x.AnyMobile != null && x.AnyMobile != "");
+
+            var totalItems = await sessions.CountAsync();
+            var pageSessionIds = await sessions
+                .OrderByDescending(x => x.VerifiedAt ?? x.SentAt)
+                .ThenBy(x => x.SessionId)
+                .Skip((page - 1) * limit).Take(limit)
+                .Select(x => x.SessionId)
+                .ToListAsync();
+
+            var pageEvents = await eventsQuery
+                .Where(e => pageSessionIds.Contains(e.SessionId))
+                .Select(e => new AuthEventRow(e.EventType, e.SessionId, e.Mobile, e.OccurredAt, e.Country, e.Region, e.City))
+                .ToListAsync();
+            var bySession = pageEvents.GroupBy(e => e.SessionId).ToDictionary(g => g.Key!, g => g.ToList());
+
+            var items = new List<AuthFunnelAttemptItem>();
+            foreach (var sessionId in pageSessionIds)
+            {
+                if (sessionId != null && bySession.TryGetValue(sessionId, out var evts) && BuildAttempt(evts) is { } attempt)
+                    items.Add(attempt.Item);
+            }
+
+            return new PagedResult<AuthFunnelAttemptItem>
+            {
+                Data = items,
+                Pagination = new PaginationInfo { CurrentPage = page, TotalPages = (int)Math.Ceiling(totalItems / (double)limit), TotalItems = totalItems, ItemsPerPage = limit }
+            };
+        }
+
+        private sealed record AuthEventRow(string EventType, string? SessionId, string? Mobile, DateTime OccurredAt, string? Country, string? Region, string? City);
+
+        // One login journey -> one row: first OTP sent, first OTP verified, the mobile and region.
+        private static (string Mobile, AuthFunnelAttemptItem Item)? BuildAttempt(IEnumerable<AuthEventRow> sessionEvents)
+        {
+            var sentEvt = sessionEvents.Where(e => e.EventType == EventType_OtpSent).OrderBy(e => e.OccurredAt).FirstOrDefault();
+            var verifiedEvt = sessionEvents.Where(e => e.EventType == EventType_OtpVerified).OrderBy(e => e.OccurredAt).FirstOrDefault();
+            var mobile = verifiedEvt?.Mobile ?? sentEvt?.Mobile;
+            if (string.IsNullOrWhiteSpace(mobile)) return null;
+
+            var regionSource = verifiedEvt ?? sentEvt!;
+            double? timeToAuth = null;
+            if (sentEvt != null && verifiedEvt != null && verifiedEvt.OccurredAt >= sentEvt.OccurredAt)
+                timeToAuth = Math.Round((verifiedEvt.OccurredAt - sentEvt.OccurredAt).TotalSeconds, 1);
+
+            return (mobile, new AuthFunnelAttemptItem
+            {
+                MobileMasked = MaskMobile(mobile),
+                OtpSentAt = sentEvt?.OccurredAt,
+                VerifiedAt = verifiedEvt?.OccurredAt,
+                Outcome = verifiedEvt != null ? "Verified" : "Bounced",
+                TimeToAuthenticateSeconds = timeToAuth,
+                Country = regionSource.Country,
+                Region = regionSource.Region,
+                City = regionSource.City,
+            });
+        }
+
+        // Original implementation, kept only as the fallback described at the top of the class.
+        private async Task<PagedResult<AuthFunnelAttemptItem>> GetAuthFunnelAttemptsInMemoryAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search)
+        {
             var eventsQuery = ApplyDateRange(
                 _db.AnalyticsEvents.AsNoTracking().Where(e =>
                     e.EventType == EventType_OtpSent || e.EventType == EventType_OtpVerified),
@@ -420,25 +639,50 @@ namespace CMSAPI.Data.Repositories
             var query = ApplyDateRange(
                 _db.AnalyticsEvents.AsNoTracking().Where(e => e.EventType == EventType_SearchPerformed),
                 from, to);
+
+            // The common case (no text filter, sort by time or specialty) pages in SQL. The query text and
+            // result count live inside MetadataJson, so a text search or a result-count sort still
+            // needs the JSON parsed in memory, but only over rows SQL has already narrowed down.
+            var sortKey = sortBy?.ToLowerInvariant();
+            var sqlSortable = sortKey is null or "" or "occurredat" or "specialtyid";
+            if (string.IsNullOrWhiteSpace(search) && sqlSortable)
+            {
+                try
+                {
+                    var isAscSql = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
+                    var ordered = sortKey == "specialtyid"
+                        ? (isAscSql ? query.OrderBy(e => e.SpecialtyId) : query.OrderByDescending(e => e.SpecialtyId))
+                        : (isAscSql ? query.OrderBy(e => e.OccurredAt) : query.OrderByDescending(e => e.OccurredAt));
+                    var total = await query.CountAsync();
+                    var pageRows = await ordered.ThenBy(e => e.EventId)
+                        .Skip((page - 1) * limit).Take(limit)
+                        .Select(e => new { e.OccurredAt, e.SpecialtyId, e.Country, e.Region, e.City, e.MetadataJson })
+                        .ToListAsync();
+                    return new PagedResult<SearchLogItem>
+                    {
+                        Data = pageRows.Select(e => ToSearchLogItem(e.OccurredAt, e.SpecialtyId, e.Country, e.Region, e.City, e.MetadataJson)).ToList(),
+                        Pagination = new PaginationInfo { CurrentPage = page, TotalPages = (int)Math.Ceiling(total / (double)limit), TotalItems = total, ItemsPerPage = limit }
+                    };
+                }
+                catch (InvalidOperationException ex)
+                {
+                    LogFallback("search-log", ex);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(search))
+            {
+                // Coarse SQL pre-filter (a JSON key name can also match); the exact check runs below.
+                var pre = search.Trim();
+                query = query.Where(e =>
+                    (e.MetadataJson != null && e.MetadataJson.Contains(pre))
+                    || (e.SpecialtyId != null && e.SpecialtyId.Contains(pre)));
+            }
+
             var events = await query
                 .Select(e => new { e.OccurredAt, e.SpecialtyId, e.Country, e.Region, e.City, e.MetadataJson })
                 .ToListAsync();
 
-            var items = events.Select(e =>
-            {
-                var meta = ParseJson<SearchMetadata>(e.MetadataJson);
-                return new SearchLogItem
-                {
-                    OccurredAt = e.OccurredAt,
-                    Query = meta?.Query,
-                    SpecialtyId = e.SpecialtyId,
-                    ResultsCount = meta?.ResultsCount,
-                    AiUsed = meta?.AiUsed ?? false,
-                    Country = e.Country,
-                    Region = e.Region,
-                    City = e.City,
-                };
-            });
+            var items = events.Select(e => ToSearchLogItem(e.OccurredAt, e.SpecialtyId, e.Country, e.Region, e.City, e.MetadataJson));
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -465,6 +709,22 @@ namespace CMSAPI.Data.Repositories
             {
                 Data = pageItems,
                 Pagination = new PaginationInfo { CurrentPage = page, TotalPages = totalPages, TotalItems = totalItems, ItemsPerPage = limit }
+            };
+        }
+
+        private static SearchLogItem ToSearchLogItem(DateTime occurredAt, string? specialtyId, string? country, string? region, string? city, string? metadataJson)
+        {
+            var meta = ParseJson<SearchMetadata>(metadataJson);
+            return new SearchLogItem
+            {
+                OccurredAt = occurredAt,
+                Query = meta?.Query,
+                SpecialtyId = specialtyId,
+                ResultsCount = meta?.ResultsCount,
+                AiUsed = meta?.AiUsed ?? false,
+                Country = country,
+                Region = region,
+                City = city,
             };
         }
 
