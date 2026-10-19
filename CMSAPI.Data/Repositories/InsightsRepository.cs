@@ -49,8 +49,9 @@ namespace CMSAPI.Data.Repositories
 
         private static IQueryable<AnalyticsEvent> ApplyDateRange(IQueryable<AnalyticsEvent> query, DateOnly? from, DateOnly? to)
         {
-            if (from.HasValue) query = query.Where(e => e.OccurredAt >= from.Value.ToDateTime(TimeOnly.MinValue));
-            if (to.HasValue) query = query.Where(e => e.OccurredAt < to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue));
+            // India-time days (TrackingTime); rows are stored in UTC.
+            if (from.HasValue) { var start = TrackingTime.StartUtc(from.Value); query = query.Where(e => e.OccurredAt >= start); }
+            if (to.HasValue) { var end = TrackingTime.EndUtcExclusive(to.Value); query = query.Where(e => e.OccurredAt < end); }
             return query;
         }
 
@@ -76,48 +77,200 @@ namespace CMSAPI.Data.Repositories
             return mobile[..2] + new string('X', mobile.Length - 4) + mobile[^2..];
         }
 
-        public async Task<SiteVisitStats> GetSiteVisitStatsAsync(DateOnly? from, DateOnly? to)
+        private const string LeadSource_DoctorDekho = "DoctorDekho";
+        private const string Country_India = "India";
+        private const int TopN = 15;
+
+        // People-only tracking rows (EasyHMS flags crawlers / data-centre traffic as IsAutomated).
+        private IQueryable<AnalyticsEvent> HumanEvents => _db.AnalyticsEvents.AsNoTracking().Where(e => !e.IsAutomated);
+
+        private static (DateOnly From, DateOnly To) ResolveRange(DateOnly? from, DateOnly? to)
         {
-            var query = _db.WebsiteVisits.AsNoTracking().AsQueryable();
-            if (from.HasValue) query = query.Where(v => v.VisitedAt >= from.Value.ToDateTime(TimeOnly.MinValue));
-            if (to.HasValue) query = query.Where(v => v.VisitedAt < to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue));
+            // No bounds = the tracking retention period (365 days), so "all time" stays bounded.
+            var end = to ?? TrackingTime.TodayIst();
+            var start = from ?? end.AddDays(-364);
+            return start <= end ? (start, end) : (end, start);
+        }
 
-            var totalVisits = await query.CountAsync();
-            var uniqueVisitors = await query
-                .Where(v => v.SessionId != null)
-                .Select(v => v.SessionId)
-                .Distinct()
-                .CountAsync();
+        private static string? NormalizeSite(string? site) =>
+            site?.Trim().ToLowerInvariant() switch { "doctordekho" => "doctordekho", "nexeagle" => "nexeagle", _ => null };
 
-            var topRegions = await query
-                .Where(v => v.Country != null || v.Region != null || v.City != null)
-                .GroupBy(v => new { v.Country, v.Region, v.City })
-                .Select(g => new RegionVisitCount { Country = g.Key.Country, Region = g.Key.Region, City = g.Key.City, Count = g.Count() })
-                .OrderByDescending(g => g.Count)
-                .Take(15)
-                .ToListAsync();
+        private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
-            var topPages = await query
+        private static List<LocationCount> Top<T>(IEnumerable<T> rows, Func<T, string?> name, Func<T, string?>? parent = null) =>
+            rows.Select(r => new { Name = Clean(name(r)), Parent = parent == null ? null : Clean(parent(r)) })
+                .Where(r => r.Name != null)
+                .GroupBy(r => new { r.Name, r.Parent })
+                .Select(g => new LocationCount { Name = g.Key.Name!, Parent = g.Key.Parent, Visits = g.Count() })
+                .OrderByDescending(x => x.Visits).ThenBy(x => x.Name)
+                .Take(TopN)
+                .ToList();
+
+        // One visit (browser session) of a person.
+        private sealed record VisitRow(int PageViews, DateTime StartedAt, string? Country, string? Region, string? City, string? Site);
+
+        private static async Task<(List<VisitRow>, List<PageVisitCount>, Dictionary<DateOnly, int>)> SiteVisitAggregatesSqlAsync(IQueryable<WebsiteVisit> human)
+        {
+            // Location/site per visit: a session stays on one network almost always, so MAX per column
+            // is a safe pick. Page views without a session id count as a visit each.
+            var visits = (await human
+                    .GroupBy(v => v.SessionId ?? v.VisitId.ToString())
+                    .Select(g => new
+                    {
+                        PageViews = g.Count(),
+                        StartedAt = g.Min(v => v.VisitedAt),
+                        Country = g.Max(v => v.Country),
+                        Region = g.Max(v => v.Region),
+                        City = g.Max(v => v.City),
+                        Site = g.Max(v => v.Site),
+                    })
+                    .ToListAsync())
+                .Select(x => new VisitRow(x.PageViews, x.StartedAt, x.Country, x.Region, x.City, x.Site))
+                .ToList();
+
+            var pages = await human
                 .Where(v => v.PagePath != null)
                 .GroupBy(v => v.PagePath)
-                .Select(g => new PageVisitCount { PagePath = g.Key, Count = g.Count() })
-                .OrderByDescending(g => g.Count)
-                .Take(15)
+                .Select(g => new PageVisitCount
+                {
+                    PagePath = g.Key,
+                    Count = g.Count(),
+                    Visits = g.Select(v => v.SessionId ?? v.VisitId.ToString()).Distinct().Count(),
+                })
+                .OrderByDescending(p => p.Visits).ThenByDescending(p => p.Count)
+                .Take(TopN)
                 .ToListAsync();
 
-            var dailyRaw = await query
-                .GroupBy(v => v.VisitedAt.Date)
-                .Select(g => new { Date = g.Key, Count = g.Count() })
-                .OrderBy(g => g.Date)
+            // India-time day = UTC + 5:30.
+            var istMinutes = (int)TrackingTime.IstOffset.TotalMinutes;
+            var pageViewsByDay = (await human
+                    .GroupBy(v => v.VisitedAt.AddMinutes(istMinutes).Date)
+                    .Select(g => new { Day = g.Key, Count = g.Count() })
+                    .ToListAsync())
+                .ToDictionary(x => DateOnly.FromDateTime(x.Day), x => x.Count);
+
+            return (visits, pages, pageViewsByDay);
+        }
+
+        private static async Task<(List<VisitRow>, List<PageVisitCount>, Dictionary<DateOnly, int>)> SiteVisitAggregatesInMemoryAsync(IQueryable<WebsiteVisit> human)
+        {
+            var rows = await human
+                .Select(v => new { v.SessionId, v.VisitId, v.VisitedAt, v.Country, v.Region, v.City, v.Site, v.PagePath })
                 .ToListAsync();
+            string Key(string? sessionId, Guid visitId) => sessionId ?? visitId.ToString();
+
+            var visits = rows
+                .GroupBy(v => Key(v.SessionId, v.VisitId))
+                .Select(g => new VisitRow(g.Count(), g.Min(v => v.VisitedAt), g.Max(v => v.Country), g.Max(v => v.Region), g.Max(v => v.City), g.Max(v => v.Site)))
+                .ToList();
+            var pages = rows
+                .Where(v => v.PagePath != null)
+                .GroupBy(v => v.PagePath)
+                .Select(g => new PageVisitCount { PagePath = g.Key, Count = g.Count(), Visits = g.Select(v => Key(v.SessionId, v.VisitId)).Distinct().Count() })
+                .OrderByDescending(p => p.Visits).ThenByDescending(p => p.Count)
+                .Take(TopN)
+                .ToList();
+            var pageViewsByDay = rows.GroupBy(v => TrackingTime.IstDate(v.VisitedAt)).ToDictionary(g => g.Key, g => g.Count());
+            return (visits, pages, pageViewsByDay);
+        }
+
+        public async Task<SiteVisitStats> GetSiteVisitStatsAsync(DateOnly? from, DateOnly? to, string? site)
+        {
+            var (fromDay, toDay) = ResolveRange(from, to);
+            var startUtc = TrackingTime.StartUtc(fromDay);
+            var endUtc = TrackingTime.EndUtcExclusive(toDay);
+            var siteKey = NormalizeSite(site);
+
+            var inRange = _db.WebsiteVisits.AsNoTracking().Where(v => v.VisitedAt >= startUtc && v.VisitedAt < endUtc);
+            if (siteKey != null) inRange = inRange.Where(v => v.Site == siteKey);
+
+            // Automated traffic: counted only to show how much was left out.
+            var automatedPageViews = await inRange.CountAsync(v => v.IsAutomated);
+            var automatedVisits = await inRange.Where(v => v.IsAutomated)
+                .Select(v => v.SessionId ?? v.VisitId.ToString()).Distinct().CountAsync();
+
+            var human = inRange.Where(v => !v.IsAutomated);
+
+            List<VisitRow> visits;
+            List<PageVisitCount> pages;
+            Dictionary<DateOnly, int> pageViewsByDay;
+            try
+            {
+                (visits, pages, pageViewsByDay) = await SiteVisitAggregatesSqlAsync(human);
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogFallback("site-visits", ex);
+                (visits, pages, pageViewsByDay) = await SiteVisitAggregatesInMemoryAsync(human);
+            }
+
+            var india = visits.Where(v => string.Equals(Clean(v.Country), Country_India, StringComparison.OrdinalIgnoreCase)).ToList();
+            var unknown = visits.Count(v => Clean(v.Country) == null);
+
+            var visitsByDay = visits.GroupBy(v => TrackingTime.IstDate(v.StartedAt)).ToDictionary(g => g.Key, g => g.Count());
+            var daily = visitsByDay.Keys.Union(pageViewsByDay.Keys).OrderBy(d => d)
+                .Select(d => new DailyVisitCount
+                {
+                    Date = d.ToString("yyyy-MM-dd"),
+                    Count = visitsByDay.GetValueOrDefault(d),
+                    PageViews = pageViewsByDay.GetValueOrDefault(d),
+                })
+                .ToList();
+
+            // Care demand by hospital location: exact (the hospital's own address), not IP-based.
+            var leadCities = siteKey == "nexeagle"
+                ? new List<LocationCount>()
+                : Top(
+                    (await (from l in _db.HospitalLeads.AsNoTracking()
+                            where l.Source == LeadSource_DoctorDekho && !l.IsAutomated
+                                  && l.OccurredAt >= startUtc && l.OccurredAt < endUtc
+                            join h in _db.Hospitals.AsNoTracking() on l.HospitalId equals h.HospitalID
+                            select new { Visit = l.SessionId ?? l.LeadId.ToString(), h.City, h.State })
+                        .Distinct()
+                        .ToListAsync()),
+                    r => r.City, r => r.State);
+
+            var bookingCities = siteKey == "nexeagle"
+                ? new List<LocationCount>()
+                : Top(
+                    await (from a in _db.Appointments.AsNoTracking()
+                           where a.BookingSource == NexeaglePublicSource && a.CreatedAt >= startUtc && a.CreatedAt < endUtc
+                           join h in _db.Hospitals.AsNoTracking() on a.HospitalID equals h.HospitalID
+                           select new { h.City, h.State })
+                        .ToListAsync(),
+                    r => r.City, r => r.State);
+
+            var pageViews = visits.Sum(v => v.PageViews);
+            var indiaCities = Top(india, v => v.City, v => v.Region);
 
             return new SiteVisitStats
             {
-                TotalVisits = totalVisits,
-                UniqueVisitors = uniqueVisitors,
-                TopRegions = topRegions,
-                TopPages = topPages,
-                DailyTrend = dailyRaw.Select(d => new DailyVisitCount { Date = d.Date.ToString("yyyy-MM-dd"), Count = d.Count }).ToList(),
+                Site = siteKey,
+                From = fromDay.ToString("yyyy-MM-dd"),
+                To = toDay.ToString("yyyy-MM-dd"),
+                Visits = visits.Count,
+                PageViews = pageViews,
+                AutomatedVisitsExcluded = automatedVisits,
+                AutomatedPageViewsExcluded = automatedPageViews,
+                VisitsInIndia = india.Count,
+                VisitsOutsideIndia = visits.Count - india.Count - unknown,
+                VisitsLocationUnknown = unknown,
+                IndiaStates = Top(india, v => v.Region),
+                IndiaCities = indiaCities,
+                Countries = Top(visits, v => v.Country),
+                CareInterestCities = leadCities,
+                BookingCities = bookingCities,
+                TopPages = pages,
+                DailyTrend = daily,
+                Sites = visits
+                    .GroupBy(v => Clean(v.Site) ?? "unknown")
+                    .Select(g => new LocationCount { Name = g.Key, Visits = g.Count() })
+                    .OrderByDescending(x => x.Visits)
+                    .ToList(),
+                // Older CMS Web builds
+                TotalVisits = pageViews,
+                UniqueVisitors = visits.Count,
+                TopRegions = indiaCities.Select(c => new RegionVisitCount { City = c.Name, Region = c.Parent, Country = Country_India, Count = c.Visits }).ToList(),
             };
         }
 
@@ -368,16 +521,18 @@ namespace CMSAPI.Data.Repositories
         public async Task<AuthFunnelStats> GetAuthFunnelStatsAsync(DateOnly? from, DateOnly? to)
         {
             var eventsQuery = ApplyDateRange(
-                _db.AnalyticsEvents.AsNoTracking().Where(e =>
+                HumanEvents.Where(e =>
                     e.EventType == EventType_LoginInitiated || e.EventType == EventType_OtpSent || e.EventType == EventType_OtpVerified),
                 from, to);
             var events = await eventsQuery
                 .Select(e => new { e.EventType, e.SessionId, e.Mobile, e.OccurredAt })
                 .ToListAsync();
 
-            var visitQuery = _db.WebsiteVisits.AsNoTracking().AsQueryable();
-            if (from.HasValue) visitQuery = visitQuery.Where(v => v.VisitedAt >= from.Value.ToDateTime(TimeOnly.MinValue));
-            if (to.HasValue) visitQuery = visitQuery.Where(v => v.VisitedAt < to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue));
+            // Denominator: people's visits to Doctor Dekho (the only site with a login), India-time days.
+            var visitQuery = _db.WebsiteVisits.AsNoTracking()
+                .Where(v => !v.IsAutomated && (v.Site == null || v.Site == "doctordekho"));
+            if (from.HasValue) { var start = TrackingTime.StartUtc(from.Value); visitQuery = visitQuery.Where(v => v.VisitedAt >= start); }
+            if (to.HasValue) { var end = TrackingTime.EndUtcExclusive(to.Value); visitQuery = visitQuery.Where(v => v.VisitedAt < end); }
             var totalVisitorSessions = await visitQuery.Where(v => v.SessionId != null).Select(v => v.SessionId).Distinct().CountAsync();
 
             int loginInitiated = 0, otpSent = 0, otpVerified = 0;
@@ -437,7 +592,7 @@ namespace CMSAPI.Data.Repositories
         private async Task<PagedResult<AuthFunnelAttemptItem>> GetAuthFunnelAttemptsSqlAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search)
         {
             var eventsQuery = ApplyDateRange(
-                _db.AnalyticsEvents.AsNoTracking().Where(e =>
+                HumanEvents.Where(e =>
                     (e.EventType == EventType_OtpSent || e.EventType == EventType_OtpVerified) && e.SessionId != null),
                 from, to);
 
@@ -522,7 +677,7 @@ namespace CMSAPI.Data.Repositories
         private async Task<PagedResult<AuthFunnelAttemptItem>> GetAuthFunnelAttemptsInMemoryAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search)
         {
             var eventsQuery = ApplyDateRange(
-                _db.AnalyticsEvents.AsNoTracking().Where(e =>
+                HumanEvents.Where(e =>
                     e.EventType == EventType_OtpSent || e.EventType == EventType_OtpVerified),
                 from, to);
             var events = await eventsQuery
@@ -580,7 +735,7 @@ namespace CMSAPI.Data.Repositories
         public async Task<BookingFunnelStats> GetBookingFunnelStatsAsync(DateOnly? from, DateOnly? to)
         {
             var query = ApplyDateRange(
-                _db.AnalyticsEvents.AsNoTracking().Where(e =>
+                HumanEvents.Where(e =>
                     e.EventType == EventType_SearchPerformed || e.EventType == EventType_DoctorProfileViewed || e.EventType == EventType_BookingStepReached),
                 from, to);
             var events = await query
@@ -637,7 +792,7 @@ namespace CMSAPI.Data.Repositories
             if (limit < 1) limit = 10;
 
             var query = ApplyDateRange(
-                _db.AnalyticsEvents.AsNoTracking().Where(e => e.EventType == EventType_SearchPerformed),
+                HumanEvents.Where(e => e.EventType == EventType_SearchPerformed),
                 from, to);
 
             // The common case (no text filter, sort by time or specialty) pages in SQL. The query text and

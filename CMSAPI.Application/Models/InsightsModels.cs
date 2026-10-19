@@ -4,16 +4,52 @@ using System.Collections.Generic;
 namespace CMSAPI.Application.Models;
 
 // ── Site Visits ─────────────────────────────────────────────────────────────
-// Aggregate-only (no raw-row pagination) — a page-view table can grow into the millions, and
-// nothing in the CMS report needs individual rows, just counts sliced by region/page/day for a
-// chosen date range (defaults to all-time when both bounds are omitted).
+// People only: page views flagged IsAutomated (crawlers, link-preview renderers, data-centre IPs)
+// are left out and reported separately. A "visit" is one browser session: page views from the same
+// browser with no gap of 30 minutes or more (DoctorDekhoWeb src/lib/analytics.ts). Every count below
+// is in visits unless the name says page views. Days are India Standard Time days.
 public class SiteVisitStats
 {
+    /// <summary>"doctordekho" | "nexeagle" | null (both sites).</summary>
+    public string? Site { get; set; }
+    public string From { get; set; } = string.Empty;   // IST dates actually applied, yyyy-MM-dd
+    public string To { get; set; } = string.Empty;
+
+    public int Visits { get; set; }
+    public int PageViews { get; set; }
+    public int AutomatedVisitsExcluded { get; set; }
+    public int AutomatedPageViewsExcluded { get; set; }
+
+    // Visitor location (from the IP address; country and state are reliable, city is approximate
+    // because Indian mobile networks route through a few large hubs).
+    public int VisitsInIndia { get; set; }
+    public int VisitsOutsideIndia { get; set; }
+    public int VisitsLocationUnknown { get; set; }
+    public List<LocationCount> IndiaStates { get; set; } = new();
+    public List<LocationCount> IndiaCities { get; set; } = new();
+    public List<LocationCount> Countries { get; set; } = new();
+
+    // Where people look for and book care: the city of the hospital whose doctor or page they opened
+    // (HospitalLeads) and of the hospital they booked with (online appointments). Exact, not IP-based.
+    public List<LocationCount> CareInterestCities { get; set; } = new();
+    public List<LocationCount> BookingCities { get; set; } = new();
+
+    public List<PageVisitCount> TopPages { get; set; } = new();
+    public List<DailyVisitCount> DailyTrend { get; set; } = new();
+    public List<LocationCount> Sites { get; set; } = new();
+
+    // Pre-2026-10 shape, kept so an older CMS Web build keeps rendering until it is redeployed.
     public int TotalVisits { get; set; }
     public int UniqueVisitors { get; set; }
     public List<RegionVisitCount> TopRegions { get; set; } = new();
-    public List<PageVisitCount> TopPages { get; set; } = new();
-    public List<DailyVisitCount> DailyTrend { get; set; } = new();
+}
+
+public class LocationCount
+{
+    public string Name { get; set; } = string.Empty;
+    /// <summary>State for a city row; null otherwise.</summary>
+    public string? Parent { get; set; }
+    public int Visits { get; set; }
 }
 
 public class RegionVisitCount
@@ -27,13 +63,17 @@ public class RegionVisitCount
 public class PageVisitCount
 {
     public string? PagePath { get; set; }
+    /// <summary>Page views (kept as Count for older clients).</summary>
     public int Count { get; set; }
+    public int Visits { get; set; }
 }
 
 public class DailyVisitCount
 {
-    public string Date { get; set; } = string.Empty;
+    public string Date { get; set; } = string.Empty;   // IST day
+    /// <summary>Visits that started that day.</summary>
     public int Count { get; set; }
+    public int PageViews { get; set; }
 }
 
 // ── Patient Logins ──────────────────────────────────────────────────────────

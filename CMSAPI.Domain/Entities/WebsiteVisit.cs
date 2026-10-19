@@ -22,4 +22,9 @@ public class WebsiteVisit
 
     public string? UserAgent { get; set; }
     public string? SessionId { get; set; }
+
+    // Bot / crawler / data-centre page view, flagged by EasyHMS at write time; excluded from reports.
+    public bool IsAutomated { get; set; }
+    // Which website sent it: "doctordekho" | "nexeagle" (null = before 2026-10 and not inferable).
+    public string? Site { get; set; }
 }

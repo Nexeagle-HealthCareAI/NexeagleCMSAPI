@@ -22,4 +22,7 @@ public class AnalyticsEvent
     public string? City { get; set; }
 
     public string? MetadataJson { get; set; }
+
+    // Bot / data-centre traffic, flagged by EasyHMS; excluded from reports.
+    public bool IsAutomated { get; set; }
 }

@@ -22,13 +22,14 @@ public class InsightsController : ControllerBase
         _service = service;
     }
 
-    // from/to are inclusive "yyyy-MM-dd" dates; omit both for all-time, or pass the same date for
-    // both for "today".
+    // from/to are inclusive "yyyy-MM-dd" India-time dates (omit both for the last 365 days, the
+    // tracking retention period); site = doctordekho | nexeagle, omitted for both websites.
     [HasPermission("insights.view")]
     [HttpGet("site-visits")]
-    public async Task<IActionResult> GetSiteVisitStats([FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null)
+    public async Task<IActionResult> GetSiteVisitStats(
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] string? site = null)
     {
-        var result = await _service.GetSiteVisitStatsAsync(from, to);
+        var result = await _service.GetSiteVisitStatsAsync(from, to, site);
         return Ok(result);
     }
 

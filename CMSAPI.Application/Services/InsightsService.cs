@@ -14,8 +14,8 @@ public class InsightsService : IInsightsService
         _repo = repo;
     }
 
-    public Task<SiteVisitStats> GetSiteVisitStatsAsync(DateOnly? from, DateOnly? to)
-        => _repo.GetSiteVisitStatsAsync(from, to);
+    public Task<SiteVisitStats> GetSiteVisitStatsAsync(DateOnly? from, DateOnly? to, string? site)
+        => _repo.GetSiteVisitStatsAsync(from, to, site);
 
     public Task<PagedResult<PatientLoginItem>> GetPatientLoginsAsync(int page, int limit, string? search, string? sortBy, string? sortDir)
         => _repo.GetPatientLoginsAsync(page, limit, search, sortBy, sortDir);

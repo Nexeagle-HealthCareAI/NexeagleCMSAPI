@@ -149,10 +149,10 @@ namespace CMSAPI.Data.Repositories
             if (page < 1) page = 1;
             if (limit < 1) limit = 10;
 
-            var query = _db.AnalyticsEvents.AsNoTracking().Where(e =>
-                e.EventType == EventType_SearchPerformed || e.EventType == EventType_BookingStepReached);
-            if (from.HasValue) query = query.Where(e => e.OccurredAt >= from.Value.ToDateTime(TimeOnly.MinValue));
-            if (to.HasValue) query = query.Where(e => e.OccurredAt < to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue));
+            var query = _db.AnalyticsEvents.AsNoTracking().Where(e => !e.IsAutomated &&
+                (e.EventType == EventType_SearchPerformed || e.EventType == EventType_BookingStepReached));
+            if (from.HasValue) { var start = TrackingTime.StartUtc(from.Value); query = query.Where(e => e.OccurredAt >= start); }
+            if (to.HasValue) { var end = TrackingTime.EndUtcExclusive(to.Value); query = query.Where(e => e.OccurredAt < end); }
 
             var events = await query
                 .Where(e => e.SessionId != null)

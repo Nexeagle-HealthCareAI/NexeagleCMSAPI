@@ -26,4 +26,7 @@ public class HospitalLead
     public string? City { get; set; }
 
     public DateTime OccurredAt { get; set; }
+
+    // Bot / data-centre traffic, flagged by EasyHMS; excluded from reports.
+    public bool IsAutomated { get; set; }
 }
