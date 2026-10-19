@@ -61,7 +61,12 @@ namespace CMSAPI.Application.Services
 
             try
             {
-                var response = await _httpClient.GetFromJsonAsync<ModelInfoDto>($"{baseUrl}/model-info");
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl.TrimEnd('/')}/model-info");
+                var apiKey = _configuration["NlpRouter:ApiKey"];
+                if (!string.IsNullOrWhiteSpace(apiKey) && !apiKey.StartsWith("<")) request.Headers.Add("X-Api-Key", apiKey);
+                using var httpResponse = await _httpClient.SendAsync(request);
+                httpResponse.EnsureSuccessStatusCode();
+                var response = await httpResponse.Content.ReadFromJsonAsync<ModelInfoDto>();
                 if (response != null)
                 {
                     // hms_router field names -> the ones the CMS panel shows.

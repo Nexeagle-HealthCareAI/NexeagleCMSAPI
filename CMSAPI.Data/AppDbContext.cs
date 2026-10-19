@@ -39,6 +39,9 @@ public class AppDbContext : DbContext
     public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; } = null!;
     public DbSet<HospitalLead> HospitalLeads { get; set; } = null!;
     public DbSet<SymptomTrainingExample> SymptomTrainingExamples { get; set; } = null!;
+    public DbSet<AgentDecision> AgentDecisions { get; set; } = null!;
+    public DbSet<AgentLearningItem> AgentLearningItems { get; set; } = null!;
+    public DbSet<AgentModelVersion> AgentModelVersions { get; set; } = null!;
     public DbSet<PlatformSetting> PlatformSettings { get; set; } = null!;
     public DbSet<HospitalFreeTierLimit> HospitalFreeTierLimits { get; set; } = null!;
     public DbSet<HospitalMonthlyUsage> HospitalMonthlyUsages { get; set; } = null!;
@@ -78,6 +81,26 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("HospitalLeads");
             entity.HasKey(e => e.LeadId);
+        });
+
+        modelBuilder.Entity<AgentDecision>(entity =>
+        {
+            entity.ToTable("AgentDecisions");
+            entity.HasKey(e => e.DecisionId);
+            entity.Property(e => e.DecisionId).ValueGeneratedNever();
+            entity.Property(e => e.ReceivedAt).HasDefaultValueSql("sysutcdatetime()");
+        });
+
+        modelBuilder.Entity<AgentLearningItem>(entity =>
+        {
+            entity.ToTable("AgentLearningItems");
+            entity.HasKey(e => e.ItemId);
+        });
+
+        modelBuilder.Entity<AgentModelVersion>(entity =>
+        {
+            entity.ToTable("AgentModelVersions");
+            entity.HasKey(e => e.Id);
         });
 
         modelBuilder.Entity<SymptomTrainingExample>(entity =>
