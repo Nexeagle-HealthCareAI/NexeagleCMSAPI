@@ -92,7 +92,9 @@ public class OnlineAppointmentItem
     public Guid ApptId { get; set; }
     public DateTime BookedAt { get; set; }
     public DateOnly ApptDate { get; set; }
+    /// <summary>Display name from StatusMaster (falls back to the code).</summary>
     public string Status { get; set; } = string.Empty;
+    public string StatusCode { get; set; } = string.Empty;
 
     public string? PatientName { get; set; }
     public string? PatientMobileMasked { get; set; }

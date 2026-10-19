@@ -62,6 +62,13 @@ namespace CMSAPI.Application.Services
             try
             {
                 var response = await _httpClient.GetFromJsonAsync<ModelInfoDto>($"{baseUrl}/model-info");
+                if (response != null)
+                {
+                    // hms_router field names -> the ones the CMS panel shows.
+                    if (response.LastRetrainedAt == null && response.TrainedAt is > 0)
+                        response.LastRetrainedAt = DateTimeOffset.FromUnixTimeMilliseconds((long)(response.TrainedAt.Value * 1000)).UtcDateTime;
+                    response.TrainingRowCount ??= response.TrainingRows;
+                }
                 return response;
             }
             catch (Exception ex)

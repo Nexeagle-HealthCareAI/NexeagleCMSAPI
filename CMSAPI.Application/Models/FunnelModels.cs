@@ -34,18 +34,29 @@ public class AuthFunnelAttemptItem
 }
 
 // ── Booking & Search Funnel ─────────────────────────────────────────────────
+// People only (bot traffic excluded) and de-duplicated: a search is one distinct query per visit, a
+// profile view is one doctor per visit, and a booking step is one doctor per visit, however many
+// times the page re-rendered or the visitor went back and forth. Days are India time.
 public class BookingFunnelStats
 {
+    /// <summary>Distinct searches (visit + query + specialty).</summary>
     public int SearchCount { get; set; }
+    /// <summary>Visits that searched at least once.</summary>
+    public int SearchSessionCount { get; set; }
+    /// <summary>Distinct doctor profiles opened (visit + doctor).</summary>
     public int ProfileViewCount { get; set; }
-    // Search-to-View Rate = ProfileViewCount / SearchCount * 100
+    /// <summary>% of searching visits that went on to open a doctor profile.</summary>
     public double SearchToViewRatePct { get; set; }
 
-    // Booking funnel step counts — "visit" (date/time), "details" (Confirm Details), "done"
-    // (Success). No separate payment step exists in this product (pay-at-hospital-counter).
+    // Booking widget steps, per visit + doctor. "visit" = the booking form was shown (it is on every
+    // profile page), "details" = date and time chosen, moved on to patient details, "done" = booked.
     public int VisitStepCount { get; set; }
     public int DetailsStepCount { get; set; }
     public int DoneStepCount { get; set; }
+
+    /// <summary>Doctor Dekho appointments actually saved in the database for the same days (ground truth;
+    /// DoneStepCount can be lower when ad blockers stop the tracking call).</summary>
+    public int BookingsRecorded { get; set; }
 
     public List<SpecialtyDemandItem> SpecialtyDemand { get; set; } = new();
 }
@@ -53,8 +64,11 @@ public class BookingFunnelStats
 public class SpecialtyDemandItem
 {
     public string SpecialtyId { get; set; } = string.Empty;
+    /// <summary>Visits that searched this specialty.</summary>
     public int SearchCount { get; set; }
+    /// <summary>Distinct profiles of this specialty opened (visit + doctor).</summary>
     public int ProfileViewCount { get; set; }
+    /// <summary>Bookings completed in the booking widget for this specialty.</summary>
     public int CompletedBookingCount { get; set; }
 }
 

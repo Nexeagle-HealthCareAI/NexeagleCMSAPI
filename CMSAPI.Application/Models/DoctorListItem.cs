@@ -26,6 +26,12 @@ public class DoctorListItem
     public DateTime? DiscountEndAt { get; set; }
     // From UserAuth.LastLoginTime (UTC) — null if the doctor has never logged in.
     public DateTime? LastLoginTime { get; set; }
+
+    // Whether the doctor actually appears on Doctor Dekho right now, by the same rules as
+    // EasyHMS GetPublicDoctorsHandler: listed, not delisted by an admin, account not revoked, and
+    // affiliated with at least one active, non-archived hospital. NotLiveReason says why not.
+    public bool IsLiveOnDoctorDekho { get; set; }
+    public string? NotLiveReason { get; set; }
 }
 
 // Full-replace write model — whatever this says is exactly what gets set (including explicit

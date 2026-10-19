@@ -29,6 +29,17 @@ namespace CMSAPI.Data.Repositories
             return string.IsNullOrWhiteSpace(joined) ? null : joined;
         }
 
+        private const int UserStatus_Revoked = 3;   // EasyHMS UserStatusEnum.Revoked
+
+        // Mirrors EasyHMS GetPublicDoctorsHandler's eligibility rules; null = live on Doctor Dekho.
+        private static string? NotLiveReason(bool listed, bool delisted, int? userStatusId, bool hasHospital, bool hasLiveHospital) =>
+            delisted ? "Delisted by an admin"
+            : !listed ? "Not listed"
+            : userStatusId == UserStatus_Revoked ? "Doctor's account is revoked"
+            : !hasHospital ? "Not linked to any hospital department"
+            : !hasLiveHospital ? "Hospital is inactive or archived"
+            : null;
+
         public async Task<PagedResult<DoctorListItem>> GetDoctorsAsync(int page, int limit, string? search, string? sortBy, string? sortDir)
         {
             if (page < 1) page = 1;
@@ -62,6 +73,7 @@ namespace CMSAPI.Data.Repositories
                 .Select(d => new
                 {
                     d.DoctorID, d.UserID, d.PrimaryDepartmentID,
+                    UserStatusId = _db.Users.Where(u => u.UserID == d.UserID).Select(u => (int?)u.UserStatusId).FirstOrDefault(),
                     d.IsPubliclyListed, d.IsFeatured, d.IsDelistedByAdmin,
                     d.IsRegistrationVerified, d.RegistrationVerifiedAt,
                     d.DiscountPercent, d.DiscountStartAt, d.DiscountEndAt
@@ -98,13 +110,27 @@ namespace CMSAPI.Data.Repositories
                 .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode })
                 .ToDictionaryAsync(h => h.HospitalID);
 
+            // Doctors with at least one active, non-archived hospital (public directory rule).
+            var doctorsWithLiveHospital = (await (from dd in _db.DoctorDepartments
+                                                  where doctorIds.Contains(dd.DoctorID)
+                                                  join h in _db.Hospitals on dd.HospitalID equals h.HospitalID
+                                                  where h.IsActive && !h.IsArchived
+                                                  select dd.DoctorID)
+                                                 .Distinct()
+                                                 .ToListAsync())
+                .ToHashSet();
+
             var userIds = items.Select(d => d.UserID).Distinct().ToList();
             var nameByUser = await _db.UserProfiles
                 .Where(up => userIds.Contains(up.UserID))
                 .ToDictionaryAsync(up => up.UserID, up => up.FullName);
-            var lastLoginByUser = await _db.UserAuths
+            // Several UserAuth rows per user would make ToDictionary throw and fail the whole page.
+            var lastLoginByUser = (await _db.UserAuths
                 .Where(ua => userIds.Contains(ua.UserID))
-                .ToDictionaryAsync(ua => ua.UserID, ua => ua.LastLoginTime);
+                .Select(ua => new { ua.UserID, ua.LastLoginTime })
+                .ToListAsync())
+                .GroupBy(ua => ua.UserID)
+                .ToDictionary(g => g.Key, g => g.Max(ua => ua.LastLoginTime));
 
             var deptIds = items.Where(d => d.PrimaryDepartmentID.HasValue).Select(d => d.PrimaryDepartmentID!.Value).Distinct().ToList();
             var deptNameById = await _db.Departments
@@ -116,12 +142,15 @@ namespace CMSAPI.Data.Repositories
                          && doctorIds.Contains(f.DoctorId) && hospitalIdsUsed.Contains(f.HospitalId))
                 .Select(f => new { f.DoctorId, f.HospitalId, f.Amount })
                 .ToListAsync())
-                .ToDictionary(f => (f.DoctorId, f.HospitalId), f => f.Amount);
+                .GroupBy(f => (f.DoctorId, f.HospitalId))
+                .ToDictionary(g => g.Key, g => g.First().Amount);
 
             var projected = items.Select(d =>
             {
                 var hasHospital = doctorHospital.TryGetValue(d.DoctorID, out var hospitalId);
                 var hospital = hasHospital && hospitalById.TryGetValue(hospitalId, out var h) ? h : null;
+                var notLive = NotLiveReason(d.IsPubliclyListed, d.IsDelistedByAdmin, d.UserStatusId,
+                    hasHospital, doctorsWithLiveHospital.Contains(d.DoctorID));
                 return new DoctorListItem
                 {
                     DoctorId = d.DoctorID,
@@ -140,6 +169,8 @@ namespace CMSAPI.Data.Repositories
                     DiscountStartAt = d.DiscountStartAt,
                     DiscountEndAt = d.DiscountEndAt,
                     LastLoginTime = lastLoginByUser.TryGetValue(d.UserID, out var lastLogin) ? lastLogin : null,
+                    NotLiveReason = notLive,
+                    IsLiveOnDoctorDekho = notLive == null,
                 };
             }).ToList();
 

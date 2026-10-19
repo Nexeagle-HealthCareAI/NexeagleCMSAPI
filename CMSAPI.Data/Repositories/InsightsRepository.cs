@@ -316,26 +316,43 @@ namespace CMSAPI.Data.Repositories
             };
         }
 
-        public async Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source)
+        public async Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source, string? dateBy)
         {
             if (page < 1) page = 1;
             if (limit < 1) limit = 10;
             try
             {
-                return await GetOnlineAppointmentsSqlAsync(page, limit, from, to, search, sortBy, sortDir, source);
+                return await GetOnlineAppointmentsSqlAsync(page, limit, from, to, search, sortBy, sortDir, source, dateBy);
             }
             catch (InvalidOperationException ex)
             {
                 LogFallback("online-appointments", ex);
-                return await GetOnlineAppointmentsInMemoryAsync(page, limit, from, to, search, sortBy, sortDir, source);
+                return await GetOnlineAppointmentsInMemoryAsync(page, limit, from, to, search, sortBy, sortDir, source, dateBy);
             }
         }
 
-        private IQueryable<Appointment> OnlineAppointmentsQuery(DateOnly? from, DateOnly? to, string? source)
+        // StatusMaster code -> display name.
+        private async Task<Dictionary<string, string>> StatusNamesAsync() =>
+            (await _db.StatusMaster.AsNoTracking().Select(x => new { x.StatusCode, x.StatusName }).ToListAsync())
+                .Where(x => !string.IsNullOrWhiteSpace(x.StatusName))
+                .GroupBy(x => x.StatusCode, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().StatusName!, StringComparer.OrdinalIgnoreCase);
+
+        // dateBy = appointment: from/to filter the appointment date. Otherwise (default) they filter the
+        // day the booking was made, in India time, so "Today" means "booked today".
+        private IQueryable<Appointment> OnlineAppointmentsQuery(DateOnly? from, DateOnly? to, string? source, string? dateBy)
         {
             var query = _db.Appointments.AsNoTracking().Where(a => a.BookingSource == NexeaglePublicSource);
-            if (from.HasValue) query = query.Where(a => a.ApptDate >= from.Value);
-            if (to.HasValue) query = query.Where(a => a.ApptDate <= to.Value);
+            if (string.Equals(dateBy, "appointment", StringComparison.OrdinalIgnoreCase))
+            {
+                if (from.HasValue) query = query.Where(a => a.ApptDate >= from.Value);
+                if (to.HasValue) query = query.Where(a => a.ApptDate <= to.Value);
+            }
+            else
+            {
+                if (from.HasValue) { var start = TrackingTime.StartUtc(from.Value); query = query.Where(a => a.CreatedAt >= start); }
+                if (to.HasValue) { var end = TrackingTime.EndUtcExclusive(to.Value); query = query.Where(a => a.CreatedAt < end); }
+            }
             if (string.Equals(source, "Guest", StringComparison.OrdinalIgnoreCase))
                 query = query.Where(a => a.BookedByMobile == null);
             else if (string.Equals(source, "LoggedIn", StringComparison.OrdinalIgnoreCase))
@@ -345,9 +362,9 @@ namespace CMSAPI.Data.Repositories
 
         // One SQL query per page: names come from correlated subqueries, so search, sort, count and
         // paging all run in the database and only `limit` rows come back.
-        private async Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsSqlAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source)
+        private async Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsSqlAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source, string? dateBy)
         {
-            var rows = OnlineAppointmentsQuery(from, to, source).Select(a => new
+            var rows = OnlineAppointmentsQuery(from, to, source, dateBy).Select(a => new
             {
                 a.ApptId,
                 a.CreatedAt,
@@ -388,6 +405,7 @@ namespace CMSAPI.Data.Repositories
                 "doctorname" => isAsc ? rows.OrderBy(r => r.DoctorName) : rows.OrderByDescending(r => r.DoctorName),
                 "hospitalname" => isAsc ? rows.OrderBy(r => r.HospitalName) : rows.OrderByDescending(r => r.HospitalName),
                 "status" => isAsc ? rows.OrderBy(r => r.CurrentStatusCode) : rows.OrderByDescending(r => r.CurrentStatusCode),
+                "bookedat" when isAsc => rows.OrderBy(r => r.CreatedAt),
                 _ => rows.OrderByDescending(r => r.CreatedAt)
             };
 
@@ -396,6 +414,7 @@ namespace CMSAPI.Data.Repositories
                 .Skip((page - 1) * limit).Take(limit)
                 .ToListAsync();
 
+            var statusNames = await StatusNamesAsync();
             return new PagedResult<OnlineAppointmentItem>
             {
                 Data = pageRows.Select(r => new OnlineAppointmentItem
@@ -403,7 +422,8 @@ namespace CMSAPI.Data.Repositories
                     ApptId = r.ApptId,
                     BookedAt = r.CreatedAt,
                     ApptDate = r.ApptDate,
-                    Status = r.CurrentStatusCode,
+                    Status = statusNames.TryGetValue(r.CurrentStatusCode, out var sn) ? sn : r.CurrentStatusCode,
+                    StatusCode = r.CurrentStatusCode,
                     PatientName = r.PatientName,
                     PatientMobileMasked = r.PatientMobile != null ? MaskMobile(r.PatientMobile) : null,
                     DoctorName = r.DoctorName,
@@ -418,18 +438,12 @@ namespace CMSAPI.Data.Repositories
         }
 
         // Original implementation, kept only as the fallback described at the top of the class.
-        private async Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsInMemoryAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source)
+        private async Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsInMemoryAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source, string? dateBy)
         {
             if (page < 1) page = 1;
             if (limit < 1) limit = 10;
 
-            var query = _db.Appointments.AsNoTracking().Where(a => a.BookingSource == NexeaglePublicSource);
-            if (from.HasValue) query = query.Where(a => a.ApptDate >= from.Value);
-            if (to.HasValue) query = query.Where(a => a.ApptDate <= to.Value);
-            if (string.Equals(source, "Guest", StringComparison.OrdinalIgnoreCase))
-                query = query.Where(a => a.BookedByMobile == null);
-            else if (string.Equals(source, "LoggedIn", StringComparison.OrdinalIgnoreCase))
-                query = query.Where(a => a.BookedByMobile != null);
+            var query = OnlineAppointmentsQuery(from, to, source, dateBy);
 
             var matching = await query
                 .Select(a => new
@@ -463,6 +477,7 @@ namespace CMSAPI.Data.Repositories
                 .Where(h => hospitalIds.Contains(h.HospitalID))
                 .ToDictionaryAsync(h => h.HospitalID, h => h.Name);
 
+            var statusNames = await StatusNamesAsync();
             IEnumerable<OnlineAppointmentItem> projected = matching.Select(a =>
             {
                 patientsById.TryGetValue(a.PatientID, out var patient);
@@ -471,7 +486,8 @@ namespace CMSAPI.Data.Repositories
                     ApptId = a.ApptId,
                     BookedAt = a.CreatedAt,
                     ApptDate = a.ApptDate,
-                    Status = a.CurrentStatusCode,
+                    Status = statusNames.TryGetValue(a.CurrentStatusCode, out var sn) ? sn : a.CurrentStatusCode,
+                    StatusCode = a.CurrentStatusCode,
                     PatientName = patient?.FullName,
                     PatientMobileMasked = patient?.Mobile != null ? MaskMobile(patient.Mobile) : null,
                     DoctorName = doctorNameById.TryGetValue(a.DoctorID, out var dn) ? dn : null,
@@ -500,6 +516,7 @@ namespace CMSAPI.Data.Repositories
                 "doctorname" => isAsc ? projected.OrderBy(p => p.DoctorName) : projected.OrderByDescending(p => p.DoctorName),
                 "hospitalname" => isAsc ? projected.OrderBy(p => p.HospitalName) : projected.OrderByDescending(p => p.HospitalName),
                 "status" => isAsc ? projected.OrderBy(p => p.Status) : projected.OrderByDescending(p => p.Status),
+                "bookedat" when isAsc => projected.OrderBy(p => p.BookedAt),
                 _ => projected.OrderByDescending(p => p.BookedAt)
             };
 
@@ -738,50 +755,74 @@ namespace CMSAPI.Data.Repositories
                 HumanEvents.Where(e =>
                     e.EventType == EventType_SearchPerformed || e.EventType == EventType_DoctorProfileViewed || e.EventType == EventType_BookingStepReached),
                 from, to);
-            var events = await query
-                .Select(e => new { e.EventType, e.SpecialtyId, e.MetadataJson })
-                .ToListAsync();
+            var events = (await query
+                    .Select(e => new { e.EventId, e.EventType, e.SessionId, e.DoctorId, e.SpecialtyId, e.OccurredAt, e.MetadataJson })
+                    .ToListAsync())
+                .Select(e => new
+                {
+                    e.EventType,
+                    Visit = e.SessionId ?? e.EventId.ToString(),   // no session id: the event is its own visit
+                    e.DoctorId,
+                    SpecialtyId = string.IsNullOrWhiteSpace(e.SpecialtyId) ? null : e.SpecialtyId.Trim().ToLowerInvariant(),
+                    e.OccurredAt,
+                    e.MetadataJson,
+                })
+                .ToList();
 
-            var searches = events.Where(e => e.EventType == EventType_SearchPerformed).ToList();
-            var profileViews = events.Where(e => e.EventType == EventType_DoctorProfileViewed).ToList();
-            var bookingSteps = events.Where(e => e.EventType == EventType_BookingStepReached).ToList();
+            // Searches: one per visit + query text + specialty (the site used to log the same search again
+            // when more results loaded or the symptom router answered).
+            var searches = events.Where(e => e.EventType == EventType_SearchPerformed)
+                .Select(e => new { e.Visit, e.SpecialtyId, e.OccurredAt, Query = (ParseJson<SearchMetadata>(e.MetadataJson)?.Query ?? "").Trim().ToLowerInvariant() })
+                .ToList();
+            var distinctSearches = searches.Select(e => (e.Visit, e.Query, e.SpecialtyId)).Distinct().Count();
+            var firstSearchAt = searches.GroupBy(e => e.Visit).ToDictionary(g => g.Key, g => g.Min(e => e.OccurredAt));
 
-            var stepCounts = bookingSteps
-                .Select(e => ParseJson<BookingStepMetadata>(e.MetadataJson)?.Step)
-                .Where(step => !string.IsNullOrWhiteSpace(step))
-                .GroupBy(step => step)
-                .ToDictionary(g => g.Key!, g => g.Count());
+            var views = events.Where(e => e.EventType == EventType_DoctorProfileViewed).ToList();
+            var viewPairs = views.Select(e => (e.Visit, e.DoctorId)).Distinct().ToList();
+            var lastViewAt = views.GroupBy(e => e.Visit).ToDictionary(g => g.Key, g => g.Max(e => e.OccurredAt));
+            var searchedThenViewed = firstSearchAt.Count(kv => lastViewAt.TryGetValue(kv.Key, out var viewedAt) && viewedAt >= kv.Value);
 
-            var doneEvents = bookingSteps.Where(e =>
-                string.Equals(ParseJson<BookingStepMetadata>(e.MetadataJson)?.Step, "done", StringComparison.OrdinalIgnoreCase)).ToList();
+            var steps = events.Where(e => e.EventType == EventType_BookingStepReached)
+                .Select(e => new { e.Visit, e.DoctorId, e.SpecialtyId, Step = ParseJson<BookingStepMetadata>(e.MetadataJson)?.Step?.Trim().ToLowerInvariant() })
+                .Where(e => e.Step != null)
+                .ToList();
+            int StepPairs(string step) => steps.Where(e => e.Step == step).Select(e => (e.Visit, e.DoctorId)).Distinct().Count();
+            var donePairs = steps.Where(e => e.Step == "done").Select(e => (e.Visit, e.DoctorId, e.SpecialtyId)).Distinct().ToList();
 
-            var specialtyIds = new HashSet<string>(
-                searches.Select(e => e.SpecialtyId)
-                    .Concat(profileViews.Select(e => e.SpecialtyId))
-                    .Concat(doneEvents.Select(e => e.SpecialtyId))
-                    .Where(s => !string.IsNullOrWhiteSpace(s))!);
+            var bookings = _db.Appointments.AsNoTracking().Where(a => a.BookingSource == NexeaglePublicSource);
+            if (from.HasValue) { var start = TrackingTime.StartUtc(from.Value); bookings = bookings.Where(a => a.CreatedAt >= start); }
+            if (to.HasValue) { var end = TrackingTime.EndUtcExclusive(to.Value); bookings = bookings.Where(a => a.CreatedAt < end); }
+            var bookingsRecorded = await bookings.CountAsync();
+
+            var specialtyIds = searches.Select(e => e.SpecialtyId)
+                .Concat(views.Select(e => e.SpecialtyId))
+                .Concat(donePairs.Select(e => e.SpecialtyId))
+                .Where(sid => sid != null)
+                .Select(sid => sid!)
+                .Distinct()
+                .ToList();
 
             var specialtyDemand = specialtyIds.Select(sid => new SpecialtyDemandItem
             {
                 SpecialtyId = sid,
-                SearchCount = searches.Count(e => e.SpecialtyId == sid),
-                ProfileViewCount = profileViews.Count(e => e.SpecialtyId == sid),
-                CompletedBookingCount = doneEvents.Count(e => e.SpecialtyId == sid),
+                SearchCount = searches.Where(e => e.SpecialtyId == sid).Select(e => e.Visit).Distinct().Count(),
+                ProfileViewCount = views.Where(e => e.SpecialtyId == sid).Select(e => (e.Visit, e.DoctorId)).Distinct().Count(),
+                CompletedBookingCount = donePairs.Count(e => e.SpecialtyId == sid),
             })
-            .OrderByDescending(s => s.ProfileViewCount)
+            .OrderByDescending(x => x.SearchCount + x.ProfileViewCount)
+            .ThenBy(x => x.SpecialtyId)
             .ToList();
 
             return new BookingFunnelStats
             {
-                SearchCount = searches.Count,
-                ProfileViewCount = profileViews.Count,
-                // Clamped to 100: one search commonly leads to viewing more than one doctor
-                // profile from the results, which would otherwise legitimately push this over
-                // 100% under completely normal usage, not just a tracking edge case.
-                SearchToViewRatePct = searches.Count > 0 ? Math.Min(100, Math.Round(profileViews.Count * 100.0 / searches.Count, 1)) : 0,
-                VisitStepCount = stepCounts.TryGetValue("visit", out var v) ? v : 0,
-                DetailsStepCount = stepCounts.TryGetValue("details", out var d) ? d : 0,
-                DoneStepCount = stepCounts.TryGetValue("done", out var done) ? done : 0,
+                SearchCount = distinctSearches,
+                SearchSessionCount = firstSearchAt.Count,
+                ProfileViewCount = viewPairs.Count,
+                SearchToViewRatePct = firstSearchAt.Count > 0 ? Math.Round(searchedThenViewed * 100.0 / firstSearchAt.Count, 1) : 0,
+                VisitStepCount = StepPairs("visit"),
+                DetailsStepCount = StepPairs("details"),
+                DoneStepCount = StepPairs("done"),
+                BookingsRecorded = bookingsRecorded,
                 SpecialtyDemand = specialtyDemand,
             };
         }

@@ -8,7 +8,7 @@ public interface IInsightsService
 {
     Task<SiteVisitStats> GetSiteVisitStatsAsync(DateOnly? from, DateOnly? to, string? site);
     Task<PagedResult<PatientLoginItem>> GetPatientLoginsAsync(int page, int limit, string? search, string? sortBy, string? sortDir);
-    Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source);
+    Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source, string? dateBy);
 
     Task<AuthFunnelStats> GetAuthFunnelStatsAsync(DateOnly? from, DateOnly? to);
     Task<PagedResult<AuthFunnelAttemptItem>> GetAuthFunnelAttemptsAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search);

@@ -162,24 +162,30 @@ namespace CMSAPI.Data.Repositories
             var results = new List<FeedbackLogItem>();
             foreach (var grp in events.GroupBy(e => e.SessionId))
             {
-                // Only sessions whose search actually went through the NLP router (has a
-                // "method" in its metadata) carry the signal this pipeline needs — plain
-                // literal-keyword or Anthropic-fallback searches aren't router feedback.
-                var searchEvt = grp
+                // Only searches that actually went through the NLP router (have a "method" in their
+                // metadata) carry the signal this pipeline needs. Events are ordered by time: the old
+                // code took an arbitrary search and the session's LAST booking step whatever it was, so
+                // a booking followed by "book another" (step "visit") was logged as no booking.
+                var routerSearches = grp
                     .Where(e => e.EventType == EventType_SearchPerformed)
                     .Select(e => new { e.OccurredAt, e.SpecialtyId, Meta = ParseJson<SearchMetadata>(e.MetadataJson) })
-                    .FirstOrDefault(e => !string.IsNullOrWhiteSpace(e.Meta?.Method));
-                if (searchEvt == null) continue;
+                    .Where(e => !string.IsNullOrWhiteSpace(e.Meta?.Method))
+                    .OrderBy(e => e.OccurredAt)
+                    .ToList();
+                if (routerSearches.Count == 0) continue;
 
+                // First completed booking after the first router search; the search it is credited to
+                // is the last router search before that booking.
                 var doneEvt = grp
-                    .Where(e => e.EventType == EventType_BookingStepReached)
-                    .OrderByDescending(e => e.OccurredAt)
+                    .Where(e => e.EventType == EventType_BookingStepReached && e.OccurredAt >= routerSearches[0].OccurredAt
+                        && string.Equals(ParseJson<Dictionary<string, object>>(e.MetadataJson)?.GetValueOrDefault("step")?.ToString(),
+                            "done", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(e => e.OccurredAt)
                     .FirstOrDefault();
-                // "done" step is nested in metadata (see BookingStepMetadata convention already
-                // used by InsightsRepository) — re-check here since we didn't parse it above.
-                var hasBooking = doneEvt != null &&
-                    string.Equals(ParseJson<Dictionary<string, object>>(doneEvt.MetadataJson)?
-                        .GetValueOrDefault("step")?.ToString(), "done", StringComparison.OrdinalIgnoreCase);
+                var hasBooking = doneEvt != null;
+                var searchEvt = hasBooking
+                    ? routerSearches.Last(e => e.OccurredAt <= doneEvt!.OccurredAt)
+                    : routerSearches[^1];
 
                 var actualSpecialtyId = hasBooking ? doneEvt!.SpecialtyId : null;
                 var predictedSpecialtyId = searchEvt.SpecialtyId;
