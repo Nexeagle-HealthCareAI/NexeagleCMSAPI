@@ -42,6 +42,10 @@
 #   RETRAIN_WORKFLOW_TOKEN  GitHub PAT (repo + workflow scope) letting CMSAPI trigger
 #                           1HMS-NLP-Router's retrain.yml via workflow_dispatch (CMS's
 #                           "Retrain now" button).
+#   NLP_ROUTER_API_KEY      Raw router API key with scopes route|admin (make one in 1HMS-NLP-Router:
+#                           python3 scripts/make_api_key.py cms route admin) — its HMS_API_KEYS entry
+#                           must be on the router. Used by the CMS "AI Agents" tab (status, rebuild).
+#                           Unset: that tab shows the router as unreachable (401).
 #   SMTP_SENDER_EMAIL       GoDaddy Workspace/Professional Email mailbox OTP emails send from
 #                           (e.g. info@nexeagle.com). Also the SMTP auth username.
 #   SMTP_PASSWORD           That mailbox's password. Server/port default to GoDaddy's
@@ -165,6 +169,7 @@ jobs:
           RAD_SVC_KEY: ${{ secrets.RAD_SERVICE_KEY }}
           HEALTH_WIKI_SVC_KEY: ${{ secrets.HEALTH_WIKI_SERVICE_KEY }}
           EASYHMS_API_URL: ${{ vars.DEV_EASYHMS_API_URL || 'https://1hms-dev-api.nexeagle.com' }}
+          NLP_ROUTER_API_KEY: ${{ secrets.NLP_ROUTER_API_KEY }}
           RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
           SMTP_EMAIL: ${{ secrets.SMTP_SENDER_EMAIL }}
           SMTP_PW: ${{ secrets.SMTP_PASSWORD }}
@@ -177,7 +182,7 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY,SYMPTOM_ROUTER_SVC_KEY,RAD_SVC_KEY,HEALTH_WIKI_SVC_KEY,EASYHMS_API_URL,RETRAIN_TOKEN,SMTP_EMAIL,SMTP_PW,GROQ_API_KEY,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_ACCESS_TOKEN
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY,SYMPTOM_ROUTER_SVC_KEY,RAD_SVC_KEY,HEALTH_WIKI_SVC_KEY,EASYHMS_API_URL,RETRAIN_TOKEN,SMTP_EMAIL,SMTP_PW,GROQ_API_KEY,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_ACCESS_TOKEN,NLP_ROUTER_API_KEY
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -199,6 +204,7 @@ jobs:
               printf 'CMS_SEED_ADMIN_PASSWORD=%s\n'            "${CMS_ADMIN_PW:-}"
               printf 'ServiceAuth__EasyHmsServiceKey=%s\n'     "${EASYHMS_SVC_KEY:-}"
               printf 'ServiceAuth__SymptomRouterServiceKey=%s\n' "${SYMPTOM_ROUTER_SVC_KEY:-}"
+              printf 'NlpRouter__ApiKey=%s\n'                  "${NLP_ROUTER_API_KEY:-}"
               printf 'ServiceAuth__RadServiceKey=%s\n'         "${RAD_SVC_KEY:-}"
               printf 'ServiceAuth__HealthWikiServiceKey=%s\n' "${HEALTH_WIKI_SVC_KEY:-}"
               printf 'EasyHmsApi__BaseUrl=%s\n'                "${EASYHMS_API_URL:-}"
@@ -259,6 +265,7 @@ jobs:
           RAD_SVC_KEY: ${{ secrets.RAD_SERVICE_KEY }}
           HEALTH_WIKI_SVC_KEY: ${{ secrets.HEALTH_WIKI_SERVICE_KEY }}
           EASYHMS_API_URL: ${{ vars.PROD_EASYHMS_API_URL || 'https://1hms-api.nexeagle.com' }}
+          NLP_ROUTER_API_KEY: ${{ secrets.NLP_ROUTER_API_KEY }}
           RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
           SMTP_EMAIL: ${{ secrets.SMTP_SENDER_EMAIL }}
           SMTP_PW: ${{ secrets.SMTP_PASSWORD }}
@@ -284,6 +291,7 @@ jobs:
             printf 'CMS_SEED_ADMIN_PASSWORD=%s\n'              "${CMS_ADMIN_PW:-}"
             printf 'ServiceAuth__EasyHmsServiceKey=%s\n'       "${EASYHMS_SVC_KEY:-}"
             printf 'ServiceAuth__SymptomRouterServiceKey=%s\n' "${SYMPTOM_ROUTER_SVC_KEY:-}"
+            printf 'NlpRouter__ApiKey=%s\n'                    "${NLP_ROUTER_API_KEY:-}"
             printf 'ServiceAuth__RadServiceKey=%s\n'           "${RAD_SVC_KEY:-}"
             printf 'ServiceAuth__HealthWikiServiceKey=%s\n'   "${HEALTH_WIKI_SVC_KEY:-}"
             printf 'EasyHmsApi__BaseUrl=%s\n'                  "${EASYHMS_API_URL:-}"
