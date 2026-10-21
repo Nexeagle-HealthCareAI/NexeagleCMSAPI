@@ -39,6 +39,12 @@
 #                           affected. Optional variables DEV_EASYHMS_API_URL / PROD_EASYHMS_API_URL set
 #                           the 1HMSAPI address (defaults: https://1hms-dev-api.nexeagle.com and
 #                           https://1hms-api.nexeagle.com).
+#   VITA_SERVICE_KEY        Shared secret for VitaProxyService's outbound calls to the Vita Test Agent
+#                           control API (CMS "Vita Test Agent" tab) and for Vita's inbound run-update
+#                           pushes to POST /api/v1/vita/events — same value must also be set as
+#                           VITA_SERVICE_KEY in the VitaTestAgent deployment. Unset: the Vita CMS routes
+#                           answer 503, nothing else is affected. Optional variables DEV_VITA_URL /
+#                           PROD_VITA_URL override the Vita address (default: appsettings, https://vita-dev.nexeagle.com).
 #   RETRAIN_WORKFLOW_TOKEN  GitHub PAT (repo + workflow scope) letting CMSAPI trigger
 #                           1HMS-NLP-Router's retrain.yml via workflow_dispatch (CMS's
 #                           "Retrain now" button).
@@ -168,6 +174,8 @@ jobs:
           # validates.
           RAD_SVC_KEY: ${{ secrets.RAD_SERVICE_KEY }}
           HEALTH_WIKI_SVC_KEY: ${{ secrets.HEALTH_WIKI_SERVICE_KEY }}
+          VITA_SVC_KEY: ${{ secrets.VITA_SERVICE_KEY }}
+          VITA_URL: ${{ vars.DEV_VITA_URL }}
           EASYHMS_API_URL: ${{ vars.DEV_EASYHMS_API_URL || 'https://1hms-dev-api.nexeagle.com' }}
           NLP_ROUTER_API_KEY: ${{ secrets.NLP_ROUTER_API_KEY }}
           RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
@@ -182,7 +190,7 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY,SYMPTOM_ROUTER_SVC_KEY,RAD_SVC_KEY,HEALTH_WIKI_SVC_KEY,EASYHMS_API_URL,RETRAIN_TOKEN,SMTP_EMAIL,SMTP_PW,GROQ_API_KEY,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_ACCESS_TOKEN,NLP_ROUTER_API_KEY
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUD,CMS_DB_CONN,CMS_ADMIN_EMAIL,CMS_ADMIN_PW,EASYHMS_SVC_KEY,SYMPTOM_ROUTER_SVC_KEY,RAD_SVC_KEY,HEALTH_WIKI_SVC_KEY,VITA_SVC_KEY,VITA_URL,EASYHMS_API_URL,RETRAIN_TOKEN,SMTP_EMAIL,SMTP_PW,GROQ_API_KEY,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_ACCESS_TOKEN,NLP_ROUTER_API_KEY
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -207,6 +215,8 @@ jobs:
               printf 'NlpRouter__ApiKey=%s\n'                  "${NLP_ROUTER_API_KEY:-}"
               printf 'ServiceAuth__RadServiceKey=%s\n'         "${RAD_SVC_KEY:-}"
               printf 'ServiceAuth__HealthWikiServiceKey=%s\n' "${HEALTH_WIKI_SVC_KEY:-}"
+              printf 'ServiceAuth__VitaServiceKey=%s\n'       "${VITA_SVC_KEY:-}"
+              if [ -n "${VITA_URL:-}" ]; then printf 'Vita__BaseUrl=%s\n' "$VITA_URL"; fi
               printf 'EasyHmsApi__BaseUrl=%s\n'                "${EASYHMS_API_URL:-}"
               printf 'GitHub__RetrainWorkflowToken=%s\n'       "${RETRAIN_TOKEN:-}"
               printf 'Smtp__SenderEmail=%s\n'                  "${SMTP_EMAIL:-}"
@@ -264,6 +274,8 @@ jobs:
           SYMPTOM_ROUTER_SVC_KEY: ${{ secrets.SYMPTOM_ROUTER_SERVICE_KEY }}
           RAD_SVC_KEY: ${{ secrets.RAD_SERVICE_KEY }}
           HEALTH_WIKI_SVC_KEY: ${{ secrets.HEALTH_WIKI_SERVICE_KEY }}
+          VITA_SVC_KEY: ${{ secrets.VITA_SERVICE_KEY }}
+          VITA_URL: ${{ vars.PROD_VITA_URL }}
           EASYHMS_API_URL: ${{ vars.PROD_EASYHMS_API_URL || 'https://1hms-api.nexeagle.com' }}
           NLP_ROUTER_API_KEY: ${{ secrets.NLP_ROUTER_API_KEY }}
           RETRAIN_TOKEN: ${{ secrets.RETRAIN_WORKFLOW_TOKEN }}
@@ -294,6 +306,8 @@ jobs:
             printf 'NlpRouter__ApiKey=%s\n'                    "${NLP_ROUTER_API_KEY:-}"
             printf 'ServiceAuth__RadServiceKey=%s\n'           "${RAD_SVC_KEY:-}"
             printf 'ServiceAuth__HealthWikiServiceKey=%s\n'   "${HEALTH_WIKI_SVC_KEY:-}"
+            printf 'ServiceAuth__VitaServiceKey=%s\n'         "${VITA_SVC_KEY:-}"
+            if [ -n "${VITA_URL:-}" ]; then printf 'Vita__BaseUrl=%s\n' "$VITA_URL"; fi
             printf 'EasyHmsApi__BaseUrl=%s\n'                  "${EASYHMS_API_URL:-}"
             printf 'GitHub__RetrainWorkflowToken=%s\n'         "${RETRAIN_TOKEN:-}"
             printf 'Smtp__SenderEmail=%s\n'                    "${SMTP_EMAIL:-}"
