@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+using CMSAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -125,6 +126,9 @@ builder.Services.AddHttpClient<IHealthWikiService, HealthWikiService>(c =>
 {
     c.Timeout = TimeSpan.FromSeconds(60);
 });
+// Vita Test Agent (runs, generated cases, the PR gate) lives in its own service; VitaController relays to it with a shared key.
+// Named client "Vita" (Vita:TimeoutSeconds, default 20 s). See CMSAPI/Services/VitaProxyExtensions.cs, Vita:BaseUrl, ServiceAuth:VitaServiceKey.
+builder.Services.AddVitaProxy(builder.Configuration);
 
 // Register Data Repositories
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
@@ -271,7 +275,7 @@ builder.Services
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
-                if (!string.IsNullOrEmpty(accessToken) && (path.StartsWithSegments("/chathub") || path.StartsWithSegments("/hubs/crm")))
+                if (!string.IsNullOrEmpty(accessToken) && (path.StartsWithSegments("/chathub") || path.StartsWithSegments("/hubs/crm") || path.StartsWithSegments("/hubs/vita")))
                 {
                     context.Token = accessToken;
                 }
@@ -457,6 +461,7 @@ try
     app.MapControllers();
     app.MapHub<CMSAPI.Hubs.ChatHub>("/chathub").RequireRateLimiting("chathub").AllowAnonymous(); // guests are anonymous; agent methods check live-support.view
     app.MapHub<CMSAPI.Hubs.CrmHub>("/hubs/crm"); // auth + marketing.view enforced by [HasPermission] on the hub
+    app.MapHub<CMSAPI.Hubs.VitaHub>("/hubs/vita"); // auth + vita.view enforced by [HasPermission] on the hub
 
     app.MapHealthChecks("/health")
         .AllowAnonymous();
