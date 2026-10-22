@@ -14,6 +14,7 @@ namespace CMSAPI.Services;
 public class VitaProxyService : IVitaProxyService
 {
     public const string HttpClientName = "Vita";
+    public const string LongHttpClientName = "VitaLong";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
@@ -35,31 +36,32 @@ public class VitaProxyService : IVitaProxyService
     public Task<VitaProxyResponse> GetAsync(string path, string? query, string actor)
     {
         var url = string.IsNullOrEmpty(query) ? path : $"{path}?{query}";
-        return RelayAsync(() => new HttpRequestMessage(HttpMethod.Get, url), actor);
+        return RelayAsync(() => new HttpRequestMessage(HttpMethod.Get, url), actor, false);
     }
 
-    public Task<VitaProxyResponse> SendAsync(HttpMethod method, string path, JsonElement? body, string actor) =>
+    public Task<VitaProxyResponse> SendAsync(HttpMethod method, string path, JsonElement? body, string actor, bool longRunning = false) =>
         RelayAsync(() =>
         {
             var request = new HttpRequestMessage(method, path);
             if (body.HasValue && body.Value.ValueKind != JsonValueKind.Undefined && body.Value.ValueKind != JsonValueKind.Null)
                 request.Content = new StringContent(body.Value.GetRawText(), Encoding.UTF8, "application/json");
             return request;
-        }, actor);
+        }, actor, longRunning);
 
-    public Task<VitaProxyResponse> SendObjectAsync(HttpMethod method, string path, object? body, string actor) =>
+    public Task<VitaProxyResponse> SendObjectAsync(HttpMethod method, string path, object? body, string actor, bool longRunning = false) =>
         RelayAsync(() =>
         {
             var request = new HttpRequestMessage(method, path);
             if (body != null)
                 request.Content = new StringContent(JsonSerializer.Serialize(body, BodyOptions), Encoding.UTF8, "application/json");
             return request;
-        }, actor);
+        }, actor, longRunning);
 
-    private async Task<VitaProxyResponse> RelayAsync(Func<HttpRequestMessage> build, string actor)
+    private async Task<VitaProxyResponse> RelayAsync(Func<HttpRequestMessage> build, string actor, bool longRunning)
     {
         var baseUrl = Clean(_configuration["Vita:BaseUrl"])?.TrimEnd('/');
-        var key = Clean(_configuration["ServiceAuth:VitaServiceKey"]);
+        // Vita's CMS-scoped key (VITA_CMS_KEY: everything but run imports); the shared VitaServiceKey for older setups.
+        var key = Clean(_configuration["ServiceAuth:VitaCmsKey"]) ?? Clean(_configuration["ServiceAuth:VitaServiceKey"]);
         if (baseUrl == null || key == null)
         {
             _logger.LogWarning("Vita call skipped: Vita:BaseUrl or ServiceAuth:VitaServiceKey isn't configured.");
@@ -69,9 +71,18 @@ public class VitaProxyService : IVitaProxyService
         using var request = build();
         request.RequestUri = new Uri($"{baseUrl}/{request.RequestUri!.OriginalString.TrimStart('/')}");
         request.Headers.Add("X-Service-Key", key);
-        request.Headers.Add("X-Actor", SafeActor(actor));
+        var who = SafeActor(actor);
+        request.Headers.Add("X-Actor", who);
+        // Optional: sign the actor so a leaked CMS key alone cannot name someone else (Vita's VITA_ACTOR_SECRET).
+        var actorSecret = Clean(_configuration["ServiceAuth:VitaActorSecret"]);
+        if (actorSecret != null)
+        {
+            var (ts, sig) = SignActor(actorSecret, who, DateTimeOffset.UtcNow);
+            request.Headers.Add("X-Actor-Ts", ts);
+            request.Headers.Add("X-Actor-Sig", sig);
+        }
 
-        var client = _httpClientFactory.CreateClient(HttpClientName);
+        var client = _httpClientFactory.CreateClient(longRunning ? LongHttpClientName : HttpClientName);
         try
         {
             using var response = await client.SendAsync(request);
@@ -122,6 +133,15 @@ public class VitaProxyService : IVitaProxyService
             if (!char.IsControl(ch) && ch < 128) cleaned.Append(ch);
         var text = cleaned.ToString().Trim();
         return text.Length == 0 ? "CMS" : text.Length > 200 ? text[..200] : text;
+    }
+
+    // hex(HMAC-SHA256(secret, actor + "|" + ts)), ts = Unix seconds; Vita accepts it for 300 s (vita/api/auth.py).
+    public static (string Ts, string Sig) SignActor(string secret, string actor, DateTimeOffset now)
+    {
+        var ts = now.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        using var h = new System.Security.Cryptography.HMACSHA256(Encoding.UTF8.GetBytes(secret));
+        var sig = Convert.ToHexString(h.ComputeHash(Encoding.UTF8.GetBytes($"{actor}|{ts}"))).ToLowerInvariant();
+        return (ts, sig);
     }
 
     private static JsonNode? TryParse(string text)
