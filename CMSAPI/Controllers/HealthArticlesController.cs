@@ -73,6 +73,11 @@ public class HealthArticlesController : HealthWikiControllerBase
     public async Task<IActionResult> Unpublish(string slug, [FromBody] JsonElement body) =>
         Reply(await _service.SendAsync(HttpMethod.Post, $"internal/health-articles/{Slug(slug)}/unpublish", body, Actor, HealthWikiShape.Article));
 
+    // Take a live article offline and put it back in review; the author cannot publish it alone again. { "reason": "..." } is kept in the history.
+    [HttpPost("{slug}/pull-back")]
+    public async Task<IActionResult> PullBack(string slug, [FromBody] JsonElement body) =>
+        Reply(await _service.SendAsync(HttpMethod.Post, $"internal/health-articles/{Slug(slug)}/pull-back", body, Actor, HealthWikiShape.Article));
+
     [HttpGet("{slug}/history")]
     public async Task<IActionResult> History(string slug) =>
         Reply(await _service.GetAsync($"internal/health-articles/{Slug(slug)}/history", null, Actor));

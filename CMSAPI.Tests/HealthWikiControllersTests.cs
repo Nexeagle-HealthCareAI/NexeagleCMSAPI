@@ -146,6 +146,7 @@ public class HealthWikiControllersTests
         await Articles().Approve("a");
         await Articles().Withdraw("a", body);
         await Articles().Unpublish("a", body);
+        await Articles().PullBack("a", body);
         await Wiki().SendLink(id, body);
         await Wiki().Reject(id, body);
         await Wiki().Accept(id);
@@ -159,6 +160,7 @@ public class HealthWikiControllersTests
         Sent(HttpMethod.Post, "internal/health-articles/a/approve", HealthWikiShape.Article);
         Sent(HttpMethod.Post, "internal/health-articles/a/withdraw", HealthWikiShape.Article);
         Sent(HttpMethod.Post, "internal/health-articles/a/unpublish", HealthWikiShape.Article);
+        Sent(HttpMethod.Post, "internal/health-articles/a/pull-back", HealthWikiShape.Article);
         Sent(HttpMethod.Post, $"internal/health-wiki/contributors/{id}/send-link", HealthWikiShape.Contributor);
         Sent(HttpMethod.Post, $"internal/health-wiki/contributors/{id}/reject", HealthWikiShape.Contributor);
         Sent(HttpMethod.Post, $"internal/health-wiki/topic-requests/{id}/accept", HealthWikiShape.Whole);
