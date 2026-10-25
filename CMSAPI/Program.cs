@@ -126,6 +126,8 @@ builder.Services.AddHttpClient<IHealthWikiService, HealthWikiService>(c =>
 {
     c.Timeout = TimeSpan.FromSeconds(60);
 });
+// Vita's emergency takeover (verify hospitals, places not on 1HMS, alert log) lives in 1HMSAPI too: same address and internal key.
+builder.Services.AddHttpClient<IEmergencyTakeoverService, EmergencyTakeoverService>(c => c.Timeout = TimeSpan.FromSeconds(20));
 // Vita Test Agent (runs, generated cases, the PR gate) lives in its own service; VitaController relays to it with a shared key.
 // Named client "Vita" (Vita:TimeoutSeconds, default 20 s). See CMSAPI/Services/VitaProxyExtensions.cs, Vita:BaseUrl, ServiceAuth:VitaServiceKey.
 builder.Services.AddVitaProxy(builder.Configuration);
