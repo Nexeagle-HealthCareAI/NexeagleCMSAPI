@@ -192,7 +192,7 @@ public class CrmWebhookController : ControllerBase
 
             // ── 8. SignalR hot-lead alert ─────────────────────────────────────
             if (createdLead.AiIntentScore >= 80)
-                await _hubContext.Clients.All.SendAsync("crm-hot-lead-received", createdLead, cancellationToken: ct);
+                await _hubContext.Clients.All.SendAsync(CrmHub.HotLeadReceived, createdLead, cancellationToken: ct);
 
             // Meta only checks HTTP 2xx — the body is logged in their developer dashboard,
             // so don't expose internal IDs in it.
@@ -291,7 +291,7 @@ public class CrmWebhookController : ControllerBase
 
                         await _salesLeadService.AddFollowUpAsync(lead.LeadId, followUpReq, Guid.Empty, "WhatsApp User");
                         await _hubContext.Clients.All.SendAsync(
-                            "crm-inbound-whatsapp",
+                            CrmHub.InboundWhatsApp,
                             new { leadId = lead.LeadId, message = messageText },
                             cancellationToken: ct);
                     }

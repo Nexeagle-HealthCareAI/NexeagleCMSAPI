@@ -22,6 +22,16 @@ public class UsersController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll() => Ok(await _admin.GetUsersAsync());
 
+    // Names for the lead "assigned to" pickers in Marketing. Only id + name of active users, so
+    // marketing staff don't need user-management.view (the full list carries emails and roles).
+    [HasPermission("marketing.view")]
+    [HttpGet("assignees")]
+    public async Task<IActionResult> GetAssignees() =>
+        Ok((await _admin.GetUsersAsync())
+            .Where(u => u.IsActive)
+            .OrderBy(u => u.FullName)
+            .Select(u => new { u.UserId, u.FullName }));
+
     [HasPermission("user-management.view")]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id)

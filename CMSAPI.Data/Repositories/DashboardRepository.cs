@@ -2,19 +2,43 @@ using CMSAPI.Application.Interfaces;
 using CMSAPI.Application.Models;
 using CMSAPI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CMSAPI.Data.Repositories;
 
 public class DashboardRepository : IDashboardRepository
 {
-    private readonly AppDbContext _db;
+    // The dashboard is the CMS landing page: every login and every visit to "/" asks for it. The
+    // numbers are week/month/year trends, so a few minutes of staleness is invisible, and caching
+    // turns ~16 queries per visit into ~16 queries per 5 minutes for all admins together.
+    private const string CacheKey = "cms:dashboard:v2";
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
-    public DashboardRepository(AppDbContext db)
+    private readonly AppDbContext _db;
+    private readonly IMemoryCache _cache;
+
+    public DashboardRepository(AppDbContext db, IMemoryCache cache)
     {
         _db = db;
+        _cache = cache;
     }
 
     public async Task<DashboardResponse> GetDashboardAsync()
+    {
+        if (_cache.TryGetValue(CacheKey, out DashboardResponse? cached) && cached != null)
+            return cached;
+
+        var fresh = await BuildDashboardAsync();
+        _cache.Set(CacheKey, fresh, CacheDuration);
+        return fresh;
+    }
+
+    private sealed record DayCount(DateTime Day, int Count);
+
+    private static Dictionary<DateOnly, int> ToDailyMap(List<DayCount> rows) =>
+        rows.ToDictionary(r => DateOnly.FromDateTime(r.Day), r => r.Count);
+
+    private async Task<DashboardResponse> BuildDashboardAsync()
     {
         try
         {
@@ -48,23 +72,29 @@ public class DashboardRepository : IDashboardRepository
             var userThisWeek = await _db.UserAuths.CountAsync(u => u.CreatedAt >= startOfThisWeek);
             var userLastWeek = await _db.UserAuths.CountAsync(u => u.CreatedAt >= startOfLastWeek && u.CreatedAt < startOfThisWeek);
 
-            // ── Chart data: load only the date column, only for the last 5 years ──────
-            var hospitalDates = await _db.Hospitals
+            // ── Chart data: one row per day (at most ~1,830 per entity), counted in SQL ──
+            // Previously every creation date of every row was loaded and counted in C#.
+            var hospitalDays = ToDailyMap(await _db.Hospitals
                 .Where(h => h.CreatedAt >= fiveYearsAgo)
-                .Select(h => h.CreatedAt).ToListAsync();
+                .GroupBy(h => h.CreatedAt.Date)
+                .Select(g => new DayCount(g.Key, g.Count())).ToListAsync());
 
-            var doctorDates = await (from d in _db.Doctors
-                                     join u in _db.UserProfiles on d.UserID equals u.UserID
-                                     where u.CreatedAt >= fiveYearsAgo
-                                     select u.CreatedAt).ToListAsync();
+            var doctorDays = ToDailyMap(await (from d in _db.Doctors
+                                               join u in _db.UserProfiles on d.UserID equals u.UserID
+                                               where u.CreatedAt >= fiveYearsAgo
+                                               select new { u.CreatedAt })
+                .GroupBy(x => x.CreatedAt.Date)
+                .Select(g => new DayCount(g.Key, g.Count())).ToListAsync());
 
-            var patientDates = await _db.PatientRegistrations
+            var patientDays = ToDailyMap(await _db.PatientRegistrations
                 .Where(p => p.RegisteredAt >= fiveYearsAgo)
-                .Select(p => p.RegisteredAt).ToListAsync();
+                .GroupBy(p => p.RegisteredAt.Date)
+                .Select(g => new DayCount(g.Key, g.Count())).ToListAsync());
 
-            var userDates = await _db.UserAuths
+            var userDays = ToDailyMap(await _db.UserAuths
                 .Where(u => u.CreatedAt >= fiveYearsAgo)
-                .Select(u => u.CreatedAt).ToListAsync();
+                .GroupBy(u => u.CreatedAt.Date)
+                .Select(g => new DayCount(g.Key, g.Count())).ToListAsync());
 
             // ── Assemble response ─────────────────────────────────────────────────────
             var resp = new DashboardResponse();
@@ -74,10 +104,10 @@ public class DashboardRepository : IDashboardRepository
             resp.TotalPatients  = CalculateMetric(totalPatients, patThisWeek, patLastWeek, "overall");
             resp.TotalUsers     = CalculateMetric(totalUsers, userThisWeek, userLastWeek, "this week");
 
-            resp.Charts.Hospitals = GenerateChartData(hospitalDates, today);
-            resp.Charts.Doctors   = GenerateChartData(doctorDates,   today);
-            resp.Charts.Patients  = GenerateChartData(patientDates,   today);
-            resp.Charts.Users     = GenerateChartData(userDates,      today);
+            resp.Charts.Hospitals = GenerateChartData(hospitalDays, today);
+            resp.Charts.Doctors   = GenerateChartData(doctorDays,   today);
+            resp.Charts.Patients  = GenerateChartData(patientDays,  today);
+            resp.Charts.Users     = GenerateChartData(userDays,     today);
 
             return resp;
         }
@@ -104,16 +134,17 @@ public class DashboardRepository : IDashboardRepository
         };
     }
 
-    private ChartData GenerateChartData(List<DateTime> dates, DateOnly today)
+    // dailyCounts: rows created per calendar day. Same buckets and labels as before.
+    private ChartData GenerateChartData(Dictionary<DateOnly, int> dailyCounts, DateOnly today)
     {
         var data = new ChartData();
-        var datesOnly = dates.Select(d => DateOnly.FromDateTime(d)).ToList();
+        int Sum(Func<DateOnly, bool> inBucket) => dailyCounts.Where(kv => inBucket(kv.Key)).Sum(kv => kv.Value);
 
         // Daily (Last 7 days)
         for (int i = 6; i >= 0; i--)
         {
             var d = today.AddDays(-i);
-            var val = datesOnly.Count(x => x == d);
+            var val = dailyCounts.TryGetValue(d, out var n) ? n : 0;
             data.Daily.Add(new StatPoint { Label = d.DayOfWeek.ToString().Substring(0, 3), Value = val });
         }
 
@@ -122,7 +153,7 @@ public class DashboardRepository : IDashboardRepository
         {
             var start = today.AddDays(-(i * 7) - 6);
             var end = today.AddDays(-(i * 7));
-            var val = datesOnly.Count(x => x >= start && x <= end);
+            var val = Sum(x => x >= start && x <= end);
             data.Weekly.Add(new StatPoint { Label = $"Week {4 - i}", Value = val });
         }
 
@@ -133,7 +164,7 @@ public class DashboardRepository : IDashboardRepository
             var monthDate = currentMonth.AddMonths(-i);
             var monthStart = new DateOnly(monthDate.Year, monthDate.Month, 1);
             var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-            var val = datesOnly.Count(x => x >= monthStart && x <= monthEnd);
+            var val = Sum(x => x >= monthStart && x <= monthEnd);
             data.Monthly.Add(new StatPoint { Label = monthDate.ToString("MMM"), Value = val });
         }
 
@@ -142,7 +173,7 @@ public class DashboardRepository : IDashboardRepository
         for (int i = 4; i >= 0; i--)
         {
             var y = currentYear - i;
-            var val = datesOnly.Count(x => x.Year == y);
+            var val = Sum(x => x.Year == y);
             data.Yearly.Add(new StatPoint { Label = y.ToString(), Value = val });
         }
 

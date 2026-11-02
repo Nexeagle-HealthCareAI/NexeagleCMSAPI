@@ -14,14 +14,14 @@ public class InsightsService : IInsightsService
         _repo = repo;
     }
 
-    public Task<SiteVisitStats> GetSiteVisitStatsAsync(DateOnly? from, DateOnly? to)
-        => _repo.GetSiteVisitStatsAsync(from, to);
+    public Task<SiteVisitStats> GetSiteVisitStatsAsync(DateOnly? from, DateOnly? to, string? site)
+        => _repo.GetSiteVisitStatsAsync(from, to, site);
 
     public Task<PagedResult<PatientLoginItem>> GetPatientLoginsAsync(int page, int limit, string? search, string? sortBy, string? sortDir)
         => _repo.GetPatientLoginsAsync(page, limit, search, sortBy, sortDir);
 
-    public Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source)
-        => _repo.GetOnlineAppointmentsAsync(page, limit, from, to, search, sortBy, sortDir, source);
+    public Task<PagedResult<OnlineAppointmentItem>> GetOnlineAppointmentsAsync(int page, int limit, DateOnly? from, DateOnly? to, string? search, string? sortBy, string? sortDir, string? source, string? dateBy)
+        => _repo.GetOnlineAppointmentsAsync(page, limit, from, to, search, sortBy, sortDir, source, dateBy);
 
     public Task<AuthFunnelStats> GetAuthFunnelStatsAsync(DateOnly? from, DateOnly? to)
         => _repo.GetAuthFunnelStatsAsync(from, to);

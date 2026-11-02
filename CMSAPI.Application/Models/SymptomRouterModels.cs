@@ -37,6 +37,10 @@ public class FeedbackLogItem
 }
 
 // ── Model info (proxied from the NLP service's own /model-info) ────────────
+// The router in service today (hms_router) reports modelVersion, trainedAt (Unix seconds),
+// trainingRows, emergencyRows and sources (rows per training file); it does not publish validation
+// metrics. The older classifier's LastRetrainedAt / TrainingRowCount / ValidationMetrics are kept
+// for compatibility and filled from the new fields where possible (SymptomRouterService).
 public class ModelInfoDto
 {
     public string? ModelVersion { get; set; }
@@ -44,6 +48,12 @@ public class ModelInfoDto
     public int? TrainingRowCount { get; set; }
     public int? ValidationRowCount { get; set; }
     public ValidationMetricsDto? ValidationMetrics { get; set; }
+
+    public double? TrainedAt { get; set; }
+    public int? TrainingRows { get; set; }
+    public int? EmergencyRows { get; set; }
+    public Dictionary<string, int>? Sources { get; set; }
+    public string? Reasoner { get; set; }
 }
 
 public class ValidationMetricsDto
