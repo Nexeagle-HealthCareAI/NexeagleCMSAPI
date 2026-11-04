@@ -22,7 +22,11 @@ namespace CMSAPI.Controllers;
 //                      repos/{repo}/validate, repos/{repo}/secrets/{name}/rotated, schedules/{id}/run-now
 //                 PATCH schedules/{id}; DELETE schedules/{id}, repos/{repo} (archive)
 //                 GET  digest (preview); POST digest/send
-//   vita.approve  POST cases/{id}/promote | retire, lessons/{id}/apply | revert, escapes/{repo}/{id}/verify,
+//   vita.view     also GET agents, agents/stats, agents/calibration, agents/runs/{runId}/steps, agents/steps/{id},
+//                      agents/{name}, agents/{name}/examples/{ex}, repos/{repo}/baseline, ai-evals
+//   vita.manage   also POST agents/{name}/try, agents/steps/{id}/replay, repos/{repo}/baseline/preview
+//   vita.approve  POST repos/{repo}/baseline (known findings stop blocking the gate),
+//                 POST cases/{id}/promote | retire, lessons/{id}/apply | revert, escapes/{repo}/{id}/verify,
 //                      results/{id}/label (relabel a verdict), classifier/{id}/promote | retire
 //                 PUT  controls (kill switch, budgets, models, monthly cap; reason required)
 //   (actor = the signed-in user, never the body: every relay carries X-Actor, HMAC-signed when
@@ -261,7 +265,86 @@ public class VitaController : ControllerBase
     public async Task<IActionResult> SendDigest() =>
         Reply(await _vita.SendObjectAsync(HttpMethod.Post, "digest/send", new { actor = Actor }, Actor, longRunning: true));
 
+    // ---- agents, known findings, AI agents (vita.view to read) -------------------------------------------------------
+
+    // Every agent and collaboration flow: card, examples, last-7-days health (who decided: model / rules / fallback).
+    [HasPermission("vita.view")]
+    [HttpGet("agents")]
+    public async Task<IActionResult> Agents() => Reply(await _vita.GetAsync("agents", null, Actor));
+
+    [HasPermission("vita.view")]
+    [HttpGet("agents/stats")]
+    public async Task<IActionResult> AgentStats([FromQuery] int? days) =>
+        Reply(await _vita.GetAsync("agents/stats", Query(("days", days?.ToString())), Actor));
+
+    // Judge vs people's relabels: agreement, Cohen's kappa, confusion, false downgrades / alarms.
+    [HasPermission("vita.view")]
+    [HttpGet("agents/calibration")]
+    public async Task<IActionResult> AgentCalibration([FromQuery] int? days) =>
+        Reply(await _vita.GetAsync("agents/calibration", Query(("days", days?.ToString())), Actor));
+
+    // What each agent did in a run (titles, who asked whom); one step in full (inputs and outputs are redacted by Vita).
+    [HasPermission("vita.view")]
+    [HttpGet("agents/runs/{runId}/steps")]
+    public async Task<IActionResult> RunSteps(string runId, [FromQuery] string? agent) =>
+        Reply(await _vita.GetAsync($"agents/runs/{Uri.EscapeDataString(runId)}/steps", Query(("agent", agent)), Actor));
+
+    [HasPermission("vita.view")]
+    [HttpGet("agents/steps/{stepId}")]
+    public async Task<IActionResult> AgentStep(string stepId) =>
+        Reply(await _vita.GetAsync($"agents/steps/{Uri.EscapeDataString(stepId)}", null, Actor));
+
+    [HasPermission("vita.view")]
+    [HttpGet("agents/{name}")]
+    public async Task<IActionResult> Agent(string name) =>
+        Reply(await _vita.GetAsync($"agents/{Uri.EscapeDataString(name)}", null, Actor));
+
+    [HasPermission("vita.view")]
+    [HttpGet("agents/{name}/examples/{example}")]
+    public async Task<IActionResult> AgentExample(string name, string example) =>
+        Reply(await _vita.GetAsync($"agents/{Uri.EscapeDataString(name)}/examples/{Uri.EscapeDataString(example)}", null, Actor));
+
+    // The repo's vita-baseline.txt: findings that predate Vita, each with its latest state (still failing | fixed | not run yet).
+    [HasPermission("vita.view")]
+    [HttpGet("repos/{repo}/baseline")]
+    public async Task<IActionResult> Baseline(string repo) =>
+        Reply(await _vita.GetAsync($"repos/{Uri.EscapeDataString(repo)}/baseline", null, Actor));
+
+    // Latest AI-agent suite results (router /chat, route-symptom, WhatsApp bot): per suite and scenario, pass rates over trials.
+    [HasPermission("vita.view")]
+    [HttpGet("ai-evals")]
+    public async Task<IActionResult> AiEvals([FromQuery] string? repo, [FromQuery] int? limit) =>
+        Reply(await _vita.GetAsync("ai-evals", Query(("repo", repo), ("limit", limit?.ToString())), Actor));
+
+    // ---- agents playground and baseline (vita.manage) ---------------------------------------------------------------
+
+    // Run one agent on its own: { input | example, mode: rules | llm }. Nothing is saved or sent; llm mode spends model tokens
+    // (capped by Vita) and is audited with the signed-in user.
+    [HasPermission("vita.manage")]
+    [HttpPost("agents/{name}/try")]
+    public async Task<IActionResult> TryAgent(string name, [FromBody] JsonElement body) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"agents/{Uri.EscapeDataString(name)}/try", WithActor(body), Actor, longRunning: true));
+
+    // Re-run a recorded step: { mode: replay | rules | llm } -> the differences from the run.
+    [HasPermission("vita.manage")]
+    [HttpPost("agents/steps/{stepId}/replay")]
+    public async Task<IActionResult> ReplayStep(string stepId, [FromBody] JsonElement body) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"agents/steps/{Uri.EscapeDataString(stepId)}/replay", WithActor(body), Actor, longRunning: true));
+
+    // What a baseline written from a run would list: { run_id, skills? } -> { count, by_skill, keys }. Writes nothing.
+    [HasPermission("vita.manage")]
+    [HttpPost("repos/{repo}/baseline/preview")]
+    public async Task<IActionResult> PreviewBaseline(string repo, [FromBody] JsonElement body) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"repos/{Uri.EscapeDataString(repo)}/baseline/preview", WithActor(body), Actor));
+
     // ---- approve (vita.approve) ------------------------------------------------------------------------------------
+    // Record known findings from a run: { run_id, skills?, note? }. Listed failures stop blocking the PR gate (they still run and
+    // are reported), so this is an approval. Vita writes vita-baseline.txt next to the repo's vita.yaml and returns its text.
+    [HasPermission("vita.approve")]
+    [HttpPost("repos/{repo}/baseline")]
+    public async Task<IActionResult> WriteBaseline(string repo, [FromBody] JsonElement body) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"repos/{Uri.EscapeDataString(repo)}/baseline", WithActor(body), Actor));
+
 
     // Kill switch, budgets, monthly cap and model router. Four-eyes: vita.approve AND a non-empty reason, which Vita records
     // with the signed-in user. The body is passed through (any of kill_switch / budgets / models / monthly_inr_cap) with
