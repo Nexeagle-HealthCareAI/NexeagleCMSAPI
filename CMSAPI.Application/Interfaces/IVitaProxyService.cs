@@ -14,9 +14,10 @@ public interface IVitaProxyService
     // actor is the signed-in CMS user's email, sent as X-Actor so Vita's audit log names the person.
     Task<VitaProxyResponse> GetAsync(string path, string? query, string actor);
 
-    // body is passed on exactly as received (JSON), or omitted when null.
-    Task<VitaProxyResponse> SendAsync(HttpMethod method, string path, JsonElement? body, string actor);
+    // body is passed on exactly as received (JSON), or omitted when null. longRunning: use the "VitaLong" client
+    // (Vita:LongTimeoutSeconds, default 900 s) for calls that wait on a model or a PR stack.
+    Task<VitaProxyResponse> SendAsync(HttpMethod method, string path, JsonElement? body, string actor, bool longRunning = false);
 
     // Same as SendAsync, for a body this API built itself (e.g. { actor, reason } on promote/retire); serialised with snake_case keys.
-    Task<VitaProxyResponse> SendObjectAsync(HttpMethod method, string path, object? body, string actor);
+    Task<VitaProxyResponse> SendObjectAsync(HttpMethod method, string path, object? body, string actor, bool longRunning = false);
 }

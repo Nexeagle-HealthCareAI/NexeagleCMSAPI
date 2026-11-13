@@ -17,15 +17,22 @@ namespace CMSAPI.Controllers;
 // passes the call on to Vita's control API (vita/api/app.py) after the CMS login and the vita.* permission are checked:
 //
 //   vita.view     GET  overview, repos, runs, results, cases, graph counts, schedules, coverage, escapes, learning,
-//                      settings/repos, repos/{repo}/secrets, audit, controls
+//                      settings/repos, repos/{repo}/secrets, audit, controls, classifier
 //   vita.manage   POST runs (sync), runs/enqueue, schedules, gate pause/resume, generate, escapes, learn, repos (add),
 //                      repos/{repo}/validate, repos/{repo}/secrets/{name}/rotated, schedules/{id}/run-now
 //                 PATCH schedules/{id}; DELETE schedules/{id}, repos/{repo} (archive)
-//   vita.approve  POST cases/{id}/promote | retire, lessons/{id}/apply | revert, escapes/{repo}/{id}/verify
+//                 GET  digest (preview); POST digest/send
+//   vita.view     also GET agents, agents/stats, agents/calibration, agents/runs/{runId}/steps, agents/steps/{id},
+//                      agents/{name}, agents/{name}/examples/{ex}, repos/{repo}/baseline, ai-evals
+//   vita.manage   also POST agents/{name}/try, agents/steps/{id}/replay, repos/{repo}/baseline/preview
+//   vita.approve  POST repos/{repo}/baseline (known findings stop blocking the gate),
+//                 POST cases/{id}/promote | retire, lessons/{id}/apply | revert, escapes/{repo}/{id}/verify,
+//                      results/{id}/label (relabel a verdict), classifier/{id}/promote | retire
 //                 PUT  controls (kill switch, budgets, models, monthly cap; reason required)
-//                 (actor = the signed-in user, never the body)
+//   (actor = the signed-in user, never the body: every relay carries X-Actor, HMAC-signed when
+//    ServiceAuth:VitaActorSecret is set; bodies also get "actor" for older Vita builds)
 //
-// POST events is server-to-server from Vita (X-Service-Key = ServiceAuth:VitaServiceKey) and fans a run update out to the
+// POST events is server-to-server from Vita (X-Service-Key = ServiceAuth:VitaEventsKey, else VitaServiceKey) and fans a run update out to the
 // CMS web over VitaHub.
 [Authorize]
 [ApiController]
@@ -84,8 +91,8 @@ public class VitaController : ControllerBase
 
     [HasPermission("vita.view")]
     [HttpGet("runs/{repo}/{runId}/results")]
-    public async Task<IActionResult> RunResults(string repo, string runId) =>
-        Reply(await _vita.GetAsync($"runs/{Uri.EscapeDataString(repo)}/{Uri.EscapeDataString(runId)}/results", null, Actor));
+    public async Task<IActionResult> RunResults(string repo, string runId, [FromQuery] int? limit) =>
+        Reply(await _vita.GetAsync($"runs/{Uri.EscapeDataString(repo)}/{Uri.EscapeDataString(runId)}/results", Query(("limit", limit?.ToString())), Actor));
 
     // status: shadow | active | retired. skill: a skill pack name such as api-contract.
     [HasPermission("vita.view")]
@@ -146,6 +153,11 @@ public class VitaController : ControllerBase
     [HttpGet("controls")]
     public async Task<IActionResult> Controls() => Reply(await _vita.GetAsync("controls", null, Actor));
 
+    // Verdict classifier: { available, active, versions: [{ id, status, rows, metrics, trained_at }], last_trained }.
+    [HasPermission("vita.view")]
+    [HttpGet("classifier")]
+    public async Task<IActionResult> Classifier() => Reply(await _vita.GetAsync("classifier", null, Actor));
+
     // ---- operate (vita.manage) -------------------------------------------------------------------------------------
 
     // "Add repo": { manifest_path, source_root? } -> { repo, kind, skills, targets, graph: { endpoint: n, ... } } or 400 with
@@ -153,7 +165,7 @@ public class VitaController : ControllerBase
     [HasPermission("vita.manage")]
     [HttpPost("repos")]
     public async Task<IActionResult> AddRepo([FromBody] JsonElement body) =>
-        Reply(await _vita.SendObjectAsync(HttpMethod.Post, "repos", WithActor(body), Actor));
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, "repos", WithActor(body), Actor, longRunning: true));
 
     // Re-validate the repo's stored manifest path: { ok, problems, changed_since_onboarding }.
     [HasPermission("vita.manage")]
@@ -179,11 +191,11 @@ public class VitaController : ControllerBase
     public async Task<IActionResult> UpdateSchedule(string id, [FromBody] JsonElement body) =>
         Reply(await _vita.SendObjectAsync(HttpMethod.Patch, $"schedules/{Uri.EscapeDataString(id)}", WithActor(body), Actor));
 
-    // Queue the schedule's run now -> { run_id, status: "queued" }.
+    // Queue the schedule's run now -> { run_id, status: "queued" }; a digest schedule sends the digest -> { status: "sent", digest }.
     [HasPermission("vita.manage")]
     [HttpPost("schedules/{id}/run-now")]
     public async Task<IActionResult> RunScheduleNow(string id) =>
-        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"schedules/{Uri.EscapeDataString(id)}/run-now", new { actor = Actor }, Actor));
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"schedules/{Uri.EscapeDataString(id)}/run-now", new { actor = Actor }, Actor, longRunning: true));
 
     // Vita takes the actor as a query parameter on this route (DELETE /schedules/{sid}?actor=).
     [HasPermission("vita.manage")]
@@ -196,19 +208,19 @@ public class VitaController : ControllerBase
     [HasPermission("vita.manage")]
     [HttpPost("runs/enqueue")]
     public async Task<IActionResult> EnqueueRun([FromBody] JsonElement body) =>
-        Reply(await _vita.SendAsync(HttpMethod.Post, "runs/enqueue", body, Actor));
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, "runs/enqueue", WithActor(body), Actor));
 
     // Synchronous (Phase 0 surface): blocks until the run finishes, so it can hit the 20 s client timeout on a real repo. Kept for
     // parity with Vita's API; the CMS web uses runs/enqueue.
     [HasPermission("vita.manage")]
     [HttpPost("runs")]
     public async Task<IActionResult> CreateRun([FromBody] JsonElement body) =>
-        Reply(await _vita.SendAsync(HttpMethod.Post, "runs", body, Actor));
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, "runs", WithActor(body), Actor, longRunning: true));
 
     [HasPermission("vita.manage")]
     [HttpPost("schedules")]
     public async Task<IActionResult> CreateSchedule([FromBody] JsonElement body) =>
-        Reply(await _vita.SendAsync(HttpMethod.Post, "schedules", body, Actor));
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, "schedules", WithActor(body), Actor));
 
     // Pausing the gate makes `vita / gate` answer neutral on every PR of that repo until it is resumed. The optional body is { reason }.
     [HasPermission("vita.manage")]
@@ -226,23 +238,113 @@ public class VitaController : ControllerBase
     [HasPermission("vita.manage")]
     [HttpPost("generate/{repo}")]
     public async Task<IActionResult> Generate(string repo, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JsonElement? body = null) =>
-        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"generate/{Uri.EscapeDataString(repo)}", WithActor(body), Actor));
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"generate/{Uri.EscapeDataString(repo)}", WithActor(body), Actor, longRunning: true));
 
     // Log a bug that reached users: { title, description, sha? } -> { escape, case_ids, ... }. Vita saves it and asks the Case Generator
     // for shadow cases that would have caught it.
     [HasPermission("vita.manage")]
     [HttpPost("escapes/{repo}")]
     public async Task<IActionResult> LogEscape(string repo, [FromBody] JsonElement body) =>
-        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"escapes/{Uri.EscapeDataString(repo)}", WithActor(body), Actor));
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"escapes/{Uri.EscapeDataString(repo)}", WithActor(body), Actor, longRunning: true));
 
     // Run the Learner now: { apply_auto? } -> { report, applied, stale }. Lessons it may apply on its own (shadow-only case changes,
     // risk map, relabelled verdicts) are applied when apply_auto is true; anything touching an ACTIVE case stays pending for vita.approve.
     [HasPermission("vita.manage")]
     [HttpPost("learn/{repo}")]
     public async Task<IActionResult> Learn(string repo, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JsonElement? body = null) =>
-        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"learn/{Uri.EscapeDataString(repo)}", WithActor(body), Actor));
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"learn/{Uri.EscapeDataString(repo)}", WithActor(body), Actor, longRunning: true));
+
+    // Weekly digest preview (markdown + data) for the last `days` (1-90, default 7), and "send now" (emails it; audited).
+    [HasPermission("vita.manage")]
+    [HttpGet("digest")]
+    public async Task<IActionResult> Digest([FromQuery] int? days) =>
+        Reply(await _vita.GetAsync("digest", Query(("days", days?.ToString())), Actor));
+
+    [HasPermission("vita.manage")]
+    [HttpPost("digest/send")]
+    public async Task<IActionResult> SendDigest() =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, "digest/send", new { actor = Actor }, Actor, longRunning: true));
+
+    // ---- agents, known findings, AI agents (vita.view to read) -------------------------------------------------------
+
+    // Every agent and collaboration flow: card, examples, last-7-days health (who decided: model / rules / fallback).
+    [HasPermission("vita.view")]
+    [HttpGet("agents")]
+    public async Task<IActionResult> Agents() => Reply(await _vita.GetAsync("agents", null, Actor));
+
+    [HasPermission("vita.view")]
+    [HttpGet("agents/stats")]
+    public async Task<IActionResult> AgentStats([FromQuery] int? days) =>
+        Reply(await _vita.GetAsync("agents/stats", Query(("days", days?.ToString())), Actor));
+
+    // Judge vs people's relabels: agreement, Cohen's kappa, confusion, false downgrades / alarms.
+    [HasPermission("vita.view")]
+    [HttpGet("agents/calibration")]
+    public async Task<IActionResult> AgentCalibration([FromQuery] int? days) =>
+        Reply(await _vita.GetAsync("agents/calibration", Query(("days", days?.ToString())), Actor));
+
+    // What each agent did in a run (titles, who asked whom); one step in full (inputs and outputs are redacted by Vita).
+    [HasPermission("vita.view")]
+    [HttpGet("agents/runs/{runId}/steps")]
+    public async Task<IActionResult> RunSteps(string runId, [FromQuery] string? agent) =>
+        Reply(await _vita.GetAsync($"agents/runs/{Uri.EscapeDataString(runId)}/steps", Query(("agent", agent)), Actor));
+
+    [HasPermission("vita.view")]
+    [HttpGet("agents/steps/{stepId}")]
+    public async Task<IActionResult> AgentStep(string stepId) =>
+        Reply(await _vita.GetAsync($"agents/steps/{Uri.EscapeDataString(stepId)}", null, Actor));
+
+    [HasPermission("vita.view")]
+    [HttpGet("agents/{name}")]
+    public async Task<IActionResult> Agent(string name) =>
+        Reply(await _vita.GetAsync($"agents/{Uri.EscapeDataString(name)}", null, Actor));
+
+    [HasPermission("vita.view")]
+    [HttpGet("agents/{name}/examples/{example}")]
+    public async Task<IActionResult> AgentExample(string name, string example) =>
+        Reply(await _vita.GetAsync($"agents/{Uri.EscapeDataString(name)}/examples/{Uri.EscapeDataString(example)}", null, Actor));
+
+    // The repo's vita-baseline.txt: findings that predate Vita, each with its latest state (still failing | fixed | not run yet).
+    [HasPermission("vita.view")]
+    [HttpGet("repos/{repo}/baseline")]
+    public async Task<IActionResult> Baseline(string repo) =>
+        Reply(await _vita.GetAsync($"repos/{Uri.EscapeDataString(repo)}/baseline", null, Actor));
+
+    // Latest AI-agent suite results (router /chat, route-symptom, WhatsApp bot): per suite and scenario, pass rates over trials.
+    [HasPermission("vita.view")]
+    [HttpGet("ai-evals")]
+    public async Task<IActionResult> AiEvals([FromQuery] string? repo, [FromQuery] int? limit) =>
+        Reply(await _vita.GetAsync("ai-evals", Query(("repo", repo), ("limit", limit?.ToString())), Actor));
+
+    // ---- agents playground and baseline (vita.manage) ---------------------------------------------------------------
+
+    // Run one agent on its own: { input | example, mode: rules | llm }. Nothing is saved or sent; llm mode spends model tokens
+    // (capped by Vita) and is audited with the signed-in user.
+    [HasPermission("vita.manage")]
+    [HttpPost("agents/{name}/try")]
+    public async Task<IActionResult> TryAgent(string name, [FromBody] JsonElement body) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"agents/{Uri.EscapeDataString(name)}/try", WithActor(body), Actor, longRunning: true));
+
+    // Re-run a recorded step: { mode: replay | rules | llm } -> the differences from the run.
+    [HasPermission("vita.manage")]
+    [HttpPost("agents/steps/{stepId}/replay")]
+    public async Task<IActionResult> ReplayStep(string stepId, [FromBody] JsonElement body) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"agents/steps/{Uri.EscapeDataString(stepId)}/replay", WithActor(body), Actor, longRunning: true));
+
+    // What a baseline written from a run would list: { run_id, skills? } -> { count, by_skill, keys }. Writes nothing.
+    [HasPermission("vita.manage")]
+    [HttpPost("repos/{repo}/baseline/preview")]
+    public async Task<IActionResult> PreviewBaseline(string repo, [FromBody] JsonElement body) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"repos/{Uri.EscapeDataString(repo)}/baseline/preview", WithActor(body), Actor));
 
     // ---- approve (vita.approve) ------------------------------------------------------------------------------------
+    // Record known findings from a run: { run_id, skills?, note? }. Listed failures stop blocking the PR gate (they still run and
+    // are reported), so this is an approval. Vita writes vita-baseline.txt next to the repo's vita.yaml and returns its text.
+    [HasPermission("vita.approve")]
+    [HttpPost("repos/{repo}/baseline")]
+    public async Task<IActionResult> WriteBaseline(string repo, [FromBody] JsonElement body) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"repos/{Uri.EscapeDataString(repo)}/baseline", WithActor(body), Actor));
+
 
     // Kill switch, budgets, monthly cap and model router. Four-eyes: vita.approve AND a non-empty reason, which Vita records
     // with the signed-in user. The body is passed through (any of kill_switch / budgets / models / monthly_inr_cap) with
@@ -286,11 +388,28 @@ public class VitaController : ControllerBase
         Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"lessons/{Uri.EscapeDataString(id)}/revert", new { actor = Actor }, Actor));
 
     // Escape -> verified case: { broken_sha, fixed_sha }. Cases that FAIL on broken and PASS on fixed become ACTIVE (hence vita.approve)
-    // and the escape is closed; the rest are retired. Slow (a PR stack per build): raise Vita:TimeoutSeconds where it is used.
+    // and the escape is closed; the rest are retired. Slow (a PR stack per build): goes through the "VitaLong" client.
     [HasPermission("vita.approve")]
     [HttpPost("escapes/{repo}/{id}/verify")]
     public async Task<IActionResult> VerifyEscape(string repo, string id, [FromBody] JsonElement body) =>
-        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"escapes/{Uri.EscapeDataString(repo)}/{Uri.EscapeDataString(id)}/verify", WithActor(body), Actor));
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"escapes/{Uri.EscapeDataString(repo)}/{Uri.EscapeDataString(id)}/verify", WithActor(body), Actor, longRunning: true));
+
+    // A human correction of the Judge on the Runs tab: { label: bug | flaky | environment | bad-test }. The Learner mines these.
+    [HasPermission("vita.approve")]
+    [HttpPost("results/{id}/label")]
+    public async Task<IActionResult> LabelResult(string id, [FromBody] JsonElement body) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"results/{Uri.EscapeDataString(id)}/label", WithActor(body), Actor));
+
+    // Make a classifier model version ACTIVE (the current one is retired) or retire one. Body { reason? }.
+    [HasPermission("vita.approve")]
+    [HttpPost("classifier/{id}/promote")]
+    public async Task<IActionResult> PromoteClassifier(string id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] VitaCaseDecisionRequest? body = null) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"classifier/{Uri.EscapeDataString(id)}/promote", new { actor = Actor, reason = body?.Reason ?? "" }, Actor));
+
+    [HasPermission("vita.approve")]
+    [HttpPost("classifier/{id}/retire")]
+    public async Task<IActionResult> RetireClassifier(string id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] VitaCaseDecisionRequest? body = null) =>
+        Reply(await _vita.SendObjectAsync(HttpMethod.Post, $"classifier/{Uri.EscapeDataString(id)}/retire", new { actor = Actor, reason = body?.Reason ?? "" }, Actor));
 
     // shadow -> active: the case starts counting towards the PR gate. Vita wants { actor, reason }; the actor is always the signed-in user.
     [HasPermission("vita.approve")]
@@ -322,7 +441,10 @@ public class VitaController : ControllerBase
 
     private bool IsValidServiceKey(string? key)
     {
-        var expected = _configuration["ServiceAuth:VitaServiceKey"];
+        // Vita's worker pushes with its VITA_EVENTS_KEY; ServiceAuth:VitaEventsKey holds the same value (falls back to the
+        // shared VitaServiceKey for deployments that still use one key).
+        var events = _configuration["ServiceAuth:VitaEventsKey"];
+        var expected = string.IsNullOrWhiteSpace(events) || events.StartsWith('<') ? _configuration["ServiceAuth:VitaServiceKey"] : events;
         // The committed placeholder ("<set-via-env-...>") must never act as a real key.
         if (string.IsNullOrWhiteSpace(expected) || expected.StartsWith('<') || key == null) return false;
         return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
