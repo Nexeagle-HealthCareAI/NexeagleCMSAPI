@@ -51,6 +51,11 @@ public class CmsDbContext : DbContext
     public DbSet<WorkProjectAccessLog> WorkProjectAccessLogs => Set<WorkProjectAccessLog>();
     public DbSet<WorkPresence> WorkPresences => Set<WorkPresence>();
     public DbSet<WorkSessionLog> WorkSessionLogs => Set<WorkSessionLog>();
+    public DbSet<WorkChatChannel> WorkChatChannels => Set<WorkChatChannel>();
+    public DbSet<WorkChatMember> WorkChatMembers => Set<WorkChatMember>();
+    public DbSet<WorkChatMessage> WorkChatMessages => Set<WorkChatMessage>();
+    public DbSet<WorkChatMention> WorkChatMentions => Set<WorkChatMention>();
+    public DbSet<WorkNotification> WorkNotifications => Set<WorkNotification>();
     public DbSet<WorkSprint> WorkSprints => Set<WorkSprint>();
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
@@ -141,6 +146,45 @@ public class CmsDbContext : DbContext
             e.HasKey(x => x.LogId);
             e.Property(x => x.LogId).ValueGeneratedNever();
             e.Property(x => x.Action).HasMaxLength(20).IsRequired();
+        });
+
+        // Team chat (30_CMSDatabase_WorkChat.sql)
+        b.Entity<WorkChatChannel>(e =>
+        {
+            e.ToTable("WorkChatChannels");
+            e.HasKey(x => x.ChannelId);
+            e.Property(x => x.ChannelId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(10).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(80);
+            e.Property(x => x.DirectKey).HasMaxLength(80);
+        });
+
+        b.Entity<WorkChatMember>(e =>
+        {
+            e.ToTable("WorkChatMembers");
+            e.HasKey(x => new { x.ChannelId, x.UserId });
+        });
+
+        b.Entity<WorkChatMessage>(e =>
+        {
+            e.ToTable("WorkChatMessages");
+            e.HasKey(x => x.MessageId);
+            e.Property(x => x.MessageId).ValueGeneratedNever();
+            e.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+        });
+
+        b.Entity<WorkChatMention>(e =>
+        {
+            e.ToTable("WorkChatMentions");
+            e.HasKey(x => new { x.MessageId, x.UserId });
+        });
+
+        b.Entity<WorkNotification>(e =>
+        {
+            e.ToTable("WorkNotifications");
+            e.HasKey(x => x.NotificationId);
+            e.Property(x => x.NotificationId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(12).IsRequired();
         });
 
         // Activity (29_CMSDatabase_WorkActivity.sql)
