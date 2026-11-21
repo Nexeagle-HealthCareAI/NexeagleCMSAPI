@@ -47,6 +47,8 @@ public class CmsDbContext : DbContext
     public DbSet<CmsWhatsappTemplate> CmsWhatsappTemplates => Set<CmsWhatsappTemplate>();
     public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
     public DbSet<WorkStatus> WorkStatuses => Set<WorkStatus>();
+    public DbSet<WorkProjectMember> WorkProjectMembers => Set<WorkProjectMember>();
+    public DbSet<WorkProjectAccessLog> WorkProjectAccessLogs => Set<WorkProjectAccessLog>();
     public DbSet<WorkSprint> WorkSprints => Set<WorkSprint>();
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
@@ -122,6 +124,21 @@ public class CmsDbContext : DbContext
             e.HasIndex(x => x.Key).IsUnique();
             e.Property(x => x.Name).HasMaxLength(100).IsRequired();
             e.Property(x => x.Description).HasMaxLength(500);
+        });
+
+        // Board members (28_CMSDatabase_WorkBoardAccess.sql)
+        b.Entity<WorkProjectMember>(e =>
+        {
+            e.ToTable("WorkProjectMembers");
+            e.HasKey(x => new { x.ProjectId, x.UserId });
+        });
+
+        b.Entity<WorkProjectAccessLog>(e =>
+        {
+            e.ToTable("WorkProjectAccessLog");
+            e.HasKey(x => x.LogId);
+            e.Property(x => x.LogId).ValueGeneratedNever();
+            e.Property(x => x.Action).HasMaxLength(20).IsRequired();
         });
 
         b.Entity<WorkStatus>(e =>

@@ -668,6 +668,7 @@ public class WorkService : IWorkService
         Description = p.Description,
         SprintDays = p.SprintDays,
         IsArchived = p.IsArchived,
+        IsRestricted = p.IsRestricted,
         Statuses = statuses.OrderBy(st => st.SortOrder).ThenBy(st => st.Name).Select(MapStatus).ToList(),
     };
 

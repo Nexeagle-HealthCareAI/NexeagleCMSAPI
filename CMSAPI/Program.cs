@@ -157,6 +157,7 @@ builder.Services.AddScoped<IReferralCodeRepository, ReferralCodeRepository>();
 builder.Services.AddScoped<IReferralCodeService, ReferralCodeService>();
 builder.Services.AddScoped<IWorkRepository, WorkRepository>();
 builder.Services.AddScoped<IWorkService, WorkService>();
+builder.Services.AddScoped<IWorkAccessService, CMSAPI.Data.Services.WorkAccessService>();
 // Docs tab: uploaded files go to the MinIO store when it is configured; without it pages still work
 // and uploads are refused with a clear message.
 if (!string.IsNullOrWhiteSpace(builder.Configuration["Storage:Minio:AccessKey"])

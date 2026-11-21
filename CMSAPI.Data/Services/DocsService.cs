@@ -719,6 +719,8 @@ public class DocsService : IDocsService
         var items = await _db.WorkItems.AsNoTracking().Where(i => itemIds.Contains(i.WorkItemId) && !i.IsDeleted).ToListAsync();
         var projectIds = items.Select(i => i.ProjectId).Distinct().ToList();
         var projects = await _db.WorkProjects.AsNoTracking().Where(p => projectIds.Contains(p.ProjectId)).ToDictionaryAsync(p => p.ProjectId, p => p.Key);
+        // A members-only board's item shows its key here, never its title: opening it is checked by the board.
+        var closedBoards = (await _db.WorkProjects.AsNoTracking().Where(p => projectIds.Contains(p.ProjectId) && p.IsRestricted).Select(p => p.ProjectId).ToListAsync()).ToHashSet();
 
         var people = new List<Guid>();
         if (doc.CreatedByUserId.HasValue) people.Add(doc.CreatedByUserId.Value);
@@ -745,7 +747,7 @@ public class DocsService : IDocsService
                 WorkItemId = i.WorkItemId,
                 ProjectId = i.ProjectId,
                 Key = (projects.TryGetValue(i.ProjectId, out var key) ? key : "?") + "-" + i.Number,
-                Title = i.Title,
+                Title = closedBoards.Contains(i.ProjectId) ? "Item on a members-only board" : i.Title,
                 ItemType = i.ItemType,
             })
             .ToList();

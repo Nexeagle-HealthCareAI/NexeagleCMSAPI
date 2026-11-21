@@ -131,6 +131,8 @@ public class WorkProjectDto
     public string? Description { get; set; }
     public int SprintDays { get; set; }
     public bool IsArchived { get; set; }
+    /// <summary>True when only its members can open it.</summary>
+    public bool IsRestricted { get; set; }
     /// <summary>The board's columns, in order.</summary>
     public List<WorkStatusDto> Statuses { get; set; } = new List<WorkStatusDto>();
 }
@@ -271,4 +273,39 @@ public class SaveWorkStatusRequest
 public class ReorderWorkStatusesRequest
 {
     public List<Guid> StatusIds { get; set; } = new List<Guid>();
+}
+
+// ── Who can open a board ────────────────────────────────────────────────────────────────────────
+
+/// <summary>The person asking, for the "may they open this board" check.</summary>
+public class WorkActor
+{
+    public Guid? UserId { get; set; }
+    /// <summary>work.members: opens every board and chooses its members.</summary>
+    public bool SeesAllBoards { get; set; }
+}
+
+public class WorkAccessLogDto
+{
+    /// <summary>MemberAdded, MemberRemoved, Restricted or Opened.</summary>
+    public string Action { get; set; } = string.Empty;
+    public string? TargetName { get; set; }
+    public string ActorName { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+}
+
+public class WorkProjectAccessDto
+{
+    public Guid ProjectId { get; set; }
+    public bool IsRestricted { get; set; }
+    public List<Guid> MemberUserIds { get; set; } = new List<Guid>();
+    /// <summary>Newest first, the last 50.</summary>
+    public List<WorkAccessLogDto> Log { get; set; } = new List<WorkAccessLogDto>();
+}
+
+/// <summary>The whole access state of one board: the switch and every member.</summary>
+public class SaveWorkProjectAccessRequest
+{
+    public bool IsRestricted { get; set; }
+    public List<Guid> MemberUserIds { get; set; } = new List<Guid>();
 }
