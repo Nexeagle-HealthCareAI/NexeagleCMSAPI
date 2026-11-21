@@ -309,3 +309,74 @@ public class SaveWorkProjectAccessRequest
     public bool IsRestricted { get; set; }
     public List<Guid> MemberUserIds { get; set; } = new List<Guid>();
 }
+
+// ── Activity log, sign-ins and "last seen" ──────────────────────────────────────────────────────
+
+public static class WorkActivityRules
+{
+    public static readonly string[] SessionKinds = { "Opened", "CopyBlocked", "PrintBlocked", "SaveBlocked", "ScreenshotKey" };
+    /// <summary>The groups the log can be narrowed to.</summary>
+    public static readonly string[] Sources = { "items", "comments", "access", "docs", "sessions" };
+    /// <summary>Someone seen within this many minutes counts as on the board now.</summary>
+    public const int OnlineMinutes = 2;
+}
+
+/// <summary>What the browser tells the API while the board is open.</summary>
+public class WorkPresenceRequest
+{
+    /// <summary>True on the first call after the page opens: that is logged as a visit.</summary>
+    public bool Opened { get; set; }
+    /// <summary>Something the protected screen stopped: CopyBlocked, PrintBlocked, SaveBlocked or ScreenshotKey.</summary>
+    public string? Event { get; set; }
+}
+
+/// <summary>A person's own sign-in details, shown to them on the board.</summary>
+public class WorkMyPresenceDto
+{
+    public DateTime? OpenedAt { get; set; }
+    public string? Ip { get; set; }
+    public DateTime? PreviousOpenedAt { get; set; }
+    public string? PreviousIp { get; set; }
+}
+
+public class WorkLastSeenDto
+{
+    public Guid UserId { get; set; }
+    public DateTime LastSeenAt { get; set; }
+    public bool IsOnline { get; set; }
+}
+
+/// <summary>What to show in the activity log. Everything is optional.</summary>
+public class WorkActivityQuery
+{
+    public Guid? UserId { get; set; }
+    public Guid? ProjectId { get; set; }
+    /// <summary>items, comments, access, docs or sessions.</summary>
+    public string? Source { get; set; }
+    public DateTime? From { get; set; }
+    /// <summary>Rows older than this moment: pass the last row's CreatedAt to load the next page.</summary>
+    public DateTime? Before { get; set; }
+    public int Take { get; set; } = 100;
+}
+
+/// <summary>One line of the activity log.</summary>
+public class WorkActivityDto
+{
+    /// <summary>items, comments, access, docs or sessions.</summary>
+    public string Source { get; set; } = string.Empty;
+    /// <summary>items: the changed field. Otherwise the action (MemberAdded, open, Opened, commented...).</summary>
+    public string Action { get; set; } = string.Empty;
+    public Guid? ActorUserId { get; set; }
+    public string ActorName { get; set; } = string.Empty;
+    public string? ProjectKey { get; set; }
+    public Guid? WorkItemId { get; set; }
+    public string? ItemKey { get; set; }
+    public string? ItemTitle { get; set; }
+    public Guid? DocumentId { get; set; }
+    public string? DocumentName { get; set; }
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+    /// <summary>Extra words: the person added, the folder, the address and browser of a visit.</summary>
+    public string? Detail { get; set; }
+    public DateTime CreatedAt { get; set; }
+}

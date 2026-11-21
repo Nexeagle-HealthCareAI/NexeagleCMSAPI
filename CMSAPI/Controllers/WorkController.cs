@@ -16,6 +16,7 @@ namespace CMSAPI.Controllers;
 //   work.delete   delete an item, remove a board column, remove someone else's comment.
 //                 Separate from work.manage on purpose: deleting loses work, so few people hold it.
 //   work.members  choose who can open each board; opens every board.
+//   work.audit    read the activity log (who did what, visits, what the protected screen stopped).
 // Boards: a project is open to everyone with work.view until it is switched to members-only. After
 // that only its members (and work.members holders) can open it; for everyone else the project, its
 // items, columns and comments answer "not found" (IWorkAccessService).
@@ -28,11 +29,13 @@ public class WorkController : ControllerBase
 {
     private readonly IWorkService _service;
     private readonly IWorkAccessService _access;
+    private readonly IWorkActivityService _activity;
 
-    public WorkController(IWorkService service, IWorkAccessService access)
+    public WorkController(IWorkService service, IWorkAccessService access, IWorkActivityService activity)
     {
         _service = service;
         _access = access;
+        _activity = activity;
     }
 
     private WorkActor Actor => new WorkActor { UserId = ActorId, SeesAllBoards = Has("work.members") };
@@ -118,6 +121,34 @@ public class WorkController : ControllerBase
     [HasPermission("work.view")]
     public async Task<IActionResult> GetUsers() =>
         Ok(new { success = true, data = await _service.GetUsersAsync() });
+
+    // ── Presence and the activity log ───────────────────────────────────────────────────────────
+
+    // The open board calls this about once a minute: { opened: true } on the first call of a visit,
+    // { event: "CopyBlocked" } when the protected screen stops something. Answers with the caller's
+    // own sign-in details (this visit and the one before).
+    [HttpPost("presence")]
+    [HasPermission("work.view")]
+    public async Task<IActionResult> Touch([FromBody] WorkPresenceRequest? request)
+    {
+        if (!ActorId.HasValue) return Unauthorized(new { success = false, message = "Sign in again." });
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var agent = Request.Headers.UserAgent.ToString();
+        var mine = await _activity.TouchAsync(ActorId.Value, request ?? new WorkPresenceRequest(), ip, agent);
+        return Ok(new { success = true, data = mine });
+    }
+
+    // When each person was last on the board, and whether they are on it now.
+    [HttpGet("presence")]
+    [HasPermission("work.view")]
+    public async Task<IActionResult> GetLastSeen() =>
+        Ok(new { success = true, data = await _activity.GetLastSeenAsync() });
+
+    // ?userId= &projectId= &source=items|comments|access|docs|sessions &from= &before= &take=
+    [HttpGet("activity")]
+    [HasPermission("work.audit")]
+    public async Task<IActionResult> GetActivity([FromQuery] WorkActivityQuery query) =>
+        Ok(new { success = true, data = await _activity.GetActivityAsync(query, Actor, Has("docs.sensitive")) });
 
     // ── Items ───────────────────────────────────────────────────────────────────────────────────
 
