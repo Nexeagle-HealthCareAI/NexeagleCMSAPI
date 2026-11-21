@@ -51,8 +51,67 @@ public class CmsDbContext : DbContext
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
     public DbSet<WorkItemHistory> WorkItemHistories => Set<WorkItemHistory>();
+    public DbSet<DocFolder> DocFolders => Set<DocFolder>();
+    public DbSet<DocFolderAccess> DocFolderAccesses => Set<DocFolderAccess>();
+    public DbSet<WorkDocument> WorkDocuments => Set<WorkDocument>();
+    public DbSet<DocVersion> DocVersions => Set<DocVersion>();
+    public DbSet<DocAccessLog> DocAccessLogs => Set<DocAccessLog>();
+    public DbSet<WorkItemDocument> WorkItemDocuments => Set<WorkItemDocument>();
     protected override void OnModelCreating(ModelBuilder b)
     {
+        // ── Daily Work Board, Docs tab (27_CMSDatabase_WorkDocs.sql) ──
+        b.Entity<DocFolder>(e =>
+        {
+            e.ToTable("DocFolders");
+            e.HasKey(x => x.FolderId);
+            e.Property(x => x.FolderId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            e.Property(x => x.Color).HasMaxLength(20);
+        });
+
+        b.Entity<DocFolderAccess>(e =>
+        {
+            e.ToTable("DocFolderAccess");
+            e.HasKey(x => new { x.FolderId, x.UserId });
+        });
+
+        b.Entity<WorkDocument>(e =>
+        {
+            e.ToTable("Documents");
+            e.HasKey(x => x.DocumentId);
+            e.Property(x => x.DocumentId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(10).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(255).IsRequired();
+            e.Property(x => x.ContentType).HasMaxLength(150);
+            e.Property(x => x.StorageKey).HasMaxLength(400);
+            e.Property(x => x.Tags).HasMaxLength(400);
+        });
+
+        b.Entity<DocVersion>(e =>
+        {
+            e.ToTable("DocVersions");
+            e.HasKey(x => x.VersionId);
+            e.Property(x => x.VersionId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(255).IsRequired();
+            e.Property(x => x.ContentType).HasMaxLength(150);
+            e.Property(x => x.StorageKey).HasMaxLength(400);
+        });
+
+        b.Entity<DocAccessLog>(e =>
+        {
+            e.ToTable("DocAccessLog");
+            e.HasKey(x => x.LogId);
+            e.Property(x => x.LogId).ValueGeneratedNever();
+            e.Property(x => x.Action).HasMaxLength(30).IsRequired();
+            e.Property(x => x.Detail).HasMaxLength(300);
+        });
+
+        b.Entity<WorkItemDocument>(e =>
+        {
+            e.ToTable("WorkItemDocuments");
+            e.HasKey(x => new { x.WorkItemId, x.DocumentId });
+        });
+
         // ── Daily Work Board (26_CMSDatabase_WorkBoard.sql) ──
         b.Entity<WorkProject>(e =>
         {

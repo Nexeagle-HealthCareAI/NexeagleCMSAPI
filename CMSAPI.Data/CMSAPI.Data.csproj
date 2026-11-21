@@ -12,6 +12,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.2" />
+    <!-- S3-compatible client for the MinIO store that keeps uploaded documents (Storage/DocFileStores.cs).
+         Same package and version range as 1RADAPI. -->
+    <PackageReference Include="AWSSDK.S3" Version="3.7.*" />
   </ItemGroup>
 
   <ItemGroup>
