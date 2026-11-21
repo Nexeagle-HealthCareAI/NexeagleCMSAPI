@@ -58,7 +58,8 @@ public class ChatController : ControllerBase
         if (limit < 1) limit = 10;
         if (limit > 100) limit = 100;
 
-        var query = _context.SupportSessions.AsNoTracking().AsQueryable();
+        // Chats in which nobody wrote anything (a visitor opened the widget and left) are not history.
+        var query = _context.SupportSessions.AsNoTracking().Where(s => s.Messages.Any());
 
         if (from.HasValue) query = query.Where(s => s.StartedAt >= from.Value.ToDateTime(TimeOnly.MinValue));
         if (to.HasValue) query = query.Where(s => s.StartedAt < to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue));
