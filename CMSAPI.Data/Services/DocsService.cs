@@ -245,6 +245,13 @@ public class DocsService : IDocsService
         return WorkResult<DocDetailDto>.Success(await BuildDetailAsync(doc, map));
     }
 
+    public async Task<bool> CanSeeDocumentAsync(DocsActor actor, Guid documentId)
+    {
+        var map = await LoadMapAsync(actor);
+        var doc = await _db.WorkDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.DocumentId == documentId && !d.IsDeleted);
+        return doc != null && map.CanSeeDocument(doc);
+    }
+
     // ── Documents: writing ──────────────────────────────────────────────────────────────────────
 
     public async Task<WorkResult<DocDetailDto>> CreatePageAsync(DocsActor actor, CreateDocPageRequest request)

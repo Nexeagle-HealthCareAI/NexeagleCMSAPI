@@ -21,6 +21,8 @@ public interface IDocsService
     /// <summary>Documents in one folder (null: the top level), or everywhere the caller can see when search has text.</summary>
     Task<WorkResult<List<DocDto>>> ListAsync(DocsActor actor, Guid? folderId, string? search);
     Task<WorkResult<DocDetailDto>> GetAsync(DocsActor actor, Guid documentId);
+    /// <summary>True when the document exists, is not in the bin and this person may open it. Logs nothing.</summary>
+    Task<bool> CanSeeDocumentAsync(DocsActor actor, Guid documentId);
     Task<WorkResult<DocDetailDto>> CreatePageAsync(DocsActor actor, CreateDocPageRequest request);
     Task<WorkResult<DocDetailDto>> SavePageAsync(DocsActor actor, Guid documentId, SaveDocPageRequest request);
     Task<WorkResult<DocDetailDto>> UpdateAsync(DocsActor actor, Guid documentId, UpdateDocRequest request);

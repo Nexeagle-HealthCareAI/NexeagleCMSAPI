@@ -51,6 +51,9 @@ public class CmsDbContext : DbContext
     public DbSet<WorkProjectAccessLog> WorkProjectAccessLogs => Set<WorkProjectAccessLog>();
     public DbSet<WorkPresence> WorkPresences => Set<WorkPresence>();
     public DbSet<WorkSessionLog> WorkSessionLogs => Set<WorkSessionLog>();
+    public DbSet<DocComment> DocComments => Set<DocComment>();
+    public DbSet<DocCommentMention> DocCommentMentions => Set<DocCommentMention>();
+    public DbSet<DocNotification> DocNotifications => Set<DocNotification>();
     public DbSet<WorkChatChannel> WorkChatChannels => Set<WorkChatChannel>();
     public DbSet<WorkChatMember> WorkChatMembers => Set<WorkChatMember>();
     public DbSet<WorkChatMessage> WorkChatMessages => Set<WorkChatMessage>();
@@ -146,6 +149,30 @@ public class CmsDbContext : DbContext
             e.HasKey(x => x.LogId);
             e.Property(x => x.LogId).ValueGeneratedNever();
             e.Property(x => x.Action).HasMaxLength(20).IsRequired();
+        });
+
+        // Comments on documents (31_CMSDatabase_DocComments.sql)
+        b.Entity<DocComment>(e =>
+        {
+            e.ToTable("DocComments");
+            e.HasKey(x => x.CommentId);
+            e.Property(x => x.CommentId).ValueGeneratedNever();
+            e.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.Quote).HasMaxLength(500);
+        });
+
+        b.Entity<DocCommentMention>(e =>
+        {
+            e.ToTable("DocCommentMentions");
+            e.HasKey(x => new { x.CommentId, x.UserId });
+        });
+
+        b.Entity<DocNotification>(e =>
+        {
+            e.ToTable("DocNotifications");
+            e.HasKey(x => x.NotificationId);
+            e.Property(x => x.NotificationId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(12).IsRequired();
         });
 
         // Team chat (30_CMSDatabase_WorkChat.sql)
