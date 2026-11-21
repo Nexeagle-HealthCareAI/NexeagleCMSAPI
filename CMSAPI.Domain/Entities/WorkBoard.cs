@@ -123,3 +123,29 @@ public class WorkItemHistory
     public string? NewValue { get; set; }
     public DateTime CreatedAt { get; set; }
 }
+
+/// <summary>When a person was last on the board (29_CMSDatabase_WorkActivity.sql).</summary>
+public class WorkPresence
+{
+    public Guid UserId { get; set; }
+    public DateTime LastSeenAt { get; set; }
+    public DateTime? LastOpenedAt { get; set; }
+    public DateTime? PreviousOpenedAt { get; set; }
+    public string? PreviousIp { get; set; }
+    public string? LastIp { get; set; }
+    public string? LastUserAgent { get; set; }
+}
+
+/// <summary>
+/// Someone opened the board, or the protected screen stopped something.
+/// Kind: Opened, CopyBlocked, PrintBlocked, SaveBlocked or ScreenshotKey.
+/// </summary>
+public class WorkSessionLog
+{
+    public Guid LogId { get; set; }
+    public Guid UserId { get; set; }
+    public string Kind { get; set; } = string.Empty;
+    public string? Ip { get; set; }
+    public string? UserAgent { get; set; }
+    public DateTime CreatedAt { get; set; }
+}

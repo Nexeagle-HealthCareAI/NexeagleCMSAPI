@@ -49,6 +49,8 @@ public class CmsDbContext : DbContext
     public DbSet<WorkStatus> WorkStatuses => Set<WorkStatus>();
     public DbSet<WorkProjectMember> WorkProjectMembers => Set<WorkProjectMember>();
     public DbSet<WorkProjectAccessLog> WorkProjectAccessLogs => Set<WorkProjectAccessLog>();
+    public DbSet<WorkPresence> WorkPresences => Set<WorkPresence>();
+    public DbSet<WorkSessionLog> WorkSessionLogs => Set<WorkSessionLog>();
     public DbSet<WorkSprint> WorkSprints => Set<WorkSprint>();
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
@@ -139,6 +141,27 @@ public class CmsDbContext : DbContext
             e.HasKey(x => x.LogId);
             e.Property(x => x.LogId).ValueGeneratedNever();
             e.Property(x => x.Action).HasMaxLength(20).IsRequired();
+        });
+
+        // Activity (29_CMSDatabase_WorkActivity.sql)
+        b.Entity<WorkPresence>(e =>
+        {
+            e.ToTable("WorkPresence");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.UserId).ValueGeneratedNever();
+            e.Property(x => x.LastIp).HasMaxLength(64);
+            e.Property(x => x.PreviousIp).HasMaxLength(64);
+            e.Property(x => x.LastUserAgent).HasMaxLength(300);
+        });
+
+        b.Entity<WorkSessionLog>(e =>
+        {
+            e.ToTable("WorkSessionLog");
+            e.HasKey(x => x.LogId);
+            e.Property(x => x.LogId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Ip).HasMaxLength(64);
+            e.Property(x => x.UserAgent).HasMaxLength(300);
         });
 
         b.Entity<WorkStatus>(e =>
