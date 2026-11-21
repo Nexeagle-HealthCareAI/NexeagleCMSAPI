@@ -168,6 +168,7 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration["Storage:Minio:AccessKey"])
 else
     builder.Services.AddSingleton<IDocFileStore, CMSAPI.Data.Storage.MissingDocFileStore>();
 builder.Services.AddScoped<IDocsService, CMSAPI.Data.Services.DocsService>();
+builder.Services.AddScoped<IDocCommentsService, CMSAPI.Data.Services.DocCommentsService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddSingleton<IEmailService, EmailService>();
