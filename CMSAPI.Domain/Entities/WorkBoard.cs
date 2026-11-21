@@ -14,7 +14,29 @@ public class WorkProject
     public int NextNumber { get; set; } = 1;
     public int SprintDays { get; set; } = 11;
     public bool IsArchived { get; set; }
+    /// <summary>True: only its members (WorkProjectMember) and holders of work.members can open it.</summary>
+    public bool IsRestricted { get; set; }
     public Guid? CreatedByUserId { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>Someone who may open a members-only project (28_CMSDatabase_WorkBoardAccess.sql).</summary>
+public class WorkProjectMember
+{
+    public Guid ProjectId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? AddedByUserId { get; set; }
+    public DateTime AddedAt { get; set; }
+}
+
+/// <summary>Who changed a project's access. Action: MemberAdded, MemberRemoved, Restricted or Opened.</summary>
+public class WorkProjectAccessLog
+{
+    public Guid LogId { get; set; }
+    public Guid ProjectId { get; set; }
+    public string Action { get; set; } = string.Empty;
+    public Guid? TargetUserId { get; set; }
+    public Guid? ActorUserId { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

@@ -157,6 +157,15 @@ builder.Services.AddScoped<IReferralCodeRepository, ReferralCodeRepository>();
 builder.Services.AddScoped<IReferralCodeService, ReferralCodeService>();
 builder.Services.AddScoped<IWorkRepository, WorkRepository>();
 builder.Services.AddScoped<IWorkService, WorkService>();
+builder.Services.AddScoped<IWorkAccessService, CMSAPI.Data.Services.WorkAccessService>();
+// Docs tab: uploaded files go to the MinIO store when it is configured; without it pages still work
+// and uploads are refused with a clear message.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Storage:Minio:AccessKey"])
+    && !string.IsNullOrWhiteSpace(builder.Configuration["Storage:PublicBaseUrl"] ?? builder.Configuration["Storage:Minio:PublicBaseUrl"]))
+    builder.Services.AddSingleton<IDocFileStore, CMSAPI.Data.Storage.MinioDocFileStore>();
+else
+    builder.Services.AddSingleton<IDocFileStore, CMSAPI.Data.Storage.MissingDocFileStore>();
+builder.Services.AddScoped<IDocsService, CMSAPI.Data.Services.DocsService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddSingleton<IEmailService, EmailService>();
