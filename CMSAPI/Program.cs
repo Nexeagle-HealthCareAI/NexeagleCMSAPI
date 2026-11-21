@@ -155,6 +155,8 @@ builder.Services.AddScoped<ICmsAdminService, CmsAdminService>();
 builder.Services.AddScoped<ICmsPartnerService, CmsPartnerService>();
 builder.Services.AddScoped<IReferralCodeRepository, ReferralCodeRepository>();
 builder.Services.AddScoped<IReferralCodeService, ReferralCodeService>();
+builder.Services.AddScoped<IWorkRepository, WorkRepository>();
+builder.Services.AddScoped<IWorkService, WorkService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddSingleton<IEmailService, EmailService>();

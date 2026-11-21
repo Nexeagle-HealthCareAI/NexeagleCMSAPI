@@ -45,8 +45,71 @@ public class CmsDbContext : DbContext
     public DbSet<CmsCampaign> CmsCampaigns => Set<CmsCampaign>();
     public DbSet<CmsSocialPost> CmsSocialPosts => Set<CmsSocialPost>();
     public DbSet<CmsWhatsappTemplate> CmsWhatsappTemplates => Set<CmsWhatsappTemplate>();
+    public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
+    public DbSet<WorkSprint> WorkSprints => Set<WorkSprint>();
+    public DbSet<WorkItem> WorkItems => Set<WorkItem>();
+    public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
+    public DbSet<WorkItemHistory> WorkItemHistories => Set<WorkItemHistory>();
     protected override void OnModelCreating(ModelBuilder b)
     {
+        // ── Daily Work Board (26_CMSDatabase_WorkBoard.sql) ──
+        b.Entity<WorkProject>(e =>
+        {
+            e.ToTable("WorkProjects");
+            e.HasKey(x => x.ProjectId);
+            e.Property(x => x.ProjectId).ValueGeneratedNever();
+            e.Property(x => x.Key).HasMaxLength(10).IsRequired();
+            e.HasIndex(x => x.Key).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(500);
+        });
+
+        b.Entity<WorkSprint>(e =>
+        {
+            e.ToTable("WorkSprints");
+            e.HasKey(x => x.SprintId);
+            e.Property(x => x.SprintId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Goal).HasMaxLength(500);
+            e.Property(x => x.State).HasMaxLength(20).IsRequired();
+            e.Property(x => x.StartDate).HasColumnType("date");
+            e.Property(x => x.EndDate).HasColumnType("date");
+        });
+
+        b.Entity<WorkItem>(e =>
+        {
+            e.ToTable("WorkItems");
+            e.HasKey(x => x.WorkItemId);
+            e.Property(x => x.WorkItemId).ValueGeneratedNever();
+            e.Property(x => x.ItemType).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            e.Property(x => x.StoryPoints).HasColumnType("decimal(5,1)");
+            e.Property(x => x.Labels).HasMaxLength(400);
+            e.Property(x => x.DueDate).HasColumnType("date");
+            e.Property(x => x.BlockedReason).HasMaxLength(300);
+            e.HasIndex(x => new { x.ProjectId, x.Number }).IsUnique();
+        });
+
+        b.Entity<WorkItemComment>(e =>
+        {
+            e.ToTable("WorkItemComments");
+            e.HasKey(x => x.CommentId);
+            e.Property(x => x.CommentId).ValueGeneratedNever();
+            e.Property(x => x.Body).IsRequired();
+        });
+
+        b.Entity<WorkItemHistory>(e =>
+        {
+            e.ToTable("WorkItemHistory");
+            e.HasKey(x => x.HistoryId);
+            e.Property(x => x.HistoryId).ValueGeneratedNever();
+            e.Property(x => x.Field).HasMaxLength(40).IsRequired();
+            e.Property(x => x.OldValue).HasMaxLength(400);
+            e.Property(x => x.NewValue).HasMaxLength(400);
+        });
+
         b.Entity<CmsPartner>(e =>
         {
             e.ToTable("CmsPartners");
