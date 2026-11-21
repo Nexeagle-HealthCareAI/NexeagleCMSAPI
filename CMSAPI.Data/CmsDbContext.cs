@@ -45,8 +45,227 @@ public class CmsDbContext : DbContext
     public DbSet<CmsCampaign> CmsCampaigns => Set<CmsCampaign>();
     public DbSet<CmsSocialPost> CmsSocialPosts => Set<CmsSocialPost>();
     public DbSet<CmsWhatsappTemplate> CmsWhatsappTemplates => Set<CmsWhatsappTemplate>();
+    public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
+    public DbSet<WorkStatus> WorkStatuses => Set<WorkStatus>();
+    public DbSet<WorkProjectMember> WorkProjectMembers => Set<WorkProjectMember>();
+    public DbSet<WorkProjectAccessLog> WorkProjectAccessLogs => Set<WorkProjectAccessLog>();
+    public DbSet<WorkPresence> WorkPresences => Set<WorkPresence>();
+    public DbSet<WorkSessionLog> WorkSessionLogs => Set<WorkSessionLog>();
+    public DbSet<WorkChatChannel> WorkChatChannels => Set<WorkChatChannel>();
+    public DbSet<WorkChatMember> WorkChatMembers => Set<WorkChatMember>();
+    public DbSet<WorkChatMessage> WorkChatMessages => Set<WorkChatMessage>();
+    public DbSet<WorkChatMention> WorkChatMentions => Set<WorkChatMention>();
+    public DbSet<WorkNotification> WorkNotifications => Set<WorkNotification>();
+    public DbSet<WorkSprint> WorkSprints => Set<WorkSprint>();
+    public DbSet<WorkItem> WorkItems => Set<WorkItem>();
+    public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
+    public DbSet<WorkItemHistory> WorkItemHistories => Set<WorkItemHistory>();
+    public DbSet<DocFolder> DocFolders => Set<DocFolder>();
+    public DbSet<DocFolderAccess> DocFolderAccesses => Set<DocFolderAccess>();
+    public DbSet<WorkDocument> WorkDocuments => Set<WorkDocument>();
+    public DbSet<DocVersion> DocVersions => Set<DocVersion>();
+    public DbSet<DocAccessLog> DocAccessLogs => Set<DocAccessLog>();
+    public DbSet<WorkItemDocument> WorkItemDocuments => Set<WorkItemDocument>();
     protected override void OnModelCreating(ModelBuilder b)
     {
+        // ── Daily Work Board, Docs tab (27_CMSDatabase_WorkDocs.sql) ──
+        b.Entity<DocFolder>(e =>
+        {
+            e.ToTable("DocFolders");
+            e.HasKey(x => x.FolderId);
+            e.Property(x => x.FolderId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            e.Property(x => x.Color).HasMaxLength(20);
+        });
+
+        b.Entity<DocFolderAccess>(e =>
+        {
+            e.ToTable("DocFolderAccess");
+            e.HasKey(x => new { x.FolderId, x.UserId });
+        });
+
+        b.Entity<WorkDocument>(e =>
+        {
+            e.ToTable("Documents");
+            e.HasKey(x => x.DocumentId);
+            e.Property(x => x.DocumentId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(10).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(255).IsRequired();
+            e.Property(x => x.ContentType).HasMaxLength(150);
+            e.Property(x => x.StorageKey).HasMaxLength(400);
+            e.Property(x => x.Tags).HasMaxLength(400);
+        });
+
+        b.Entity<DocVersion>(e =>
+        {
+            e.ToTable("DocVersions");
+            e.HasKey(x => x.VersionId);
+            e.Property(x => x.VersionId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(255).IsRequired();
+            e.Property(x => x.ContentType).HasMaxLength(150);
+            e.Property(x => x.StorageKey).HasMaxLength(400);
+        });
+
+        b.Entity<DocAccessLog>(e =>
+        {
+            e.ToTable("DocAccessLog");
+            e.HasKey(x => x.LogId);
+            e.Property(x => x.LogId).ValueGeneratedNever();
+            e.Property(x => x.Action).HasMaxLength(30).IsRequired();
+            e.Property(x => x.Detail).HasMaxLength(300);
+        });
+
+        b.Entity<WorkItemDocument>(e =>
+        {
+            e.ToTable("WorkItemDocuments");
+            e.HasKey(x => new { x.WorkItemId, x.DocumentId });
+        });
+
+        // ── Daily Work Board (26_CMSDatabase_WorkBoard.sql) ──
+        b.Entity<WorkProject>(e =>
+        {
+            e.ToTable("WorkProjects");
+            e.HasKey(x => x.ProjectId);
+            e.Property(x => x.ProjectId).ValueGeneratedNever();
+            e.Property(x => x.Key).HasMaxLength(10).IsRequired();
+            e.HasIndex(x => x.Key).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(500);
+        });
+
+        // Board members (28_CMSDatabase_WorkBoardAccess.sql)
+        b.Entity<WorkProjectMember>(e =>
+        {
+            e.ToTable("WorkProjectMembers");
+            e.HasKey(x => new { x.ProjectId, x.UserId });
+        });
+
+        b.Entity<WorkProjectAccessLog>(e =>
+        {
+            e.ToTable("WorkProjectAccessLog");
+            e.HasKey(x => x.LogId);
+            e.Property(x => x.LogId).ValueGeneratedNever();
+            e.Property(x => x.Action).HasMaxLength(20).IsRequired();
+        });
+
+        // Team chat (30_CMSDatabase_WorkChat.sql)
+        b.Entity<WorkChatChannel>(e =>
+        {
+            e.ToTable("WorkChatChannels");
+            e.HasKey(x => x.ChannelId);
+            e.Property(x => x.ChannelId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(10).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(80);
+            e.Property(x => x.DirectKey).HasMaxLength(80);
+        });
+
+        b.Entity<WorkChatMember>(e =>
+        {
+            e.ToTable("WorkChatMembers");
+            e.HasKey(x => new { x.ChannelId, x.UserId });
+        });
+
+        b.Entity<WorkChatMessage>(e =>
+        {
+            e.ToTable("WorkChatMessages");
+            e.HasKey(x => x.MessageId);
+            e.Property(x => x.MessageId).ValueGeneratedNever();
+            e.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+        });
+
+        b.Entity<WorkChatMention>(e =>
+        {
+            e.ToTable("WorkChatMentions");
+            e.HasKey(x => new { x.MessageId, x.UserId });
+        });
+
+        b.Entity<WorkNotification>(e =>
+        {
+            e.ToTable("WorkNotifications");
+            e.HasKey(x => x.NotificationId);
+            e.Property(x => x.NotificationId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(12).IsRequired();
+        });
+
+        // Activity (29_CMSDatabase_WorkActivity.sql)
+        b.Entity<WorkPresence>(e =>
+        {
+            e.ToTable("WorkPresence");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.UserId).ValueGeneratedNever();
+            e.Property(x => x.LastIp).HasMaxLength(64);
+            e.Property(x => x.PreviousIp).HasMaxLength(64);
+            e.Property(x => x.LastUserAgent).HasMaxLength(300);
+        });
+
+        b.Entity<WorkSessionLog>(e =>
+        {
+            e.ToTable("WorkSessionLog");
+            e.HasKey(x => x.LogId);
+            e.Property(x => x.LogId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Ip).HasMaxLength(64);
+            e.Property(x => x.UserAgent).HasMaxLength(300);
+        });
+
+        b.Entity<WorkStatus>(e =>
+        {
+            e.ToTable("WorkStatuses");
+            e.HasKey(x => x.StatusId);
+            e.Property(x => x.StatusId).ValueGeneratedNever();
+            e.Property(x => x.Key).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Category).HasMaxLength(20).IsRequired();
+            e.HasIndex(x => new { x.ProjectId, x.Key }).IsUnique();
+        });
+
+        b.Entity<WorkSprint>(e =>
+        {
+            e.ToTable("WorkSprints");
+            e.HasKey(x => x.SprintId);
+            e.Property(x => x.SprintId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Goal).HasMaxLength(500);
+            e.Property(x => x.State).HasMaxLength(20).IsRequired();
+            e.Property(x => x.StartDate).HasColumnType("date");
+            e.Property(x => x.EndDate).HasColumnType("date");
+        });
+
+        b.Entity<WorkItem>(e =>
+        {
+            e.ToTable("WorkItems");
+            e.HasKey(x => x.WorkItemId);
+            e.Property(x => x.WorkItemId).ValueGeneratedNever();
+            e.Property(x => x.ItemType).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            e.Property(x => x.StoryPoints).HasColumnType("decimal(5,1)");
+            e.Property(x => x.Labels).HasMaxLength(400);
+            e.Property(x => x.StartDate).HasColumnType("date");
+            e.Property(x => x.DueDate).HasColumnType("date");
+            e.Property(x => x.BlockedReason).HasMaxLength(300);
+            e.HasIndex(x => new { x.ProjectId, x.Number }).IsUnique();
+        });
+
+        b.Entity<WorkItemComment>(e =>
+        {
+            e.ToTable("WorkItemComments");
+            e.HasKey(x => x.CommentId);
+            e.Property(x => x.CommentId).ValueGeneratedNever();
+            e.Property(x => x.Body).IsRequired();
+        });
+
+        b.Entity<WorkItemHistory>(e =>
+        {
+            e.ToTable("WorkItemHistory");
+            e.HasKey(x => x.HistoryId);
+            e.Property(x => x.HistoryId).ValueGeneratedNever();
+            e.Property(x => x.Field).HasMaxLength(40).IsRequired();
+            e.Property(x => x.OldValue).HasMaxLength(400);
+            e.Property(x => x.NewValue).HasMaxLength(400);
+        });
+
         b.Entity<CmsPartner>(e =>
         {
             e.ToTable("CmsPartners");
