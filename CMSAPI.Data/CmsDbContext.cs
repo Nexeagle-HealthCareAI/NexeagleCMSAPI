@@ -46,6 +46,7 @@ public class CmsDbContext : DbContext
     public DbSet<CmsSocialPost> CmsSocialPosts => Set<CmsSocialPost>();
     public DbSet<CmsWhatsappTemplate> CmsWhatsappTemplates => Set<CmsWhatsappTemplate>();
     public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
+    public DbSet<WorkStatus> WorkStatuses => Set<WorkStatus>();
     public DbSet<WorkSprint> WorkSprints => Set<WorkSprint>();
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
@@ -62,6 +63,17 @@ public class CmsDbContext : DbContext
             e.HasIndex(x => x.Key).IsUnique();
             e.Property(x => x.Name).HasMaxLength(100).IsRequired();
             e.Property(x => x.Description).HasMaxLength(500);
+        });
+
+        b.Entity<WorkStatus>(e =>
+        {
+            e.ToTable("WorkStatuses");
+            e.HasKey(x => x.StatusId);
+            e.Property(x => x.StatusId).ValueGeneratedNever();
+            e.Property(x => x.Key).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Category).HasMaxLength(20).IsRequired();
+            e.HasIndex(x => new { x.ProjectId, x.Key }).IsUnique();
         });
 
         b.Entity<WorkSprint>(e =>
@@ -83,10 +95,11 @@ public class CmsDbContext : DbContext
             e.Property(x => x.WorkItemId).ValueGeneratedNever();
             e.Property(x => x.ItemType).HasMaxLength(20).IsRequired();
             e.Property(x => x.Title).HasMaxLength(300).IsRequired();
-            e.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(40).IsRequired();
             e.Property(x => x.Priority).HasMaxLength(20).IsRequired();
             e.Property(x => x.StoryPoints).HasColumnType("decimal(5,1)");
             e.Property(x => x.Labels).HasMaxLength(400);
+            e.Property(x => x.StartDate).HasColumnType("date");
             e.Property(x => x.DueDate).HasColumnType("date");
             e.Property(x => x.BlockedReason).HasMaxLength(300);
             e.HasIndex(x => new { x.ProjectId, x.Number }).IsUnique();

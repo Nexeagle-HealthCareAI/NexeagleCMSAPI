@@ -10,6 +10,17 @@ public interface IWorkRepository
     Task<bool> ProjectKeyExistsAsync(string key);
     Task AddProjectAsync(WorkProject project);
 
+    /// <summary>Columns of one project, in board order.</summary>
+    Task<List<WorkStatus>> GetStatusesAsync(Guid projectId);
+    /// <summary>Columns of every project.</summary>
+    Task<List<WorkStatus>> GetAllStatusesAsync();
+    Task<WorkStatus?> GetStatusAsync(Guid statusId);
+    Task AddStatusesAsync(List<WorkStatus> statuses);
+    Task SaveStatusesAsync(List<WorkStatus> statuses);
+    Task<int> CountItemsInStatusAsync(Guid projectId, string statusKey);
+    /// <summary>Removes a column. Items still in it (deleted ones included) move to moveToKey first.</summary>
+    Task DeleteStatusAsync(WorkStatus status, string moveToKey);
+
     Task<List<WorkItem>> GetItemsAsync(Guid projectId);
     Task<WorkItem?> GetItemAsync(Guid workItemId);
     Task<List<WorkItem>> GetChildrenAsync(Guid parentId);

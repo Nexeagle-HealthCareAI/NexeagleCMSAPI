@@ -18,6 +18,22 @@ public class WorkProject
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>
+/// A column of a project's board. Items store Key, which never changes; Name is what people see and
+/// can be renamed. Category says what the column means: not started, under way, or finished.
+/// </summary>
+public class WorkStatus
+{
+    public Guid StatusId { get; set; }
+    public Guid ProjectId { get; set; }
+    public string Key { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    /// <summary>ToDo, InProgress or Done.</summary>
+    public string Category { get; set; } = "ToDo";
+    public int SortOrder { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
 /// <summary>A time box. The sprint screens come in the next release; items already carry SprintId.</summary>
 public class WorkSprint
 {
@@ -42,6 +58,7 @@ public class WorkItem
     public string Title { get; set; } = string.Empty;
     /// <summary>Markdown from the editor.</summary>
     public string? Description { get; set; }
+    /// <summary>The Key of one of the project's WorkStatus rows.</summary>
     public string Status { get; set; } = "ToDo";
     public string Priority { get; set; } = "Medium";
     public decimal? StoryPoints { get; set; }
@@ -51,6 +68,7 @@ public class WorkItem
     public Guid? SprintId { get; set; }
     /// <summary>Comma-separated, lower case.</summary>
     public string? Labels { get; set; }
+    public DateTime? StartDate { get; set; }
     public DateTime? DueDate { get; set; }
     public bool IsBlocked { get; set; }
     public string? BlockedReason { get; set; }

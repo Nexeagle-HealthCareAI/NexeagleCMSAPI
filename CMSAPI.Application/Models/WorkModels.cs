@@ -6,7 +6,36 @@ namespace CMSAPI.Application.Models;
 public static class WorkRules
 {
     public static readonly string[] ItemTypes = { "Epic", "Feature", "Story", "Task", "Bug", "Subtask" };
-    public static readonly string[] Statuses = { "ToDo", "InProgress", "InReview", "Done" };
+    /// <summary>What a board column means, whatever it is called.</summary>
+    public static readonly string[] Categories = { "ToDo", "InProgress", "Done" };
+    public const string DoneCategory = "Done";
+    public const int MaxStatusNameLength = 40;
+    public const int MaxStatusesPerProject = 12;
+
+    /// <summary>The columns every new project starts with: key, name, category.</summary>
+    public static readonly (string Key, string Name, string Category)[] DefaultStatuses =
+    {
+        ("ToDo", "To do", "ToDo"),
+        ("InProgress", "In progress", "InProgress"),
+        ("InReview", "In review", "InProgress"),
+        ("Done", "Done", "Done"),
+    };
+
+    /// <summary>A key for a new column made from its name: letters and digits only, e.g. "Ready for QA" -> "ReadyForQa".</summary>
+    public static string StatusKeyFrom(string name)
+    {
+        var key = new System.Text.StringBuilder();
+        var startOfWord = true;
+        foreach (var c in name)
+        {
+            if (!char.IsLetterOrDigit(c)) { startOfWord = true; continue; }
+            key.Append(startOfWord ? char.ToUpperInvariant(c) : char.ToLowerInvariant(c));
+            startOfWord = false;
+        }
+        var result = key.ToString();
+        if (result.Length > 30) result = result.Substring(0, 30);
+        return result.Length == 0 ? "Column" : result;
+    }
     public static readonly string[] Priorities = { "Highest", "High", "Medium", "Low", "Lowest" };
 
     public const int MaxTitleLength = 300;
@@ -85,6 +114,15 @@ public class WorkResult<T>
         new WorkResult<T> { Ok = false, Status = status, Message = message };
 }
 
+public class WorkStatusDto
+{
+    public Guid StatusId { get; set; }
+    public string Key { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+}
+
 public class WorkProjectDto
 {
     public Guid ProjectId { get; set; }
@@ -93,6 +131,8 @@ public class WorkProjectDto
     public string? Description { get; set; }
     public int SprintDays { get; set; }
     public bool IsArchived { get; set; }
+    /// <summary>The board's columns, in order.</summary>
+    public List<WorkStatusDto> Statuses { get; set; } = new List<WorkStatusDto>();
 }
 
 public class WorkUserDto
@@ -111,7 +151,10 @@ public class WorkItemDto
     public int Number { get; set; }
     public string ItemType { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
+    /// <summary>The column's key. StatusName and StatusCategory describe it.</summary>
     public string Status { get; set; } = string.Empty;
+    public string StatusName { get; set; } = string.Empty;
+    public string StatusCategory { get; set; } = string.Empty;
     public string Priority { get; set; } = string.Empty;
     public decimal? StoryPoints { get; set; }
     public Guid? AssigneeUserId { get; set; }
@@ -124,6 +167,8 @@ public class WorkItemDto
     public string? ParentType { get; set; }
     public Guid? SprintId { get; set; }
     public List<string> Labels { get; set; } = new List<string>();
+    /// <summary>yyyy-MM-dd, or null.</summary>
+    public string? StartDate { get; set; }
     /// <summary>yyyy-MM-dd, or null.</summary>
     public string? DueDate { get; set; }
     public bool IsBlocked { get; set; }
@@ -183,6 +228,8 @@ public class CreateWorkItemRequest
     public Guid? ParentId { get; set; }
     public List<string>? Labels { get; set; }
     /// <summary>yyyy-MM-dd, or null.</summary>
+    public string? StartDate { get; set; }
+    /// <summary>yyyy-MM-dd, or null.</summary>
     public string? DueDate { get; set; }
 }
 
@@ -201,6 +248,7 @@ public class UpdateWorkItemRequest
     public Guid? ParentId { get; set; }
     public Guid? SprintId { get; set; }
     public List<string>? Labels { get; set; }
+    public string? StartDate { get; set; }
     public string? DueDate { get; set; }
     public bool IsBlocked { get; set; }
     public string? BlockedReason { get; set; }
@@ -209,4 +257,18 @@ public class UpdateWorkItemRequest
 public class AddWorkCommentRequest
 {
     public string Body { get; set; } = string.Empty;
+}
+
+/// <summary>A board column to add or change.</summary>
+public class SaveWorkStatusRequest
+{
+    public string Name { get; set; } = string.Empty;
+    /// <summary>ToDo, InProgress or Done.</summary>
+    public string Category { get; set; } = "InProgress";
+}
+
+/// <summary>Every column of the project, in the order they should appear.</summary>
+public class ReorderWorkStatusesRequest
+{
+    public List<Guid> StatusIds { get; set; } = new List<Guid>();
 }

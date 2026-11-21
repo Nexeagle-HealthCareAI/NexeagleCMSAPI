@@ -12,7 +12,7 @@ namespace CMSAPI.Controllers;
 // Permissions:
 //   work.view     every GET here
 //   work.edit     create and change items, add comments, remove your own comment
-//   work.manage   add a project, delete an item, remove anyone's comment
+//   work.manage   add a project, change the board's columns, delete an item, remove anyone's comment
 // Tables are in CMSDatabase (26_CMSDatabase_WorkBoard.sql). Rules live in WorkService.
 [Authorize]
 [ApiController]
@@ -56,6 +56,31 @@ public class WorkController : ControllerBase
     [HasPermission("work.manage")]
     public async Task<IActionResult> CreateProject([FromBody] CreateWorkProjectRequest request) =>
         Reply(await _service.CreateProjectAsync(request, ActorId));
+
+    // ── Board columns (a project's statuses) ────────────────────────────────────────────────────
+    // They come back with each project (GET projects). { name, category: ToDo | InProgress | Done }.
+
+    [HttpPost("projects/{projectId:guid}/statuses")]
+    [HasPermission("work.manage")]
+    public async Task<IActionResult> AddStatus(Guid projectId, [FromBody] SaveWorkStatusRequest request) =>
+        Reply(await _service.AddStatusAsync(projectId, request));
+
+    [HttpPut("statuses/{id:guid}")]
+    [HasPermission("work.manage")]
+    public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] SaveWorkStatusRequest request) =>
+        Reply(await _service.UpdateStatusAsync(id, request));
+
+    // { statusIds: [...] } with every column once, in the new order.
+    [HttpPut("projects/{projectId:guid}/statuses/order")]
+    [HasPermission("work.manage")]
+    public async Task<IActionResult> ReorderStatuses(Guid projectId, [FromBody] ReorderWorkStatusesRequest request) =>
+        Reply(await _service.ReorderStatusesAsync(projectId, request));
+
+    // ?moveTo=<key of another column> is needed when the column still holds items.
+    [HttpDelete("statuses/{id:guid}")]
+    [HasPermission("work.manage")]
+    public async Task<IActionResult> DeleteStatus(Guid id, [FromQuery] string? moveTo) =>
+        Reply(await _service.DeleteStatusAsync(id, moveTo));
 
     // People an item can be assigned to: active CMS staff.
     [HttpGet("users")]

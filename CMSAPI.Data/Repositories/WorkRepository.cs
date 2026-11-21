@@ -37,6 +37,58 @@ public class WorkRepository : IWorkRepository
         await _db.SaveChangesAsync();
     }
 
+    public async Task<List<WorkStatus>> GetStatusesAsync(Guid projectId)
+    {
+        return await _db.WorkStatuses
+            .Where(s => s.ProjectId == projectId)
+            .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
+            .ToListAsync();
+    }
+
+    public async Task<List<WorkStatus>> GetAllStatusesAsync()
+    {
+        return await _db.WorkStatuses.AsNoTracking()
+            .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
+            .ToListAsync();
+    }
+
+    public async Task<WorkStatus?> GetStatusAsync(Guid statusId)
+    {
+        return await _db.WorkStatuses.FirstOrDefaultAsync(s => s.StatusId == statusId);
+    }
+
+    public async Task AddStatusesAsync(List<WorkStatus> statuses)
+    {
+        _db.WorkStatuses.AddRange(statuses);
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task SaveStatusesAsync(List<WorkStatus> statuses)
+    {
+        foreach (var status in statuses)
+        {
+            if (_db.Entry(status).State == EntityState.Detached) _db.WorkStatuses.Update(status);
+        }
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task<int> CountItemsInStatusAsync(Guid projectId, string statusKey)
+    {
+        return await _db.WorkItems.CountAsync(i => i.ProjectId == projectId && i.Status == statusKey && !i.IsDeleted);
+    }
+
+    public async Task DeleteStatusAsync(WorkStatus status, string moveToKey)
+    {
+        // Deleted items are moved too, so no row is left pointing at a column that is gone.
+        var items = await _db.WorkItems
+            .Where(i => i.ProjectId == status.ProjectId && i.Status == status.Key)
+            .ToListAsync();
+        foreach (var item in items) item.Status = moveToKey;
+        if (_db.Entry(status).State == EntityState.Detached) _db.WorkStatuses.Attach(status);
+        _db.WorkStatuses.Remove(status);
+        await _db.SaveChangesAsync();
+    }
+
     public async Task<List<WorkItem>> GetItemsAsync(Guid projectId)
     {
         return await _db.WorkItems.AsNoTracking()

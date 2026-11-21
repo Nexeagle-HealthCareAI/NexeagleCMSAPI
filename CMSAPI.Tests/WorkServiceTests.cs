@@ -54,6 +54,7 @@ public class WorkServiceTests
         ParentId = item.ParentId,
         SprintId = item.SprintId,
         Labels = item.Labels,
+        StartDate = item.StartDate,
         DueDate = item.DueDate,
         IsBlocked = item.IsBlocked,
         BlockedReason = item.BlockedReason,
@@ -101,6 +102,8 @@ public class WorkServiceTests
         Assert.Equal("HMS-1", first.Data!.Key);
         Assert.Equal("HMS-2", second.Data!.Key);
         Assert.Equal("ToDo", first.Data.Status);
+        Assert.Equal("To do", first.Data.StatusName);
+        Assert.Equal("ToDo", first.Data.StatusCategory);
         Assert.Equal("Asha Rao", first.Data.ReporterName);
         Assert.Contains(first.Data.History, h => h.Field == "created");
     }
@@ -179,8 +182,8 @@ public class WorkServiceTests
         Assert.Equal("InProgress", result.Data!.Status);
         Assert.Equal("Bilal Khan", result.Data.AssigneeName);
         var status = result.Data.History.Single(h => h.Field == "status");
-        Assert.Equal("ToDo", status.OldValue);
-        Assert.Equal("InProgress", status.NewValue);
+        Assert.Equal("To do", status.OldValue);      // history keeps the column names people saw
+        Assert.Equal("In progress", status.NewValue);
         Assert.Equal("Bilal Khan", result.Data.History.Single(h => h.Field == "assignee").NewValue);
         Assert.Equal(3, result.Data.History.Count); // created + status + assignee
     }
@@ -255,6 +258,114 @@ public class WorkServiceTests
         var result = await board.Service.UpdateItemAsync(created.Data!.WorkItemId, change, Asha);
 
         Assert.False(result.Ok);
+    }
+
+    [Fact]
+    public async Task UpdateItem_StartDateAfterDueDate_IsRefused()
+    {
+        var board = await NewBoardAsync();
+        var created = await board.Service.CreateItemAsync(New(board, "Task", "Plan"), Asha);
+        var change = Same(created.Data!);
+        change.StartDate = "2026-12-10";
+        change.DueDate = "2026-12-01";
+
+        var refused = await board.Service.UpdateItemAsync(created.Data!.WorkItemId, change, Asha);
+        Assert.False(refused.Ok);
+
+        change.DueDate = "2026-12-20";
+        var saved = await board.Service.UpdateItemAsync(created.Data.WorkItemId, change, Asha);
+        Assert.Equal("2026-12-10", saved.Data!.StartDate);
+        Assert.Contains(saved.Data.History, h => h.Field == "startDate");
+    }
+
+    // ── Board columns ───────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Projects_ComeWithTheFourStartingColumns_InOrder()
+    {
+        var board = await NewBoardAsync();
+
+        var project = (await board.Service.GetProjectsAsync()).Single();
+
+        Assert.Equal(new[] { "ToDo", "InProgress", "InReview", "Done" }, project.Statuses.Select(st => st.Key).ToArray());
+        Assert.Equal("Done", project.Statuses.Last().Category);
+    }
+
+    [Fact]
+    public async Task AddStatus_MakesAKeyFromTheName_AndItemsCanMoveThere()
+    {
+        var board = await NewBoardAsync();
+
+        var added = await board.Service.AddStatusAsync(board.ProjectId, new SaveWorkStatusRequest { Name = "Ready for QA", Category = "InProgress" });
+        Assert.True(added.Ok);
+        Assert.Equal("ReadyForQa", added.Data!.Key);
+
+        var repeat = await board.Service.AddStatusAsync(board.ProjectId, new SaveWorkStatusRequest { Name = "ready for qa", Category = "InProgress" });
+        Assert.Equal(409, repeat.Status);
+
+        var task = await board.Service.CreateItemAsync(New(board, "Task", "Test the bill"), Asha);
+        var change = Same(task.Data!);
+        change.Status = "ReadyForQa";
+        var moved = await board.Service.UpdateItemAsync(task.Data!.WorkItemId, change, Asha);
+        Assert.Equal("Ready for QA", moved.Data!.StatusName);
+        Assert.Null(moved.Data.CompletedAt);
+
+        change.Status = "NoSuchColumn";
+        Assert.False((await board.Service.UpdateItemAsync(task.Data.WorkItemId, change, Asha)).Ok);
+    }
+
+    [Fact]
+    public async Task RenameStatus_KeepsTheKey_SoItemsStayInTheColumn()
+    {
+        var board = await NewBoardAsync();
+        var task = await board.Service.CreateItemAsync(New(board, "Task", "Something"), Asha);
+        var toDo = (await board.Service.GetProjectsAsync()).Single().Statuses.First();
+
+        var renamed = await board.Service.UpdateStatusAsync(toDo.StatusId, new SaveWorkStatusRequest { Name = "Backlog", Category = "ToDo" });
+
+        Assert.Equal("ToDo", renamed.Data!.Key);
+        Assert.Equal("Backlog", (await board.Service.GetItemAsync(task.Data!.WorkItemId)).Data!.StatusName);
+    }
+
+    [Fact]
+    public async Task DeleteStatus_WithItems_NeedsSomewhereToMoveThem()
+    {
+        var board = await NewBoardAsync();
+        var task = await board.Service.CreateItemAsync(New(board, "Task", "Something"), Asha);
+        var statuses = (await board.Service.GetProjectsAsync()).Single().Statuses;
+        var toDo = statuses.Single(st => st.Key == "ToDo");
+
+        var refused = await board.Service.DeleteStatusAsync(toDo.StatusId, null);
+        Assert.Equal(409, refused.Status);
+
+        var removed = await board.Service.DeleteStatusAsync(toDo.StatusId, "InProgress");
+        Assert.True(removed.Ok);
+        Assert.Equal("InProgress", (await board.Service.GetItemAsync(task.Data!.WorkItemId)).Data!.Status);
+        Assert.Equal(3, (await board.Service.GetProjectsAsync()).Single().Statuses.Count);
+    }
+
+    [Fact]
+    public async Task TheLastDoneColumn_CannotBeRemovedOrChangedToSomethingElse()
+    {
+        var board = await NewBoardAsync();
+        var done = (await board.Service.GetProjectsAsync()).Single().Statuses.Single(st => st.Key == "Done");
+
+        Assert.Equal(400, (await board.Service.DeleteStatusAsync(done.StatusId, "ToDo")).Status);
+        Assert.Equal(400, (await board.Service.UpdateStatusAsync(done.StatusId, new SaveWorkStatusRequest { Name = "Done", Category = "InProgress" })).Status);
+    }
+
+    [Fact]
+    public async Task ReorderStatuses_SavesTheNewOrder_AndRefusesAPartialList()
+    {
+        var board = await NewBoardAsync();
+        var statuses = (await board.Service.GetProjectsAsync()).Single().Statuses;
+        var reversed = statuses.Select(st => st.StatusId).Reverse().ToList();
+
+        var saved = await board.Service.ReorderStatusesAsync(board.ProjectId, new ReorderWorkStatusesRequest { StatusIds = reversed });
+        Assert.Equal(new[] { "Done", "InReview", "InProgress", "ToDo" }, saved.Data!.Select(st => st.Key).ToArray());
+
+        var partial = await board.Service.ReorderStatusesAsync(board.ProjectId, new ReorderWorkStatusesRequest { StatusIds = reversed.Take(2).ToList() });
+        Assert.Equal(400, partial.Status);
     }
 
     // ── Deleting ────────────────────────────────────────────────────────────────────────────────
