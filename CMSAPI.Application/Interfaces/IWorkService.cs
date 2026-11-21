@@ -21,6 +21,6 @@ public interface IWorkService
     Task<WorkResult<bool>> DeleteItemAsync(Guid workItemId, Guid? actorUserId);
 
     Task<WorkResult<WorkCommentDto>> AddCommentAsync(Guid workItemId, AddWorkCommentRequest request, Guid? actorUserId);
-    /// <summary>People remove their own comments; canManage lets someone remove anyone's.</summary>
+    /// <summary>People remove their own comments; canManage (the work.delete permission) lets someone remove anyone's.</summary>
     Task<WorkResult<bool>> DeleteCommentAsync(Guid commentId, Guid? actorUserId, bool canManage);
 }

@@ -12,7 +12,9 @@ namespace CMSAPI.Controllers;
 // Permissions:
 //   work.view     every GET here
 //   work.edit     create and change items, add comments, remove your own comment
-//   work.manage   add a project, change the board's columns, delete an item, remove anyone's comment
+//   work.manage   add a project; add, rename and reorder the board's columns
+//   work.delete   delete an item, remove a board column, remove someone else's comment.
+//                 Separate from work.manage on purpose: deleting loses work, so few people hold it.
 // Tables are in CMSDatabase (26_CMSDatabase_WorkBoard.sql). Rules live in WorkService.
 [Authorize]
 [ApiController]
@@ -78,7 +80,7 @@ public class WorkController : ControllerBase
 
     // ?moveTo=<key of another column> is needed when the column still holds items.
     [HttpDelete("statuses/{id:guid}")]
-    [HasPermission("work.manage")]
+    [HasPermission("work.delete")]
     public async Task<IActionResult> DeleteStatus(Guid id, [FromQuery] string? moveTo) =>
         Reply(await _service.DeleteStatusAsync(id, moveTo));
 
@@ -113,7 +115,7 @@ public class WorkController : ControllerBase
         Reply(await _service.UpdateItemAsync(id, request, ActorId));
 
     [HttpDelete("items/{id:guid}")]
-    [HasPermission("work.manage")]
+    [HasPermission("work.delete")]
     public async Task<IActionResult> DeleteItem(Guid id) =>
         Reply(await _service.DeleteItemAsync(id, ActorId));
 
@@ -127,5 +129,5 @@ public class WorkController : ControllerBase
     [HttpDelete("comments/{id:guid}")]
     [HasPermission("work.edit")]
     public async Task<IActionResult> DeleteComment(Guid id) =>
-        Reply(await _service.DeleteCommentAsync(id, ActorId, Has("work.manage")));
+        Reply(await _service.DeleteCommentAsync(id, ActorId, Has("work.delete")));
 }
