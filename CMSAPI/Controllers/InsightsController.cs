@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using CMSAPI.Application.Interfaces;
+using CMSAPI.Application.Models;
 using CMSAPI.Authorization;
 
 using Microsoft.AspNetCore.Authorization;
@@ -16,11 +17,22 @@ namespace CMSAPI.Controllers;
 public class InsightsController : ControllerBase
 {
     private readonly IInsightsService _service;
+    private readonly IWhatsAppInsightsService _whatsApp;
+    private readonly ISearchInsightsService _searches;
 
-    public InsightsController(IInsightsService service)
+    public InsightsController(IInsightsService service, IWhatsAppInsightsService whatsApp, ISearchInsightsService searches)
     {
         _service = service;
+        _whatsApp = whatsApp;
+        _searches = searches;
     }
+
+    // insights.contacts: full phone numbers of people who wrote to the WhatsApp bot, and their chats.
+    private bool CanSeeContacts =>
+        User.Claims.Any(c => c.Type == PermissionConstants.ClaimType && c.Value == "insights.contacts");
+
+    private ObjectResult BotUnavailable(WhatsAppBotUnavailableException ex) =>
+        StatusCode(503, new { success = false, message = "The WhatsApp bot's figures cannot be read right now. " + ex.Message });
 
     // from/to are inclusive "yyyy-MM-dd" India-time dates (omit both for the last 365 days, the
     // tracking retention period); site = doctordekho | nexeagle, omitted for both websites.
@@ -93,4 +105,77 @@ public class InsightsController : ControllerBase
         var result = await _service.GetSearchLogAsync(page, limit, from, to, search, sortBy, sortDir);
         return Ok(result);
     }
+
+    // ── WhatsApp bot, growth by week, Doctor Dekho by day ───────────────────────────────────────
+    // from/to are inclusive India-time days, "yyyy-MM-dd"; default the last 7 days; at most 92.
+
+    [HasPermission("insights.view")]
+    [HttpGet("whatsapp/daily")]
+    public async Task<IActionResult> GetWhatsAppDaily([FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null)
+    {
+        try { return Ok(await _whatsApp.DailyAsync(from, to)); }
+        catch (WhatsAppBotUnavailableException ex) { return BotUnavailable(ex); }
+    }
+
+    // What people searched for on Doctor Dekho and the WhatsApp bot, sorted into symptom, doctor's
+    // name, speciality, hospital and other words. channel: all | doctordekho | whatsapp. When the bot's
+    // database cannot be read, Doctor Dekho is still answered and whatsAppProblem says why.
+    [HasPermission("insights.view")]
+    [HttpGet("search-analysis")]
+    public async Task<IActionResult> GetSearchAnalysis([FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] string? channel = null)
+        => Ok(await _searches.SummaryAsync(from, to, channel));
+
+    // Every search, newest first. kind: all | symptom | doctor | specialty | hospital | other | nothing | booked.
+    // WhatsApp numbers are masked unless the reader holds insights.contacts.
+    [HasPermission("insights.view")]
+    [HttpGet("search-analysis/list")]
+    public async Task<IActionResult> GetSearchAnalysisList(
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null,
+        [FromQuery] string? channel = null, [FromQuery] string? kind = null, [FromQuery] string? search = null,
+        [FromQuery] int page = 1, [FromQuery] int limit = 25)
+    {
+        var query = new SearchListQuery { From = from, To = to, Channel = channel, Kind = kind, Search = search, Page = page, Limit = limit };
+        return Ok(await _searches.ListAsync(query, CanSeeContacts));
+    }
+
+    // outcome: all | booked | left | other. source: all | qr | direct. limit up to 1000 (for export).
+    // Numbers are masked unless the reader holds insights.contacts.
+    [HasPermission("insights.view")]
+    [HttpGet("whatsapp/people")]
+    public async Task<IActionResult> GetWhatsAppPeople(
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null,
+        [FromQuery] string? outcome = null, [FromQuery] string? source = null, [FromQuery] string? search = null,
+        [FromQuery] int page = 1, [FromQuery] int limit = 25)
+    {
+        var query = new WhatsAppPeopleQuery { From = from, To = to, Outcome = outcome, Source = source, Search = search, Page = page, Limit = limit };
+        try { return Ok(await _whatsApp.PeopleAsync(query, CanSeeContacts)); }
+        catch (WhatsAppBotUnavailableException ex) { return BotUnavailable(ex); }
+    }
+
+    // The whole conversation: what the person sent (names, ages, symptoms) and every step. Personal
+    // data, so it needs insights.contacts.
+    [HasPermission("insights.contacts")]
+    [HttpGet("whatsapp/people/{sessionId}")]
+    public async Task<IActionResult> GetWhatsAppTranscript(string sessionId)
+    {
+        try
+        {
+            var transcript = await _whatsApp.TranscriptAsync(sessionId);
+            return transcript == null ? NotFound(new { success = false, message = "Conversation not found." }) : Ok(transcript);
+        }
+        catch (WhatsAppBotUnavailableException ex) { return BotUnavailable(ex); }
+    }
+
+    // Week by week (Monday to Sunday, India time): people who wrote to the WhatsApp bot, visits to
+    // nexeagle.com and to Doctor Dekho. weeks: 2 to 52, default 12. The WhatsApp line is left empty
+    // (with whatsAppProblem saying why) when the bot's database cannot be read.
+    [HasPermission("insights.view")]
+    [HttpGet("growth/weekly")]
+    public async Task<IActionResult> GetWeeklyGrowth([FromQuery] int weeks = 12) =>
+        Ok(await _whatsApp.WeeklyGrowthAsync(weeks));
+
+    [HasPermission("insights.view")]
+    [HttpGet("doctordekho/daily")]
+    public async Task<IActionResult> GetDoctorDekhoDaily([FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null) =>
+        Ok(await _whatsApp.DoctorDekhoDailyAsync(from, to));
 }
