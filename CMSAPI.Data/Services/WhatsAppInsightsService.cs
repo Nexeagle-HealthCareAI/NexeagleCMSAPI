@@ -307,16 +307,35 @@ public class WhatsAppInsightsService : IWhatsAppInsightsService
 
     // ── Growth by week ──────────────────────────────────────────────────────────────────────────
 
-    public async Task<WeeklyGrowth> WeeklyGrowthAsync(int weeks)
+    /// <summary>Most weeks a chosen date range can cover.</summary>
+    public const int MaxCustomWeeks = 104;
+
+    public async Task<WeeklyGrowth> WeeklyGrowthAsync(int weeks, DateOnly? from = null, DateOnly? to = null)
     {
-        weeks = Math.Clamp(weeks, 2, MaxWeeks);
         var thisWeek = WhatsAppJourneys.WeekStart(TrackingTime.TodayIst());
-        var firstWeek = thisWeek.AddDays(-7 * (weeks - 1));
+        DateOnly firstWeek, lastWeek;
+        if (from.HasValue && to.HasValue)
+        {
+            // A chosen range: every week (Monday to Sunday) that has a day in it, never past this week.
+            var (a, b) = from.Value <= to.Value ? (from.Value, to.Value) : (to.Value, from.Value);
+            lastWeek = WhatsAppJourneys.WeekStart(b);
+            if (lastWeek > thisWeek) lastWeek = thisWeek;
+            firstWeek = WhatsAppJourneys.WeekStart(a);
+            if (firstWeek > lastWeek) firstWeek = lastWeek;
+            if ((lastWeek.DayNumber - firstWeek.DayNumber) / 7 + 1 > MaxCustomWeeks) firstWeek = lastWeek.AddDays(-7 * (MaxCustomWeeks - 1));
+        }
+        else
+        {
+            weeks = Math.Clamp(weeks, 2, MaxWeeks);
+            lastWeek = thisWeek;
+            firstWeek = thisWeek.AddDays(-7 * (weeks - 1));
+        }
         var fromUtc = TrackingTime.StartUtc(firstWeek);
+        var untilUtc = TrackingTime.StartUtc(lastWeek.AddDays(7));
 
         // Websites: one visit per browser session, counted in the week the visit started.
         var visits = await _db.WebsiteVisits.AsNoTracking()
-            .Where(v => !v.IsAutomated && v.VisitedAt >= fromUtc && (v.Site == SiteDoctorDekho || v.Site == SiteNexeagle))
+            .Where(v => !v.IsAutomated && v.VisitedAt >= fromUtc && v.VisitedAt < untilUtc && (v.Site == SiteDoctorDekho || v.Site == SiteNexeagle))
             .GroupBy(v => new { Visit = v.SessionId ?? v.VisitId.ToString(), v.Site })
             .Select(g => new { g.Key.Site, StartedAt = g.Min(v => v.VisitedAt) })
             .ToListAsync();
@@ -338,7 +357,7 @@ public class WhatsAppInsightsService : IWhatsAppInsightsService
             growth.WhatsAppProblem = ex.Message;
         }
 
-        for (var w = firstWeek; w <= thisWeek; w = w.AddDays(7))
+        for (var w = firstWeek; w <= lastWeek; w = w.AddDays(7))
         {
             growth.Weeks.Add(new WeeklyGrowthRow
             {

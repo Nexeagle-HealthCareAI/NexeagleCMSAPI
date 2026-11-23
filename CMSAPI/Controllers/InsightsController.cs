@@ -19,12 +19,14 @@ public class InsightsController : ControllerBase
     private readonly IInsightsService _service;
     private readonly IWhatsAppInsightsService _whatsApp;
     private readonly ISearchInsightsService _searches;
+    private readonly IAppointmentInsightsService _appointments;
 
-    public InsightsController(IInsightsService service, IWhatsAppInsightsService whatsApp, ISearchInsightsService searches)
+    public InsightsController(IInsightsService service, IWhatsAppInsightsService whatsApp, ISearchInsightsService searches, IAppointmentInsightsService appointments)
     {
         _service = service;
         _whatsApp = whatsApp;
         _searches = searches;
+        _appointments = appointments;
     }
 
     // insights.contacts: full phone numbers of people who wrote to the WhatsApp bot, and their chats.
@@ -167,12 +169,43 @@ public class InsightsController : ControllerBase
     }
 
     // Week by week (Monday to Sunday, India time): people who wrote to the WhatsApp bot, visits to
-    // nexeagle.com and to Doctor Dekho. weeks: 2 to 52, default 12. The WhatsApp line is left empty
-    // (with whatsAppProblem saying why) when the bot's database cannot be read.
+    // nexeagle.com and to Doctor Dekho. weeks: 2 to 52, default 12; or from + to (yyyy-MM-dd) for every
+    // week with a day in that range, up to 104 weeks. The WhatsApp line is left empty (with
+    // whatsAppProblem saying why) when the bot's database cannot be read.
     [HasPermission("insights.view")]
     [HttpGet("growth/weekly")]
-    public async Task<IActionResult> GetWeeklyGrowth([FromQuery] int weeks = 12) =>
-        Ok(await _whatsApp.WeeklyGrowthAsync(weeks));
+    public async Task<IActionResult> GetWeeklyGrowth([FromQuery] int weeks = 12, [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null) =>
+        Ok(await _whatsApp.WeeklyGrowthAsync(weeks, from, to));
+
+    // Every appointment in the HMS by channel: Doctor Dekho, the WhatsApp bot, the hospital desk.
+    // dateBy: booked (default; India-time booking day) | appointment. groupBy: day | week | month
+    // (default: by the length of the period). channel: all | online | doctordekho | whatsapp | hospital.
+    // Up to 731 days.
+    [HasPermission("insights.view")]
+    [HttpGet("appointments/trend")]
+    public async Task<IActionResult> GetAppointmentTrend(
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] string? dateBy = null,
+        [FromQuery] string? groupBy = null, [FromQuery] string? channel = null,
+        [FromQuery] Guid? hospitalId = null, [FromQuery] Guid? doctorId = null) =>
+        Ok(await _appointments.TrendAsync(new AppointmentQuery
+        {
+            From = from, To = to, DateBy = dateBy, GroupBy = groupBy, Channel = channel, HospitalId = hospitalId, DoctorId = doctorId,
+        }));
+
+    // The appointments behind the chart, newest first. Patient numbers are masked unless the reader
+    // holds insights.contacts. limit up to 1000 (for export).
+    [HasPermission("insights.view")]
+    [HttpGet("appointments/all")]
+    public async Task<IActionResult> GetAllAppointments(
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] string? dateBy = null,
+        [FromQuery] string? channel = null, [FromQuery] Guid? hospitalId = null, [FromQuery] Guid? doctorId = null,
+        [FromQuery] string? search = null, [FromQuery] bool includeCancelled = true,
+        [FromQuery] int page = 1, [FromQuery] int limit = 25) =>
+        Ok(await _appointments.ListAsync(new AppointmentQuery
+        {
+            From = from, To = to, DateBy = dateBy, Channel = channel, HospitalId = hospitalId, DoctorId = doctorId,
+            Search = search, IncludeCancelled = includeCancelled, Page = page, Limit = limit,
+        }, CanSeeContacts));
 
     [HasPermission("insights.view")]
     [HttpGet("doctordekho/daily")]
