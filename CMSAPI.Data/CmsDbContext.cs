@@ -524,5 +524,59 @@ public class CmsDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).ValueGeneratedNever();
         });
+
+        WorkBoardRelationships(b);
+    }
+
+    // The Daily Work Board's foreign keys, as the SQL scripts 26 to 31 declare them. EF needs to know
+    // them for one reason: when a parent row and its child rows are saved together (a work item and
+    // its "created" history line, a chat message and its mentions, a document and its first version)
+    // it inserts in whatever order it likes unless it knows which row depends on which. Without
+    // these, SQL Server refused the save with error 547 whenever the child happened to go first.
+    // Add a line here for every new foreign key between two tables that can be written together.
+    // WorkBoardModelTests checks the list.
+    private static void WorkBoardRelationships(ModelBuilder b)
+    {
+        // 26_CMSDatabase_WorkBoard.sql
+        Link<WorkStatus, WorkProject>(b, x => x.ProjectId);
+        Link<WorkSprint, WorkProject>(b, x => x.ProjectId);
+        Link<WorkItem, WorkProject>(b, x => x.ProjectId);
+        Link<WorkItem, WorkItem>(b, x => x.ParentId);
+        Link<WorkItem, WorkSprint>(b, x => x.SprintId);
+        Link<WorkItemComment, WorkItem>(b, x => x.WorkItemId);
+        Link<WorkItemHistory, WorkItem>(b, x => x.WorkItemId);
+        // 27_CMSDatabase_WorkDocs.sql
+        Link<DocFolder, DocFolder>(b, x => x.ParentId);
+        Link<DocFolderAccess, DocFolder>(b, x => x.FolderId);
+        Link<WorkDocument, DocFolder>(b, x => x.FolderId);
+        Link<DocVersion, WorkDocument>(b, x => x.DocumentId);
+        Link<WorkItemDocument, WorkItem>(b, x => x.WorkItemId);
+        Link<WorkItemDocument, WorkDocument>(b, x => x.DocumentId);
+        // 28_CMSDatabase_WorkBoardAccess.sql
+        Link<WorkProjectMember, WorkProject>(b, x => x.ProjectId);
+        Link<WorkProjectAccessLog, WorkProject>(b, x => x.ProjectId);
+        // 30_CMSDatabase_WorkChat.sql
+        Link<WorkChatChannel, WorkProject>(b, x => x.ProjectId);
+        Link<WorkChatMember, WorkChatChannel>(b, x => x.ChannelId);
+        Link<WorkChatMessage, WorkChatChannel>(b, x => x.ChannelId);
+        Link<WorkChatMessage, WorkItem>(b, x => x.WorkItemId);
+        Link<WorkChatMention, WorkChatMessage>(b, x => x.MessageId);
+        Link<WorkNotification, WorkChatChannel>(b, x => x.ChannelId);
+        Link<WorkNotification, WorkChatMessage>(b, x => x.MessageId);
+        // 31_CMSDatabase_DocComments.sql
+        Link<DocComment, WorkDocument>(b, x => x.DocumentId);
+        Link<DocComment, DocComment>(b, x => x.ParentId);
+        Link<DocCommentMention, DocComment>(b, x => x.CommentId);
+        Link<DocNotification, WorkDocument>(b, x => x.DocumentId);
+        Link<DocNotification, DocComment>(b, x => x.CommentId);
+    }
+
+    // Child rows point at the parent's key. Nothing is deleted on the parent's behalf: these tables
+    // hide rows instead of removing them, and the database's own rules stay in charge.
+    private static void Link<TChild, TParent>(ModelBuilder b, System.Linq.Expressions.Expression<Func<TChild, object?>> foreignKey)
+        where TChild : class
+        where TParent : class
+    {
+        b.Entity<TChild>().HasOne<TParent>().WithMany().HasForeignKey(foreignKey).OnDelete(DeleteBehavior.ClientNoAction);
     }
 }
