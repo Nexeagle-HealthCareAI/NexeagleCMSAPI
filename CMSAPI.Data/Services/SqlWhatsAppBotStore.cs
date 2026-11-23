@@ -117,10 +117,11 @@ public class SqlWhatsAppBotStore : IWhatsAppBotStore
 
     public Task<List<BotNluRow>> NluAsync(IReadOnlyCollection<string> sessionIds) =>
         InChunksAsync(sessionIds,
-            "SELECT session_id, utterance, specialty, symptom, doctor_name FROM dbo.nlu_logs WHERE session_id IN ({0})",
+            "SELECT session_id, utterance, specialty, symptom, doctor_name, routed_step, created_at FROM dbo.nlu_logs WHERE session_id IN ({0})",
             SqlDbType.NVarChar, r => new BotNluRow
             {
                 SessionId = r.GetString(0), Utterance = Str(r, 1), Specialty = Str(r, 2), Symptom = Str(r, 3), DoctorName = Str(r, 4),
+                RoutedStep = Str(r, 5), CreatedAt = r.IsDBNull(6) ? null : r.GetDateTime(6),
             });
 
     public Task<List<BotBookingRow>> BookingsAsync(IReadOnlyCollection<Guid> bookingIds) =>

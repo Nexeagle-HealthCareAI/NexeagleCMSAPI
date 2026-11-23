@@ -31,6 +31,9 @@ public class BotNluRow
     public string? Specialty { get; set; }
     public string? Symptom { get; set; }
     public string? DoctorName { get; set; }
+    /// <summary>The step the person was on when they wrote it.</summary>
+    public string? RoutedStep { get; set; }
+    public DateTime? CreatedAt { get; set; }
 }
 
 public class BotBookingRow

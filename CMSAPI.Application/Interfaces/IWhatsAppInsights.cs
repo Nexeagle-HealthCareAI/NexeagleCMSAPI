@@ -35,3 +35,12 @@ public interface IWhatsAppInsightsService
     Task<WeeklyGrowth> WeeklyGrowthAsync(int weeks);
     Task<DoctorDekhoDailyStats> DoctorDekhoDailyAsync(DateOnly? from, DateOnly? to);
 }
+
+/// <summary>What people searched for on Doctor Dekho and the WhatsApp bot, by kind.</summary>
+public interface ISearchInsightsService
+{
+    /// <summary>channel: all | doctordekho | whatsapp.</summary>
+    Task<SearchInsights> SummaryAsync(DateOnly? from, DateOnly? to, string? channel);
+    /// <summary>showContacts: the reader holds insights.contacts (full WhatsApp numbers).</summary>
+    Task<PagedResult<SearchListRow>> ListAsync(SearchListQuery query, bool showContacts);
+}

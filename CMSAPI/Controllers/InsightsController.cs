@@ -18,11 +18,13 @@ public class InsightsController : ControllerBase
 {
     private readonly IInsightsService _service;
     private readonly IWhatsAppInsightsService _whatsApp;
+    private readonly ISearchInsightsService _searches;
 
-    public InsightsController(IInsightsService service, IWhatsAppInsightsService whatsApp)
+    public InsightsController(IInsightsService service, IWhatsAppInsightsService whatsApp, ISearchInsightsService searches)
     {
         _service = service;
         _whatsApp = whatsApp;
+        _searches = searches;
     }
 
     // insights.contacts: full phone numbers of people who wrote to the WhatsApp bot, and their chats.
@@ -113,6 +115,27 @@ public class InsightsController : ControllerBase
     {
         try { return Ok(await _whatsApp.DailyAsync(from, to)); }
         catch (WhatsAppBotUnavailableException ex) { return BotUnavailable(ex); }
+    }
+
+    // What people searched for on Doctor Dekho and the WhatsApp bot, sorted into symptom, doctor's
+    // name, speciality, hospital and other words. channel: all | doctordekho | whatsapp. When the bot's
+    // database cannot be read, Doctor Dekho is still answered and whatsAppProblem says why.
+    [HasPermission("insights.view")]
+    [HttpGet("search-analysis")]
+    public async Task<IActionResult> GetSearchAnalysis([FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] string? channel = null)
+        => Ok(await _searches.SummaryAsync(from, to, channel));
+
+    // Every search, newest first. kind: all | symptom | doctor | specialty | hospital | other | nothing | booked.
+    // WhatsApp numbers are masked unless the reader holds insights.contacts.
+    [HasPermission("insights.view")]
+    [HttpGet("search-analysis/list")]
+    public async Task<IActionResult> GetSearchAnalysisList(
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null,
+        [FromQuery] string? channel = null, [FromQuery] string? kind = null, [FromQuery] string? search = null,
+        [FromQuery] int page = 1, [FromQuery] int limit = 25)
+    {
+        var query = new SearchListQuery { From = from, To = to, Channel = channel, Kind = kind, Search = search, Page = page, Limit = limit };
+        return Ok(await _searches.ListAsync(query, CanSeeContacts));
     }
 
     // outcome: all | booked | left | other. source: all | qr | direct. limit up to 1000 (for export).

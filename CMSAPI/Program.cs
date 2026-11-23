@@ -143,6 +143,7 @@ builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
 builder.Services.AddScoped<IInsightsRepository, InsightsRepository>();
 builder.Services.AddScoped<IWhatsAppBotStore, CMSAPI.Data.Services.SqlWhatsAppBotStore>();
 builder.Services.AddScoped<IWhatsAppInsightsService, CMSAPI.Data.Services.WhatsAppInsightsService>();
+builder.Services.AddScoped<ISearchInsightsService, CMSAPI.Data.Services.SearchInsightsService>();
 builder.Services.AddScoped<IMarketingRepository, MarketingRepository>();
 builder.Services.AddScoped<ISalesLeadRepository, SalesLeadRepository>();
 builder.Services.AddScoped<ISymptomRouterRepository, SymptomRouterRepository>();
