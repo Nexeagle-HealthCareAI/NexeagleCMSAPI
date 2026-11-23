@@ -141,6 +141,8 @@ builder.Services.AddScoped<IJobsRepository, JobsRepository>();
 builder.Services.AddScoped<IHospitalRepository, HospitalRepository>();
 builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
 builder.Services.AddScoped<IInsightsRepository, InsightsRepository>();
+builder.Services.AddScoped<IWhatsAppBotStore, CMSAPI.Data.Services.SqlWhatsAppBotStore>();
+builder.Services.AddScoped<IWhatsAppInsightsService, CMSAPI.Data.Services.WhatsAppInsightsService>();
 builder.Services.AddScoped<IMarketingRepository, MarketingRepository>();
 builder.Services.AddScoped<ISalesLeadRepository, SalesLeadRepository>();
 builder.Services.AddScoped<ISymptomRouterRepository, SymptomRouterRepository>();
@@ -320,6 +322,21 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         sql.CommandTimeout(60);
     })
 );
+
+// The WhatsApp booking bot's own database (repo Whatsapp-Webhook), read for the Insights page.
+// Prefer an explicit WhatsAppBotConnection; otherwise the same server as DefaultConnection with the
+// bot's catalog (WhatsAppBot:Database, else WhatsAppBookingProd in Production and WhatsAppBookingDev
+// elsewhere). If it cannot be reached, only the WhatsApp figures say so; nothing else is affected.
+var botConn = builder.Configuration.GetConnectionString("WhatsAppBotConnection");
+if (string.IsNullOrWhiteSpace(botConn))
+{
+    var botDatabase = builder.Configuration["WhatsAppBot:Database"];
+    if (string.IsNullOrWhiteSpace(botDatabase))
+        botDatabase = builder.Environment.IsProduction() ? "WhatsAppBookingProd" : "WhatsAppBookingDev";
+    botConn = System.Text.RegularExpressions.Regex.Replace(
+        sqlConn, @"(?i)(Initial Catalog|Database)\s*=\s*[^;]+", "Initial Catalog=" + botDatabase);
+}
+builder.Services.AddSingleton(new CMSAPI.Data.Services.WhatsAppBotConnection(botConn));
 
 // CMS identity / RBAC database (separate from the shared HMS DB).
 // Prefer an explicit CmsConnection; otherwise reuse DefaultConnection's server with the CMSDatabase catalog.
