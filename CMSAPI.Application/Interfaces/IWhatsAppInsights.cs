@@ -32,7 +32,8 @@ public interface IWhatsAppInsightsService
     /// <summary>showContacts: the reader holds insights.contacts (full numbers).</summary>
     Task<PagedResult<WhatsAppPersonRow>> PeopleAsync(WhatsAppPeopleQuery query, bool showContacts);
     Task<WhatsAppTranscript?> TranscriptAsync(string sessionId);
-    Task<WeeklyGrowth> WeeklyGrowthAsync(int weeks);
+    /// <summary>The last `weeks` weeks, or the weeks from `from` to `to` when both are given.</summary>
+    Task<WeeklyGrowth> WeeklyGrowthAsync(int weeks, DateOnly? from = null, DateOnly? to = null);
     Task<DoctorDekhoDailyStats> DoctorDekhoDailyAsync(DateOnly? from, DateOnly? to);
 }
 
@@ -43,4 +44,12 @@ public interface ISearchInsightsService
     Task<SearchInsights> SummaryAsync(DateOnly? from, DateOnly? to, string? channel);
     /// <summary>showContacts: the reader holds insights.contacts (full WhatsApp numbers).</summary>
     Task<PagedResult<SearchListRow>> ListAsync(SearchListQuery query, bool showContacts);
+}
+
+/// <summary>Every appointment by channel (Doctor Dekho, WhatsApp bot, hospital desk): the chart and the list.</summary>
+public interface IAppointmentInsightsService
+{
+    Task<AppointmentTrend> TrendAsync(AppointmentQuery query);
+    /// <summary>showContacts: the reader holds insights.contacts (full patient numbers).</summary>
+    Task<PagedResult<AppointmentRow>> ListAsync(AppointmentQuery query, bool showContacts);
 }
