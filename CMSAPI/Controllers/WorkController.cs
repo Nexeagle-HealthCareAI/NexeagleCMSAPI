@@ -30,12 +30,14 @@ public class WorkController : ControllerBase
     private readonly IWorkService _service;
     private readonly IWorkAccessService _access;
     private readonly IWorkActivityService _activity;
+    private readonly IWorkMentionService _mentions;
 
-    public WorkController(IWorkService service, IWorkAccessService access, IWorkActivityService activity)
+    public WorkController(IWorkService service, IWorkAccessService access, IWorkActivityService activity, IWorkMentionService mentions)
     {
         _service = service;
         _access = access;
         _activity = activity;
+        _mentions = mentions;
     }
 
     private WorkActor Actor => new WorkActor { UserId = ActorId, SeesAllBoards = Has("work.members") };
@@ -160,19 +162,51 @@ public class WorkController : ControllerBase
 
     [HttpGet("items/{id:guid}")]
     [HasPermission("work.view")]
-    public async Task<IActionResult> GetItem(Guid id) =>
-        await _access.CanOpenItemAsync(id, Actor) ? Reply(await _service.GetItemAsync(id)) : Hidden("Work item");
+    public async Task<IActionResult> GetItem(Guid id)
+    {
+        if (!await _access.CanOpenItemAsync(id, Actor)) return Hidden("Work item");
+        var result = await _service.GetItemAsync(id);
+        if (result.Ok && result.Data != null) await _mentions.FillAsync(result.Data);
+        return Reply(result);
+    }
+
+    // Who can be tagged (@Name) in this item: everyone active on an open board, the members of a
+    // members-only one; never the person asking.
+    [HttpGet("items/{id:guid}/taggable")]
+    [HasPermission("work.view")]
+    public async Task<IActionResult> GetTaggable(Guid id) =>
+        await _access.CanOpenItemAsync(id, Actor)
+            ? Ok(new { success = true, data = await _mentions.TaggableAsync(id, ActorId) })
+            : Hidden("Work item");
 
     [HttpPost("items")]
     [HasPermission("work.edit")]
-    public async Task<IActionResult> CreateItem([FromBody] CreateWorkItemRequest request) =>
-        await _access.CanOpenProjectAsync(request.ProjectId, Actor) ? Reply(await _service.CreateItemAsync(request, ActorId)) : Hidden("Project");
+    public async Task<IActionResult> CreateItem([FromBody] CreateWorkItemRequest request)
+    {
+        if (!await _access.CanOpenProjectAsync(request.ProjectId, Actor)) return Hidden("Project");
+        var result = await _service.CreateItemAsync(request, ActorId);
+        if (result.Ok && result.Data != null)
+            await _mentions.TagTextAsync(result.Data.WorkItemId, WorkMentionPlaces.Description, result.Data.Description, request.MentionUserIds, ActorId);
+        return Reply(result);
+    }
 
     // Send every editable field; a null clears that field. See UpdateWorkItemRequest.
     [HttpPut("items/{id:guid}")]
     [HasPermission("work.edit")]
-    public async Task<IActionResult> UpdateItem(Guid id, [FromBody] UpdateWorkItemRequest request) =>
-        await _access.CanOpenItemAsync(id, Actor) ? Reply(await _service.UpdateItemAsync(id, request, ActorId)) : Hidden("Work item");
+    public async Task<IActionResult> UpdateItem(Guid id, [FromBody] UpdateWorkItemRequest request)
+    {
+        if (!await _access.CanOpenItemAsync(id, Actor)) return Hidden("Work item");
+        var result = await _service.UpdateItemAsync(id, request, ActorId);
+        if (result.Ok && result.Data != null)
+        {
+            // People tagged in the description and in what is blocking it; unblocking clears the second.
+            await _mentions.TagTextAsync(id, WorkMentionPlaces.Description, result.Data.Description, request.DescriptionMentionUserIds, ActorId);
+            await _mentions.TagTextAsync(id, WorkMentionPlaces.Blocked, result.Data.IsBlocked ? result.Data.BlockedReason : null,
+                result.Data.IsBlocked ? request.BlockedMentionUserIds : new List<Guid>(), ActorId);
+            await _mentions.FillAsync(result.Data);
+        }
+        return Reply(result);
+    }
 
     [HttpDelete("items/{id:guid}")]
     [HasPermission("work.delete")]
@@ -183,11 +217,39 @@ public class WorkController : ControllerBase
 
     [HttpPost("items/{id:guid}/comments")]
     [HasPermission("work.edit")]
-    public async Task<IActionResult> AddComment(Guid id, [FromBody] AddWorkCommentRequest request) =>
-        await _access.CanOpenItemAsync(id, Actor) ? Reply(await _service.AddCommentAsync(id, request, ActorId)) : Hidden("Work item");
+    public async Task<IActionResult> AddComment(Guid id, [FromBody] AddWorkCommentRequest request)
+    {
+        if (!await _access.CanOpenItemAsync(id, Actor)) return Hidden("Work item");
+        var result = await _service.AddCommentAsync(id, request, ActorId);
+        if (result.Ok && result.Data != null)
+            result.Data.MentionUserIds = await _mentions.TagCommentAsync(id, result.Data.CommentId, result.Data.Body, request.MentionUserIds, ActorId);
+        return Reply(result);
+    }
 
     [HttpDelete("comments/{id:guid}")]
     [HasPermission("work.edit")]
-    public async Task<IActionResult> DeleteComment(Guid id) =>
-        await _access.CanOpenCommentAsync(id, Actor) ? Reply(await _service.DeleteCommentAsync(id, ActorId, Has("work.delete"))) : Hidden("Comment");
+    public async Task<IActionResult> DeleteComment(Guid id)
+    {
+        if (!await _access.CanOpenCommentAsync(id, Actor)) return Hidden("Comment");
+        var result = await _service.DeleteCommentAsync(id, ActorId, Has("work.delete"));
+        if (result.Ok) await _mentions.CommentRemovedAsync(id);
+        return Reply(result);
+    }
+
+    // ── Tags in work items: the person's notifications ──────────────────────────────────────────
+
+    [HttpGet("mentions")]
+    [HasPermission("work.view")]
+    public async Task<IActionResult> GetMentions() =>
+        Ok(new { success = true, data = await _mentions.GetNotificationsAsync(Actor) });
+
+    // { notificationIds: [...] }, or an empty list to mark every one read.
+    [HttpPost("mentions/read")]
+    [HasPermission("work.view")]
+    public async Task<IActionResult> ReadMentions([FromBody] ReadWorkItemNotificationsRequest? request)
+    {
+        if (!ActorId.HasValue) return Unauthorized(new { success = false, message = "Sign in again." });
+        await _mentions.MarkNotificationsReadAsync(ActorId.Value, request?.NotificationIds ?? new List<Guid>());
+        return Ok(new { success = true });
+    }
 }
