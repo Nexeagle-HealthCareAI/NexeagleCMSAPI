@@ -190,6 +190,8 @@ public class WorkCommentDto
     public string AuthorName { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+    /// <summary>People tagged in the comment.</summary>
+    public List<Guid> MentionUserIds { get; set; } = new List<Guid>();
 }
 
 public class WorkHistoryDto
@@ -233,6 +235,8 @@ public class CreateWorkItemRequest
     public string? StartDate { get; set; }
     /// <summary>yyyy-MM-dd, or null.</summary>
     public string? DueDate { get; set; }
+    /// <summary>People tagged (@Name) in the description.</summary>
+    public List<Guid>? MentionUserIds { get; set; }
 }
 
 /// <summary>
@@ -254,11 +258,40 @@ public class UpdateWorkItemRequest
     public string? DueDate { get; set; }
     public bool IsBlocked { get; set; }
     public string? BlockedReason { get; set; }
+    /// <summary>People tagged in the description. Null leaves the tags as they are.</summary>
+    public List<Guid>? DescriptionMentionUserIds { get; set; }
+    /// <summary>People tagged in what is blocking the item. Null leaves the tags as they are.</summary>
+    public List<Guid>? BlockedMentionUserIds { get; set; }
 }
 
 public class AddWorkCommentRequest
 {
     public string Body { get; set; } = string.Empty;
+    /// <summary>People tagged (@Name) in the comment.</summary>
+    public List<Guid>? MentionUserIds { get; set; }
+}
+
+/// <summary>Someone tagged you in a work item.</summary>
+public class WorkItemNotificationDto
+{
+    public Guid NotificationId { get; set; }
+    public string Kind { get; set; } = "Mention";
+    /// <summary>comment | description | blocked</summary>
+    public string Place { get; set; } = "comment";
+    public Guid WorkItemId { get; set; }
+    public Guid ProjectId { get; set; }
+    public string ItemKey { get; set; } = string.Empty;
+    public string ItemTitle { get; set; } = string.Empty;
+    public Guid? CommentId { get; set; }
+    public string ActorName { get; set; } = string.Empty;
+    public string Text { get; set; } = string.Empty;
+    public bool IsRead { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class ReadWorkItemNotificationsRequest
+{
+    public List<Guid> NotificationIds { get; set; } = new List<Guid>();
 }
 
 /// <summary>A board column to add or change.</summary>
