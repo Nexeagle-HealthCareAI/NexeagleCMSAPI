@@ -8,6 +8,8 @@ namespace CMSAPI.Application.Services;
 public class CmsAdminService : ICmsAdminService
 {
     private const int MinPasswordLength = 8;
+    /// <summary>The built-in Administrator role (script 34). It always keeps every permission, so nobody can lock everyone out.</summary>
+    public static readonly Guid AdministratorRoleId = Guid.Parse("B0000001-0000-0000-0000-000000000001");
 
     private readonly ICmsAdminRepository _repo;
     private readonly IPasswordHasher _hasher;
@@ -71,7 +73,7 @@ public class CmsAdminService : ICmsAdminService
         if (request.Description != null) role.Description = request.Description;
         if (request.IsActive.HasValue && !role.IsSystemDefined) role.IsActive = request.IsActive.Value;
 
-        if (request.PermissionKeys != null)
+        if (request.PermissionKeys != null && roleId != AdministratorRoleId)
         {
             var keyToId = (await _repo.GetPermissionsAsync()).ToDictionary(p => p.Key, p => p.PermissionId);
             await _repo.SetRolePermissionsAsync(roleId, ResolveIds(request.PermissionKeys, keyToId));
@@ -99,6 +101,9 @@ public class CmsAdminService : ICmsAdminService
             UserId = u.UserId,
             Email = u.Email,
             FullName = u.FullName,
+            PhoneNumber = u.PhoneNumber,
+            JobTitle = u.JobTitle,
+            PhotoVersion = ProfileRules.PhotoVersion(u.PhotoUpdatedAt),
             IsActive = u.IsActive,
             MustChangePassword = u.MustChangePassword,
             LastLoginAt = u.LastLoginAt,
@@ -119,6 +124,9 @@ public class CmsAdminService : ICmsAdminService
             UserId = user.UserId,
             Email = user.Email,
             FullName = user.FullName,
+            PhoneNumber = user.PhoneNumber,
+            JobTitle = user.JobTitle,
+            PhotoVersion = ProfileRules.PhotoVersion(user.PhotoUpdatedAt),
             IsActive = user.IsActive,
             MustChangePassword = user.MustChangePassword,
             LastLoginAt = user.LastLoginAt,
@@ -133,17 +141,21 @@ public class CmsAdminService : ICmsAdminService
     public async Task<(UserDetailDto? User, string? Error)> CreateUserAsync(CreateUserRequest request)
     {
         var email = (request.Email ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(email)) return (null, "Email is required.");
-        if (!IsValidEmail(email)) return (null, "Invalid email format.");
-        if (string.IsNullOrWhiteSpace(request.FullName)) return (null, "Full name is required.");
+        var error = ProfileRules.CheckEmail(email) ?? ProfileRules.CheckName(request.FullName) ?? ProfileRules.CheckJobTitle(request.JobTitle);
+        if (error != null) return (null, error);
         if ((request.Password ?? string.Empty).Length < MinPasswordLength) return (null, $"Password must be at least {MinPasswordLength} characters.");
+        var (phone, phoneError) = ProfileRules.CleanPhone(request.PhoneNumber ?? string.Empty);
+        if (phoneError != null) return (null, phoneError);
         if (await _repo.EmailExistsAsync(email)) return (null, "A user with that email already exists.");
+        if (phone != null && await _repo.PhoneTakenAsync(phone, null)) return (null, "Someone else already has that phone number.");
 
         var user = new CmsUser
         {
             UserId = Guid.NewGuid(),
             Email = email,
             FullName = request.FullName.Trim(),
+            PhoneNumber = phone,
+            JobTitle = string.IsNullOrWhiteSpace(request.JobTitle) ? null : request.JobTitle.Trim(),
             PasswordHash = _hasher.Hash(request.Password!),
             IsActive = true,
             MustChangePassword = true,
@@ -161,7 +173,36 @@ public class CmsAdminService : ICmsAdminService
         var user = await _repo.GetUserWithRolesAndOverridesAsync(userId);
         if (user == null) return (null, "User not found.");
 
+        // Check everything first, so a bad field changes nothing.
+        string? email = null;
+        if (request.Email != null)
+        {
+            email = request.Email.Trim();
+            var emailError = ProfileRules.CheckEmail(email);
+            if (emailError != null) return (null, emailError);
+            if (!string.Equals(email, user.Email, StringComparison.OrdinalIgnoreCase) && await _repo.EmailTakenAsync(email, userId))
+                return (null, "A user with that email already exists.");
+        }
+        if (request.FullName != null && ProfileRules.CheckName(request.FullName) is { } nameError) return (null, nameError);
+        if (ProfileRules.CheckJobTitle(request.JobTitle) is { } titleError) return (null, titleError);
+        string? phone = null;
+        if (request.PhoneNumber != null)
+        {
+            var (cleaned, phoneError) = ProfileRules.CleanPhone(request.PhoneNumber);
+            if (phoneError != null) return (null, phoneError);
+            if (cleaned != null && cleaned != user.PhoneNumber && await _repo.PhoneTakenAsync(cleaned, userId))
+                return (null, "Someone else already has that phone number.");
+            phone = cleaned;
+        }
+
+        if (email != null && email != user.Email)
+        {
+            _logger.LogWarning("AUDIT: Email changed for UserId={UserId} from {Old} to {New}.", userId, user.Email, email);
+            user.Email = email;
+        }
         if (request.FullName != null) user.FullName = request.FullName.Trim();
+        if (request.PhoneNumber != null) user.PhoneNumber = phone;
+        if (request.JobTitle != null) user.JobTitle = string.IsNullOrWhiteSpace(request.JobTitle) ? null : request.JobTitle.Trim();
         if (request.IsActive.HasValue) user.IsActive = request.IsActive.Value;
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -202,12 +243,6 @@ public class CmsAdminService : ICmsAdminService
             "AUDIT: Password reset for UserId={UserId} Email={Email}. User must change password on next login.",
             user.UserId, user.Email);
         return true;
-    }
-
-    private static bool IsValidEmail(string email)
-    {
-        try { _ = new System.Net.Mail.MailAddress(email); return true; }
-        catch { return false; }
     }
 
     private async Task<RoleDto?> SingleRoleAsync(Guid roleId)

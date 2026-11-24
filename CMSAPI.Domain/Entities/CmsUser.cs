@@ -8,6 +8,9 @@ public class CmsUser
     public string FullName { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public string? PhoneNumber { get; set; }   // E.164 format, e.g. +919876543210
+    public string? JobTitle { get; set; }
+    /// <summary>When the photo in CmsUserPhotos last changed; null when the person has no photo.</summary>
+    public DateTime? PhotoUpdatedAt { get; set; }
     public bool IsActive { get; set; } = true;
     public bool MustChangePassword { get; set; } = true;
     public int FailedLoginAttempts { get; set; }

@@ -54,6 +54,12 @@ public class CmsAdminRepository : ICmsAdminRepository
     public Task<bool> EmailExistsAsync(string email) =>
         _db.CmsUsers.AnyAsync(u => u.Email == email);
 
+    public Task<bool> EmailTakenAsync(string email, Guid? exceptUserId) =>
+        _db.CmsUsers.AnyAsync(u => u.Email == email && (exceptUserId == null || u.UserId != exceptUserId));
+
+    public Task<bool> PhoneTakenAsync(string phone, Guid? exceptUserId) =>
+        _db.CmsUsers.AnyAsync(u => u.PhoneNumber == phone && (exceptUserId == null || u.UserId != exceptUserId));
+
     public Task AddUserAsync(CmsUser user, IEnumerable<Guid> roleIds)
     {
         _db.CmsUsers.Add(user);

@@ -317,6 +317,8 @@ public class AuthService : IAuthService
         Id = user.UserId.ToString(),
         Name = user.FullName,
         Email = user.Email,
-        Role = roles.FirstOrDefault() ?? string.Empty
+        Role = roles.FirstOrDefault() ?? string.Empty,
+        JobTitle = user.JobTitle,
+        PhotoVersion = ProfileRules.PhotoVersion(user.PhotoUpdatedAt)
     };
 }
