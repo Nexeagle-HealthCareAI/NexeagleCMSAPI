@@ -62,6 +62,8 @@ public class CmsDbContext : DbContext
     public DbSet<WorkSprint> WorkSprints => Set<WorkSprint>();
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
+    public DbSet<WorkItemMention> WorkItemMentions => Set<WorkItemMention>();
+    public DbSet<WorkItemNotification> WorkItemNotifications => Set<WorkItemNotification>();
     public DbSet<WorkItemHistory> WorkItemHistories => Set<WorkItemHistory>();
     public DbSet<DocFolder> DocFolders => Set<DocFolder>();
     public DbSet<DocFolderAccess> DocFolderAccesses => Set<DocFolderAccess>();
@@ -165,6 +167,25 @@ public class CmsDbContext : DbContext
         {
             e.ToTable("DocCommentMentions");
             e.HasKey(x => new { x.CommentId, x.UserId });
+        });
+
+        // Tagging in work items (33_CMSDatabase_WorkItemMentions.sql)
+        b.Entity<WorkItemMention>(e =>
+        {
+            e.ToTable("WorkItemMentions");
+            e.HasKey(x => x.MentionId);
+            e.Property(x => x.MentionId).ValueGeneratedNever();
+            e.Property(x => x.Place).HasMaxLength(12).IsRequired();
+        });
+
+        b.Entity<WorkItemNotification>(e =>
+        {
+            e.ToTable("WorkItemNotifications");
+            e.HasKey(x => x.NotificationId);
+            e.Property(x => x.NotificationId).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(12).IsRequired();
+            e.Property(x => x.Place).HasMaxLength(12).IsRequired();
+            e.Property(x => x.Excerpt).HasMaxLength(300);
         });
 
         b.Entity<DocNotification>(e =>
@@ -569,6 +590,11 @@ public class CmsDbContext : DbContext
         Link<DocCommentMention, DocComment>(b, x => x.CommentId);
         Link<DocNotification, WorkDocument>(b, x => x.DocumentId);
         Link<DocNotification, DocComment>(b, x => x.CommentId);
+        // 33_CMSDatabase_WorkItemMentions.sql
+        Link<WorkItemMention, WorkItem>(b, x => x.WorkItemId);
+        Link<WorkItemMention, WorkItemComment>(b, x => x.CommentId);
+        Link<WorkItemNotification, WorkItem>(b, x => x.WorkItemId);
+        Link<WorkItemNotification, WorkItemComment>(b, x => x.CommentId);
     }
 
     // Child rows point at the parent's key. Nothing is deleted on the parent's behalf: these tables
