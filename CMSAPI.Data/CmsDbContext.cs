@@ -30,6 +30,7 @@ public class CmsDbContext : DbContext
     public DbSet<CmsUserRole> CmsUserRoles => Set<CmsUserRole>();
     public DbSet<CmsRolePermission> CmsRolePermissions => Set<CmsRolePermission>();
     public DbSet<CmsUserPermission> CmsUserPermissions => Set<CmsUserPermission>();
+    public DbSet<CmsUserPhoto> CmsUserPhotos => Set<CmsUserPhoto>();
     public DbSet<CmsRefreshToken> CmsRefreshTokens => Set<CmsRefreshToken>();
     public DbSet<CmsOtp> CmsOtps => Set<CmsOtp>();
     public DbSet<CmsPartner> CmsPartners => Set<CmsPartner>();
@@ -62,8 +63,6 @@ public class CmsDbContext : DbContext
     public DbSet<WorkSprint> WorkSprints => Set<WorkSprint>();
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
-    public DbSet<WorkItemMention> WorkItemMentions => Set<WorkItemMention>();
-    public DbSet<WorkItemNotification> WorkItemNotifications => Set<WorkItemNotification>();
     public DbSet<WorkItemHistory> WorkItemHistories => Set<WorkItemHistory>();
     public DbSet<DocFolder> DocFolders => Set<DocFolder>();
     public DbSet<DocFolderAccess> DocFolderAccesses => Set<DocFolderAccess>();
@@ -167,25 +166,6 @@ public class CmsDbContext : DbContext
         {
             e.ToTable("DocCommentMentions");
             e.HasKey(x => new { x.CommentId, x.UserId });
-        });
-
-        // Tagging in work items (33_CMSDatabase_WorkItemMentions.sql)
-        b.Entity<WorkItemMention>(e =>
-        {
-            e.ToTable("WorkItemMentions");
-            e.HasKey(x => x.MentionId);
-            e.Property(x => x.MentionId).ValueGeneratedNever();
-            e.Property(x => x.Place).HasMaxLength(12).IsRequired();
-        });
-
-        b.Entity<WorkItemNotification>(e =>
-        {
-            e.ToTable("WorkItemNotifications");
-            e.HasKey(x => x.NotificationId);
-            e.Property(x => x.NotificationId).ValueGeneratedNever();
-            e.Property(x => x.Kind).HasMaxLength(12).IsRequired();
-            e.Property(x => x.Place).HasMaxLength(12).IsRequired();
-            e.Property(x => x.Excerpt).HasMaxLength(300);
         });
 
         b.Entity<DocNotification>(e =>
@@ -340,6 +320,17 @@ public class CmsDbContext : DbContext
             e.Property(x => x.PhoneNumber).HasMaxLength(20);
             e.HasIndex(x => x.PhoneNumber).HasFilter("[PhoneNumber] IS NOT NULL");
             e.Property(x => x.LastLoginIp).HasMaxLength(64);
+            e.Property(x => x.JobTitle).HasMaxLength(100);
+        });
+
+        b.Entity<CmsUserPhoto>(e =>
+        {
+            e.ToTable("CmsUserPhotos");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.UserId).ValueGeneratedNever();
+            e.Property(x => x.ContentType).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Data).IsRequired();
+            e.HasOne<CmsUser>().WithOne().HasForeignKey<CmsUserPhoto>(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<CmsRole>(e =>
@@ -590,11 +581,6 @@ public class CmsDbContext : DbContext
         Link<DocCommentMention, DocComment>(b, x => x.CommentId);
         Link<DocNotification, WorkDocument>(b, x => x.DocumentId);
         Link<DocNotification, DocComment>(b, x => x.CommentId);
-        // 33_CMSDatabase_WorkItemMentions.sql
-        Link<WorkItemMention, WorkItem>(b, x => x.WorkItemId);
-        Link<WorkItemMention, WorkItemComment>(b, x => x.CommentId);
-        Link<WorkItemNotification, WorkItem>(b, x => x.WorkItemId);
-        Link<WorkItemNotification, WorkItemComment>(b, x => x.CommentId);
     }
 
     // Child rows point at the parent's key. Nothing is deleted on the parent's behalf: these tables

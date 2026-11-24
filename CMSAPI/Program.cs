@@ -155,6 +155,7 @@ builder.Services.AddScoped<ICmsAuthRepository, CmsAuthRepository>();
 builder.Services.AddScoped<ICmsPartnerRepository, CmsPartnerRepository>();
 builder.Services.AddScoped<ICmsAdminRepository, CmsAdminRepository>();
 builder.Services.AddScoped<ICmsAdminService, CmsAdminService>();
+builder.Services.AddScoped<ICmsProfileService, CMSAPI.Data.Services.CmsProfileService>();
 builder.Services.AddScoped<ICmsPartnerService, CmsPartnerService>();
 builder.Services.AddScoped<IReferralCodeRepository, ReferralCodeRepository>();
 builder.Services.AddScoped<IReferralCodeService, ReferralCodeService>();
@@ -162,7 +163,6 @@ builder.Services.AddScoped<IWorkRepository, WorkRepository>();
 builder.Services.AddScoped<IWorkService, WorkService>();
 builder.Services.AddScoped<IWorkAccessService, CMSAPI.Data.Services.WorkAccessService>();
 builder.Services.AddScoped<IWorkActivityService, CMSAPI.Data.Services.WorkActivityService>();
-builder.Services.AddScoped<IWorkMentionService, CMSAPI.Data.Services.WorkMentionService>();
 builder.Services.AddScoped<IWorkChatService, CMSAPI.Data.Services.WorkChatService>();
 // Docs tab: uploaded files go to the MinIO store when it is configured; without it pages still work
 // and uploads are refused with a clear message.

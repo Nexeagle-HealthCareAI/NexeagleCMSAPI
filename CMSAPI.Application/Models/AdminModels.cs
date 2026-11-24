@@ -46,6 +46,10 @@ public class UserSummaryDto
     public Guid UserId { get; set; }
     public string Email { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; }
+    public string? JobTitle { get; set; }
+    /// <summary>Changes whenever the photo changes (add it to the photo URL); null when there is no photo.</summary>
+    public string? PhotoVersion { get; set; }
     public bool IsActive { get; set; }
     public bool MustChangePassword { get; set; }
     public DateTime? LastLoginAt { get; set; }
@@ -63,12 +67,19 @@ public class CreateUserRequest
     public string Email { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; }
+    public string? JobTitle { get; set; }
     public List<Guid> RoleIds { get; set; } = new();
 }
 
 public class UpdateUserRequest
 {
+    public string? Email { get; set; }
     public string? FullName { get; set; }
+    /// <summary>Empty string removes the number; null leaves it.</summary>
+    public string? PhoneNumber { get; set; }
+    /// <summary>Empty string removes the job title; null leaves it.</summary>
+    public string? JobTitle { get; set; }
     public bool? IsActive { get; set; }
     public List<Guid>? RoleIds { get; set; }
     public List<PermissionOverrideDto>? Overrides { get; set; }
@@ -77,4 +88,35 @@ public class UpdateUserRequest
 public class ResetPasswordRequest
 {
     public string NewPassword { get; set; } = string.Empty;
+}
+
+/// <summary>The signed-in person's own profile (My profile).</summary>
+public class ProfileDto
+{
+    public Guid UserId { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; }
+    public string? JobTitle { get; set; }
+    public string? PhotoVersion { get; set; }
+    public List<string> Roles { get; set; } = new();
+    public DateTime? LastLoginAt { get; set; }
+}
+
+/// <summary>What a person may change on their own profile. Email, roles and access stay with administrators.</summary>
+public class UpdateProfileRequest
+{
+    public string? FullName { get; set; }
+    /// <summary>Empty string removes the number; null leaves it.</summary>
+    public string? PhoneNumber { get; set; }
+    /// <summary>Empty string removes the job title; null leaves it.</summary>
+    public string? JobTitle { get; set; }
+}
+
+/// <summary>A stored profile photo.</summary>
+public class UserPhoto
+{
+    public string ContentType { get; set; } = string.Empty;
+    public byte[] Data { get; set; } = Array.Empty<byte>();
+    public string Version { get; set; } = string.Empty;
 }

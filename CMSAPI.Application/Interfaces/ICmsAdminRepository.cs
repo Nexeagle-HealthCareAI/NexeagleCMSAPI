@@ -16,6 +16,10 @@ public interface ICmsAdminRepository
     Task<List<CmsUser>> GetUsersWithRolesAsync();
     Task<CmsUser?> GetUserWithRolesAndOverridesAsync(Guid userId);
     Task<bool> EmailExistsAsync(string email);
+    /// <summary>Whether someone other than <paramref name="exceptUserId"/> already has this email.</summary>
+    Task<bool> EmailTakenAsync(string email, Guid? exceptUserId);
+    /// <summary>Whether someone other than <paramref name="exceptUserId"/> already has this phone number.</summary>
+    Task<bool> PhoneTakenAsync(string phone, Guid? exceptUserId);
     Task AddUserAsync(CmsUser user, IEnumerable<Guid> roleIds);
     Task SetUserRolesAsync(Guid userId, IEnumerable<Guid> roleIds);
     Task SetUserOverridesAsync(Guid userId, IEnumerable<(Guid PermissionId, string Effect)> overrides);

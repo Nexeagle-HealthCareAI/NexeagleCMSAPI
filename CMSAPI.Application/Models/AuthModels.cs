@@ -25,6 +25,9 @@ public class AuthUser
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
+    public string? JobTitle { get; set; }
+    /// <summary>Changes whenever the person's photo changes; null when they have none.</summary>
+    public string? PhotoVersion { get; set; }
 }
 
 public class RefreshRequest
