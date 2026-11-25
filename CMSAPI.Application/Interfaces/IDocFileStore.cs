@@ -11,3 +11,12 @@ public interface IDocFileStore
     Task SaveAsync(string key, Stream content, string contentType);
     Task<Stream> OpenAsync(string key);
 }
+
+/// <summary>
+/// The file store could not take or give a file: wrong keys, a missing bucket, or the store cannot be
+/// reached. The message says which, in words an administrator can act on; nothing secret is in it.
+/// </summary>
+public class DocStorageException : Exception
+{
+    public DocStorageException(string message, Exception? inner = null) : base(message, inner) { }
+}
