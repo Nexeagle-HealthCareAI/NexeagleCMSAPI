@@ -198,6 +198,17 @@ public class DocsServiceTests
     }
 
     [Theory]
+    [InlineData(null, "")]
+    [InlineData("", "")]
+    [InlineData("cms-docs", "cms-docs/")]
+    [InlineData(" /cms-docs/ ", "cms-docs/")]
+    [InlineData("nexeagle/cms-docs", "nexeagle/cms-docs/")]
+    public void Storage_FolderSetting_BecomesTheStartOfEveryFileName(string? setting, string prefix)
+    {
+        Assert.Equal(prefix, CMSAPI.Data.Storage.MinioDocFileStore.FolderPrefix(setting));
+    }
+
+    [Theory]
     [InlineData("setup.exe")]
     [InlineData("run.bat")]
     [InlineData("page.html")]
