@@ -387,7 +387,14 @@ public class DocsService : IDocsService
         var key = $"docs/{documentId:N}/v{version}-{Guid.NewGuid():N}{Path.GetExtension(name).ToLowerInvariant()}";
 
         // Store the bytes first: a database row must never point at a file that is not there.
-        await _files.SaveAsync(key, content, type);
+        try
+        {
+            await _files.SaveAsync(key, content, type);
+        }
+        catch (DocStorageException ex)
+        {
+            return WorkResult<DocDetailDto>.Fail(503, "The file could not be stored: " + ex.Message);
+        }
 
         WorkDocument doc;
         if (existing == null)
@@ -466,6 +473,10 @@ public class DocsService : IDocsService
         catch (FileNotFoundException)
         {
             return WorkResult<DocFileDto>.Fail(404, "The file is missing from storage.");
+        }
+        catch (DocStorageException ex)
+        {
+            return WorkResult<DocFileDto>.Fail(503, "The file could not be opened: " + ex.Message);
         }
 
         Log(documentId, doc.FolderId, actor, "download", versionId.HasValue ? "An earlier version" : null);

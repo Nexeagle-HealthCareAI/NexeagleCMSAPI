@@ -166,10 +166,14 @@ builder.Services.AddScoped<IWorkAccessService, CMSAPI.Data.Services.WorkAccessSe
 builder.Services.AddScoped<IWorkActivityService, CMSAPI.Data.Services.WorkActivityService>();
 builder.Services.AddScoped<IWorkMentionService, CMSAPI.Data.Services.WorkMentionService>();
 builder.Services.AddScoped<IWorkChatService, CMSAPI.Data.Services.WorkChatService>();
-// Docs tab: uploaded files go to the MinIO store when it is configured; without it pages still work
-// and uploads are refused with a clear message.
-if (!string.IsNullOrWhiteSpace(builder.Configuration["Storage:Minio:AccessKey"])
-    && !string.IsNullOrWhiteSpace(builder.Configuration["Storage:PublicBaseUrl"] ?? builder.Configuration["Storage:Minio:PublicBaseUrl"]))
+// Docs tab: uploaded files go to the S3-compatible store (MinIO / E2E Object Storage) when all three
+// settings are there; without them pages still work and uploads are refused with a clear message.
+// The deploy workflow writes them (Storage__PublicBaseUrl, Storage__Minio__AccessKey, __SecretKey).
+var docsStorageReady =
+    !string.IsNullOrWhiteSpace(builder.Configuration["Storage:PublicBaseUrl"] ?? builder.Configuration["Storage:Minio:PublicBaseUrl"])
+    && !string.IsNullOrWhiteSpace(builder.Configuration["Storage:Minio:AccessKey"])
+    && !string.IsNullOrWhiteSpace(builder.Configuration["Storage:Minio:SecretKey"]);
+if (docsStorageReady)
     builder.Services.AddSingleton<IDocFileStore, CMSAPI.Data.Storage.MinioDocFileStore>();
 else
     builder.Services.AddSingleton<IDocFileStore, CMSAPI.Data.Storage.MissingDocFileStore>();
@@ -389,6 +393,21 @@ builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler
 try
 {
     var app = builder.Build();
+
+    // One line in `docker logs` that says whether document uploads can work here.
+    // Never stops the API from starting: a mistyped address only means files can't be stored.
+    try
+    {
+        var store = app.Services.GetRequiredService<IDocFileStore>();
+        if (store is CMSAPI.Data.Storage.MinioDocFileStore minio)
+            app.Logger.LogInformation("Docs file storage: on, {Where}.", minio.Describe());
+        else
+            app.Logger.LogWarning("Docs file storage: OFF. Uploading and opening files answer 503. Set Storage__PublicBaseUrl, Storage__Minio__AccessKey and Storage__Minio__SecretKey.");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Docs file storage: the settings are there but unusable ({Message}). Check Storage__PublicBaseUrl.", ex.Message);
+    }
 
     // =============================
     // SEED FIRST CMS ADMIN (env-driven, idempotent)

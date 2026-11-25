@@ -25,9 +25,12 @@ public class DocsServiceTests
     {
         public readonly Dictionary<string, byte[]> Saved = new Dictionary<string, byte[]>();
         public bool IsConfigured { get; set; } = true;
+        /// <summary>Set to make the store refuse files, as a store with wrong keys would.</summary>
+        public DocStorageException? Refuse { get; set; }
 
         public async Task SaveAsync(string key, Stream content, string contentType)
         {
+            if (Refuse != null) throw Refuse;
             using var copy = new MemoryStream();
             await content.CopyToAsync(copy);
             Saved[key] = copy.ToArray();
@@ -35,6 +38,7 @@ public class DocsServiceTests
 
         public Task<Stream> OpenAsync(string key)
         {
+            if (Refuse != null) throw Refuse;
             if (!Saved.TryGetValue(key, out var bytes)) throw new FileNotFoundException("missing", key);
             return Task.FromResult<Stream>(new MemoryStream(bytes));
         }
@@ -154,6 +158,54 @@ public class DocsServiceTests
         using var earlier = new StreamReader((await space.Service.OpenFileAsync(Editor(Asha), first.Data.DocumentId, old.VersionId)).Data!.Content);
         Assert.Equal("one", await earlier.ReadToEndAsync());
         Assert.Single((await space.Service.ListAsync(Editor(Asha), null, null)).Data!);
+    }
+
+    [Fact]
+    public async Task Upload_WhenTheStoreRefusesTheFile_SaysWhy_AndKeepsNothing()
+    {
+        var space = await NewSpaceAsync();
+        space.Store.Refuse = new DocStorageException("The file store at s3.example.com did not accept the storage keys.");
+
+        var result = await UploadAsync(space, Editor(Asha), null, "plan.pdf");
+
+        Assert.Equal(503, result.Status);
+        Assert.Contains("did not accept the storage keys", result.Message);
+        Assert.Empty(space.Store.Saved);
+        Assert.Empty((await space.Service.ListAsync(Editor(Asha), null, null)).Data!);
+    }
+
+    [Fact]
+    public async Task Upload_WithNoStoreSetUp_IsRefused_ButPagesStillWork()
+    {
+        var space = await NewSpaceAsync();
+        space.Store.IsConfigured = false;
+
+        Assert.Equal(503, (await UploadAsync(space, Editor(Asha), null, "plan.pdf")).Status);
+        Assert.True((await space.Service.CreatePageAsync(Editor(Asha), new CreateDocPageRequest { Name = "Notes" })).Ok);
+    }
+
+    [Fact]
+    public async Task Open_WhenTheStoreCannotBeReached_SaysSo()
+    {
+        var space = await NewSpaceAsync();
+        var file = await UploadAsync(space, Editor(Asha), null, "plan.pdf");
+        space.Store.Refuse = new DocStorageException("The file store at s3.example.com cannot be reached.");
+
+        var result = await space.Service.OpenFileAsync(Editor(Asha), file.Data!.DocumentId, null);
+
+        Assert.Equal(503, result.Status);
+        Assert.Contains("cannot be reached", result.Message);
+    }
+
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData("", "")]
+    [InlineData("cms-docs", "cms-docs/")]
+    [InlineData(" /cms-docs/ ", "cms-docs/")]
+    [InlineData("nexeagle/cms-docs", "nexeagle/cms-docs/")]
+    public void Storage_FolderSetting_BecomesTheStartOfEveryFileName(string? setting, string prefix)
+    {
+        Assert.Equal(prefix, CMSAPI.Data.Storage.MinioDocFileStore.FolderPrefix(setting));
     }
 
     [Theory]
