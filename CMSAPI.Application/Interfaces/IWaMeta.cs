@@ -31,6 +31,17 @@ public interface IWaMeta
     Task<JsonObject> GetNumberAsync(CancellationToken ct = default);
     /// <summary>Meta's own daily cost and volume by country and category (pricing_analytics).</summary>
     Task<List<WaPricePoint>> PricingAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct = default);
+
+    // Setup (WhatsApp → Setup)
+    /// <summary>The numbers in the WhatsApp Business Account: id → display number.</summary>
+    Task<Dictionary<string, string>> AccountNumbersAsync(CancellationToken ct = default);
+    /// <summary>Apps subscribed to the account's webhooks: id → name.</summary>
+    Task<Dictionary<string, string>> SubscribedAppsAsync(CancellationToken ct = default);
+    Task SubscribeAppAsync(CancellationToken ct = default);
+    /// <summary>Where Meta sends this number's webhooks: phone_number (the override), whatsapp_business_account, application.</summary>
+    Task<JsonObject> WebhookConfigurationAsync(CancellationToken ct = default);
+    /// <summary>Points this number's webhooks at `url` (Meta calls it once with the verify token first).</summary>
+    Task SetWebhookAsync(string url, string verifyToken, CancellationToken ct = default);
 }
 
 public class WaMetaException : Exception
@@ -48,7 +59,7 @@ public class WaMetaException : Exception
 
 public class WaNotConnectedException : Exception
 {
-    public WaNotConnectedException() : base("The WhatsApp marketing number is not connected on this environment yet. Set WhatsAppMarketing__PhoneNumberId, __WabaId and __AccessToken.") { }
+    public WaNotConnectedException() : base("The WhatsApp marketing number is not connected yet. An administrator connects it in WhatsApp → Setup.") { }
 }
 
 public class WaMediaFile

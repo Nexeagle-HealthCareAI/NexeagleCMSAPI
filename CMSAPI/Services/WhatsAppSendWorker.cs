@@ -23,6 +23,7 @@ public class WhatsAppSendWorker : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var lastSync = DateTime.MinValue;
+        var lastRefresh = DateTime.MinValue;
         // Let the API start first.
         try { await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken); } catch (OperationCanceledException) { return; }
 
@@ -31,6 +32,12 @@ public class WhatsAppSendWorker : BackgroundService
             var sent = 0;
             try
             {
+                // Keys changed on the Setup page of another API instance are picked up within a minute.
+                if (DateTime.UtcNow - lastRefresh > TimeSpan.FromMinutes(1))
+                {
+                    lastRefresh = DateTime.UtcNow;
+                    await _services.GetRequiredService<IWaConnectionStore>().RefreshAsync(stoppingToken);
+                }
                 using var scope = _services.CreateScope();
                 var meta = scope.ServiceProvider.GetRequiredService<IWaMeta>();
                 if (meta.IsConfigured)

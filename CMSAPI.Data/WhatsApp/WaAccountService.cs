@@ -38,7 +38,7 @@ public class WaAccountService : IWaAccountService
     public async Task<WorkResult<WaNumberDto>> NumberAsync(WaActor actor)
     {
         if (!_meta.IsConfigured)
-            return WorkResult<WaNumberDto>.Success(new WaNumberDto { Connected = false, Problem = "Not connected on this environment: set WhatsAppMarketing__PhoneNumberId, __WabaId and __AccessToken." });
+            return WorkResult<WaNumberDto>.Success(new WaNumberDto { Connected = false, Problem = "Not connected yet: an administrator connects it in WhatsApp → Setup." });
         try
         {
             var n = await _meta.GetNumberAsync();

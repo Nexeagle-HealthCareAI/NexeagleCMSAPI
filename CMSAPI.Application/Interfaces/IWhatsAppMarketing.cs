@@ -83,3 +83,17 @@ public interface IWaAccountService
     Task<WorkResult<WaSpendSummary>> SpendAsync(WaActor actor, DateOnly from, DateOnly to);
     Task<WorkResult<List<WaMetaSpendDay>>> MetaSpendAsync(WaActor actor, DateOnly from, DateOnly to);
 }
+
+/// <summary>WhatsApp → Setup: the Meta keys, the webhook and the checks that everything is connected.</summary>
+public interface IWaSetupService
+{
+    Task<WorkResult<WaSetupDto>> GetAsync(WaActor actor, string suggestedWebhookUrl);
+    Task<WorkResult<WaSetupDto>> SaveAsync(WaActor actor, WaSetupSaveRequest request, string suggestedWebhookUrl);
+    /// <summary>A new random verify token (the webhook must be connected again after it).</summary>
+    Task<WorkResult<WaSetupDto>> NewVerifyTokenAsync(WaActor actor, string suggestedWebhookUrl);
+    Task<WorkResult<WaSetupChecks>> CheckAsync(WaActor actor, string suggestedWebhookUrl);
+    Task<WorkResult<WaSetupChecks>> SubscribeAppAsync(WaActor actor, string suggestedWebhookUrl);
+    Task<WorkResult<WaSetupChecks>> ConnectWebhookAsync(WaActor actor, WaConnectWebhookRequest request, string suggestedWebhookUrl);
+    /// <summary>Sends Meta's sample template hello_world to a phone.</summary>
+    Task<WorkResult<string>> TestAsync(WaActor actor, WaTestMessageRequest request);
+}

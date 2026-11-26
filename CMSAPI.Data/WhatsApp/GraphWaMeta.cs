@@ -10,16 +10,10 @@ using Microsoft.Extensions.Logging;
 namespace CMSAPI.Data.WhatsApp;
 
 /// <summary>
-/// The marketing number on Meta's WhatsApp Cloud API (graph.facebook.com).
-///
-/// Settings (environment names in brackets), written by the deploy from GitHub secrets:
-///   WhatsAppMarketing:PhoneNumberId  [WhatsAppMarketing__PhoneNumberId]  the number's id in WhatsApp Manager (not the phone number)
-///   WhatsAppMarketing:WabaId         [WhatsAppMarketing__WabaId]         the WhatsApp Business Account id
-///   WhatsAppMarketing:AccessToken    [WhatsAppMarketing__AccessToken]    a system user's permanent token with
-///                                                                         whatsapp_business_messaging and whatsapp_business_management
-///   WhatsAppMarketing:AppId          [WhatsAppMarketing__AppId]          the Meta app's id: needed to upload template samples and the profile photo
-///   WhatsAppMarketing:GraphVersion   [WhatsAppMarketing__GraphVersion]   default v23.0
-/// The webhook's app secret and verify token are read by WhatsAppWebhookController.
+/// The marketing number on Meta's WhatsApp Cloud API (graph.facebook.com). The phone number id, account id,
+/// token and app id come from IWaConnectionStore: entered in CMS → WhatsApp → Setup, or the server settings
+/// WhatsAppMarketing__PhoneNumberId / __WabaId / __AccessToken / __AppId. Graph version: WhatsAppMarketing__GraphVersion
+/// (default v23.0).
 /// </summary>
 public class GraphWaMeta : IWaMeta
 {
@@ -31,16 +25,16 @@ public class GraphWaMeta : IWaMeta
     private readonly string? _appId;
     private readonly string _base;
 
-    public GraphWaMeta(HttpClient http, IConfiguration config, ILogger<GraphWaMeta> logger)
+    public GraphWaMeta(HttpClient http, IWaConnectionStore connection, ILogger<GraphWaMeta> logger)
     {
         _http = http;
         _logger = logger;
-        _phoneId = Clean(config["WhatsAppMarketing:PhoneNumberId"]);
-        _wabaId = Clean(config["WhatsAppMarketing:WabaId"]);
-        _token = Clean(config["WhatsAppMarketing:AccessToken"]);
-        _appId = Clean(config["WhatsAppMarketing:AppId"]);
-        var version = Clean(config["WhatsAppMarketing:GraphVersion"]) ?? "v23.0";
-        _base = $"https://graph.facebook.com/{version}/";
+        var c = connection.Current;
+        _phoneId = c.PhoneNumberId;
+        _wabaId = c.WabaId;
+        _token = c.AccessToken;
+        _appId = c.AppId;
+        _base = $"https://graph.facebook.com/{c.GraphVersion}/";
     }
 
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -94,7 +88,7 @@ public class GraphWaMeta : IWaMeta
             _logger.LogWarning("WhatsApp marketing: Meta refused {Method} {Path}: {Status} code {Code}/{Subcode} {Message} (trace {Trace})",
                 request.Method, request.RequestUri?.AbsolutePath, (int)response.StatusCode, code, subcode, message, error?["fbtrace_id"].Str());
             // A bad or expired token is ours to fix, not the person's: say so plainly.
-            if (code == 190) message = "The WhatsApp access token is not valid any more. An administrator needs to renew WhatsAppMarketing__AccessToken.";
+            if (code == 190) message = "The WhatsApp access token is not valid any more. An administrator needs to enter a new one in WhatsApp → Setup.";
             throw new WaMetaException(message, code, (int)response.StatusCode is 400 or 404 ? 400 : 502);
         }
     }
@@ -140,7 +134,7 @@ public class GraphWaMeta : IWaMeta
     public async Task<string> UploadSampleAsync(byte[] data, string mime, string fileName, CancellationToken ct = default)
     {
         Ready();
-        if (_appId == null) throw new WaMetaException("Uploading pictures to Meta needs WhatsAppMarketing__AppId (the Meta app's id).", null, 503);
+        if (_appId == null) throw new WaMetaException("Uploading pictures to Meta needs the Meta app's id: add it in WhatsApp → Setup.", null, 503);
         // Resumable Upload API: open a session on the app, then send the bytes to it.
         var open = await CallAsync(Request(HttpMethod.Post,
             $"{_appId}/uploads?file_name={Uri.EscapeDataString(fileName)}&file_length={data.Length}&file_type={Uri.EscapeDataString(mime)}"), ct);
@@ -261,6 +255,49 @@ public class GraphWaMeta : IWaMeta
             });
         }
         return points;
+    }
+
+    public async Task<Dictionary<string, string>> AccountNumbersAsync(CancellationToken ct = default)
+    {
+        Ready();
+        var answer = await CallAsync(Request(HttpMethod.Get, $"{_wabaId}/phone_numbers?fields=id,display_phone_number&limit=100"), ct);
+        var numbers = new Dictionary<string, string>();
+        foreach (var n in answer["data"]?.AsArray() ?? new JsonArray())
+            if (n?["id"].Str() is { } id) numbers[id] = n["display_phone_number"].Str() ?? id;
+        return numbers;
+    }
+
+    public async Task<Dictionary<string, string>> SubscribedAppsAsync(CancellationToken ct = default)
+    {
+        Ready();
+        var answer = await CallAsync(Request(HttpMethod.Get, $"{_wabaId}/subscribed_apps"), ct);
+        var apps = new Dictionary<string, string>();
+        foreach (var a in answer["data"]?.AsArray() ?? new JsonArray())
+        {
+            var app = a?["whatsapp_business_api_data"] ?? a;
+            if (app?["id"].Str() is { } id) apps[id] = app["name"].Str() ?? id;
+        }
+        return apps;
+    }
+
+    public async Task SubscribeAppAsync(CancellationToken ct = default)
+    {
+        Ready();
+        await CallAsync(Request(HttpMethod.Post, $"{_wabaId}/subscribed_apps"), ct);
+    }
+
+    public async Task<JsonObject> WebhookConfigurationAsync(CancellationToken ct = default)
+    {
+        Ready();
+        var answer = await CallAsync(Request(HttpMethod.Get, $"{_phoneId}?fields=webhook_configuration"), ct);
+        return answer["webhook_configuration"] is JsonObject o ? (JsonObject)o.DeepClone() : new JsonObject();
+    }
+
+    public async Task SetWebhookAsync(string url, string verifyToken, CancellationToken ct = default)
+    {
+        Ready();
+        var body = new JsonObject { ["webhook_configuration"] = new JsonObject { ["override_callback_uri"] = url, ["verify_token"] = verifyToken } };
+        await CallAsync(Request(HttpMethod.Post, $"{_phoneId}", Json(body)), ct);
     }
 
     private string? _numberDigits;

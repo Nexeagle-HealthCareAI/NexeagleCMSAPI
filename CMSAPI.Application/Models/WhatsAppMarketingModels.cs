@@ -15,6 +15,8 @@ public class WaActor
     public bool CanSettings { get; set; }
     /// <summary>insights.contacts: may import Doctor Dekho patients' numbers.</summary>
     public bool CanPatientContacts { get; set; }
+    /// <summary>whatsapp.connect: may enter the Meta keys and connect the webhook (WhatsApp → Setup).</summary>
+    public bool CanConnect { get; set; }
 }
 
 // ── Contacts and chats ───────────────────────────────────────────────────────
@@ -425,3 +427,64 @@ public class WaMetaSpendDay
     public long Volume { get; set; }
     public decimal Cost { get; set; }
 }
+
+// ── Setup (the Meta connection) ──────────────────────────────────────────────
+
+public class WaSetupDto
+{
+    public bool CanEdit { get; set; }
+    public string? PhoneNumberId { get; set; }
+    public string? WabaId { get; set; }
+    public string? AppId { get; set; }
+    public bool HasAccessToken { get; set; }
+    /// <summary>Last 4 characters of the token in use, to recognise it.</summary>
+    public string? AccessTokenHint { get; set; }
+    /// <summary>"cms" (entered here), "server" (server settings) or "none".</summary>
+    public string TokenSource { get; set; } = "none";
+    public bool HasAppSecret { get; set; }
+    /// <summary>Shown only to people who may connect: it is typed into Meta when connecting by hand.</summary>
+    public string? VerifyToken { get; set; }
+    public bool HasVerifyToken { get; set; }
+    /// <summary>The stored secrets cannot be decrypted (the server's key changed): enter them again.</summary>
+    public bool Unreadable { get; set; }
+    /// <summary>False when the server has no key to encrypt secrets with.</summary>
+    public bool CanEncrypt { get; set; }
+    public string SuggestedWebhookUrl { get; set; } = string.Empty;
+    public string? WebhookUrl { get; set; }
+    public DateTime? WebhookConnectedAt { get; set; }
+    public DateTime? LastWebhookAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+public class WaSetupSaveRequest
+{
+    public string? PhoneNumberId { get; set; }
+    public string? WabaId { get; set; }
+    public string? AppId { get; set; }
+    /// <summary>Null or empty: keep the stored one.</summary>
+    public string? AccessToken { get; set; }
+    /// <summary>Null or empty: keep the stored one.</summary>
+    public string? AppSecret { get; set; }
+    public bool ClearAccessToken { get; set; }
+    public bool ClearAppSecret { get; set; }
+}
+
+public class WaSetupCheck
+{
+    public string Key { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    /// <summary>ok, warn, fail, todo</summary>
+    public string State { get; set; } = "todo";
+    public string? Detail { get; set; }
+}
+
+public class WaSetupChecks
+{
+    public List<WaSetupCheck> Items { get; set; } = new();
+    /// <summary>Everything needed to send and receive is in place.</summary>
+    public bool Ready { get; set; }
+}
+
+public class WaConnectWebhookRequest { public string Url { get; set; } = string.Empty; }
+public class WaTestMessageRequest { public string Phone { get; set; } = string.Empty; }

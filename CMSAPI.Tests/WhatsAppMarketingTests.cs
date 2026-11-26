@@ -51,6 +51,18 @@ public class WhatsAppMarketingTests
         public Task UpdateProfileAsync(JsonObject profile, CancellationToken ct = default) => Task.CompletedTask;
         public Task<JsonObject> GetNumberAsync(CancellationToken ct = default) => Task.FromResult(new JsonObject());
         public Task<List<WaPricePoint>> PricingAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct = default) => Task.FromResult(new List<WaPricePoint>());
+        public Task<Dictionary<string, string>> AccountNumbersAsync(CancellationToken ct = default) => Task.FromResult(new Dictionary<string, string> { ["111"] = "+91 90000 00000" });
+        public Task<Dictionary<string, string>> SubscribedAppsAsync(CancellationToken ct = default) => Task.FromResult(new Dictionary<string, string>());
+        public Task SubscribeAppAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task<JsonObject> WebhookConfigurationAsync(CancellationToken ct = default) => Task.FromResult(new JsonObject());
+        public Task SetWebhookAsync(string url, string verifyToken, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class FixedConnection : IWaConnectionStore
+    {
+        public WaConnectionInfo Current { get; set; } = WaConnectionInfo.Empty with { PhoneNumberId = "111", WabaId = "222", AccessToken = "token" };
+        public Task<WaConnectionInfo> RefreshAsync(CancellationToken ct = default) => Task.FromResult(Current);
+        public Task MarkWebhookAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class NoStore : IDocFileStore
@@ -71,8 +83,7 @@ public class WhatsAppMarketingTests
     }
 
     private static WaWebhookService Webhook(CmsDbContext db) =>
-        new(db, new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["WhatsAppMarketing:PhoneNumberId"] = "111" }).Build(),
-            NullLogger<WaWebhookService>.Instance);
+        new(db, new FixedConnection(), NullLogger<WaWebhookService>.Instance);
 
     private static JsonElement Payload(object value, string phoneId = "111") =>
         JsonSerializer.SerializeToElement(new
@@ -440,5 +451,65 @@ public class WhatsAppMarketingTests
         Assert.False(WhatsAppWebhookController.Signed(body, "other", sig));
         Assert.False(WhatsAppWebhookController.Signed(body, "secret", ""));
         Assert.False(WhatsAppWebhookController.Signed(Encoding.UTF8.GetBytes("{}"), "secret", sig));
+    }
+
+    // ── Setup: keys kept encrypted ───────────────────────────────────────────
+
+    [Fact]
+    public void Secrets_are_stored_encrypted_and_only_the_same_key_reads_them()
+    {
+        var box = new WaSecretBox(new byte[32]);
+        var sealedText = box.Seal("EAAG-secret-token");
+        Assert.StartsWith("v1:", sealedText);
+        Assert.DoesNotContain("secret", sealedText);
+        Assert.Equal("EAAG-secret-token", box.Open(sealedText));
+        Assert.NotEqual(sealedText, box.Seal("EAAG-secret-token"));   // a new nonce every time
+        var other = new WaSecretBox(Enumerable.Repeat((byte)7, 32).ToArray());
+        Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => other.Open(sealedText));
+    }
+
+    [Fact]
+    public void The_key_comes_from_the_sign_in_key_when_none_is_set()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["TokenSettings:Key"] = "a-long-signing-key-for-tests-only-0123456789" }).Build();
+        var a = new WaSecretBox(config);
+        var b = new WaSecretBox(config);
+        Assert.True(a.CanSeal);
+        Assert.Equal("x", b.Open(a.Seal("x")));
+        Assert.False(new WaSecretBox(new ConfigurationBuilder().Build()).CanSeal);
+    }
+
+    [Fact]
+    public async Task Only_people_who_may_connect_can_enter_keys_and_ids_are_checked()
+    {
+        using var db = NewDb();
+        var setup = new WaSetupService(db, new FixedConnection(), new WaSecretBox(new byte[32]), new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider());
+        Assert.Equal(403, (await setup.SaveAsync(Boss, new WaSetupSaveRequest { PhoneNumberId = "123456789012345" }, "https://x/api/v1/whatsapp/webhook")).Status);
+
+        var admin = new WaActor { UserId = Asha, Name = "Asha", CanConnect = true };
+        Assert.Equal(400, (await setup.SaveAsync(admin, new WaSetupSaveRequest { PhoneNumberId = "+91 98765 43210" }, "u")).Status);
+        Assert.Equal(400, (await setup.SaveAsync(admin, new WaSetupSaveRequest { PhoneNumberId = "123456789012345", AppSecret = "not-a-secret" }, "u")).Status);
+
+        var token = "EAAG" + new string('x', 60) + "abcd";
+        var ok = await setup.SaveAsync(admin, new WaSetupSaveRequest { PhoneNumberId = "123456789012345", WabaId = "998877665544", AccessToken = token, AppSecret = new string('a', 32) }, "u");
+        Assert.True(ok.Ok, ok.Message);
+        var row = db.WaConnections.Single();
+        Assert.DoesNotContain("EAAG", row.AccessTokenEnc);
+        Assert.Equal("abcd", row.AccessTokenHint);
+        Assert.NotNull(row.VerifyTokenEnc);   // made for the webhook
+        Assert.Equal(token, new WaSecretBox(new byte[32]).Open(row.AccessTokenEnc));
+
+        // Saving again without a token keeps the stored one.
+        await setup.SaveAsync(admin, new WaSetupSaveRequest { PhoneNumberId = "123456789012345", WabaId = "998877665544" }, "u");
+        Assert.Equal("abcd", db.WaConnections.Single().AccessTokenHint);
+    }
+
+    [Fact]
+    public async Task The_webhook_address_must_be_https()
+    {
+        using var db = NewDb();
+        var setup = new WaSetupService(db, new FixedConnection(), new WaSecretBox(new byte[32]), new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider());
+        var admin = new WaActor { UserId = Asha, Name = "Asha", CanConnect = true };
+        Assert.Equal(400, (await setup.ConnectWebhookAsync(admin, new WaConnectWebhookRequest { Url = "http://151.185.45.77:5002/api/v1/whatsapp/webhook" }, "u")).Status);
     }
 }

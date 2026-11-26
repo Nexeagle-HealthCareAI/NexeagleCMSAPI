@@ -145,3 +145,21 @@ public class WaSettings
     public Guid? UpdatedByUserId { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
+
+/// <summary>The Meta connection, one row (entered in WhatsApp → Setup). Secrets are encrypted by the API.</summary>
+public class WaConnection
+{
+    public int ConnectionId { get; set; } = 1;
+    public string? PhoneNumberId { get; set; }
+    public string? WabaId { get; set; }
+    public string? AppId { get; set; }
+    public string? AccessTokenEnc { get; set; }
+    public string? AppSecretEnc { get; set; }
+    public string? VerifyTokenEnc { get; set; }
+    public string? AccessTokenHint { get; set; }
+    public string? WebhookUrl { get; set; }
+    public DateTime? WebhookConnectedAt { get; set; }
+    public DateTime? LastWebhookAt { get; set; }
+    public Guid? UpdatedByUserId { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}

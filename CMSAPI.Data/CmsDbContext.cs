@@ -55,6 +55,7 @@ public class CmsDbContext : DbContext
     public DbSet<WaBroadcastRecipient> WaBroadcastRecipients => Set<WaBroadcastRecipient>();
     public DbSet<WaRate> WaRates => Set<WaRate>();
     public DbSet<WaSettings> WaSettings => Set<WaSettings>();
+    public DbSet<WaConnection> WaConnections => Set<WaConnection>();
     public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
     public DbSet<WorkStatus> WorkStatuses => Set<WorkStatus>();
     public DbSet<WorkProjectMember> WorkProjectMembers => Set<WorkProjectMember>();
@@ -652,6 +653,19 @@ public class CmsDbContext : DbContext
             e.Property(x => x.Category).HasMaxLength(30);
             e.Property(x => x.Rate).HasPrecision(12, 4);
             e.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+        });
+        b.Entity<WaConnection>(e =>
+        {
+            e.ToTable("WaConnection");
+            e.HasKey(x => x.ConnectionId);
+            e.Property(x => x.ConnectionId).ValueGeneratedNever();
+            e.Property(x => x.PhoneNumberId).HasMaxLength(40);
+            e.Property(x => x.WabaId).HasMaxLength(40);
+            e.Property(x => x.AppId).HasMaxLength(40);
+            e.Property(x => x.AppSecretEnc).HasMaxLength(400);
+            e.Property(x => x.VerifyTokenEnc).HasMaxLength(400);
+            e.Property(x => x.AccessTokenHint).HasMaxLength(8);
+            e.Property(x => x.WebhookUrl).HasMaxLength(400);
         });
         b.Entity<WaSettings>(e =>
         {

@@ -19,11 +19,11 @@ public class WaWebhookService : IWaWebhookService
     private readonly ILogger<WaWebhookService> _logger;
     private readonly string? _phoneId;
 
-    public WaWebhookService(CmsDbContext db, IConfiguration config, ILogger<WaWebhookService> logger)
+    public WaWebhookService(CmsDbContext db, IWaConnectionStore connection, ILogger<WaWebhookService> logger)
     {
         _db = db;
         _logger = logger;
-        _phoneId = string.IsNullOrWhiteSpace(config["WhatsAppMarketing:PhoneNumberId"]) ? null : config["WhatsAppMarketing:PhoneNumberId"]!.Trim();
+        _phoneId = connection.Current.PhoneNumberId;
     }
 
     public async Task HandleAsync(JsonElement payload)

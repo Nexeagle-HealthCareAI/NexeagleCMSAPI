@@ -121,7 +121,10 @@ builder.Services.AddHttpClient<IDataMigrationService, DataMigrationService>(c =>
 builder.Services.AddHttpClient<IGroqSalesAiService, GroqSalesAiService>();
 builder.Services.AddHttpClient<IWhatsAppService, WhatsAppService>();
 // WhatsApp marketing on the CMS's own number (WhatsAppMarketing__* settings; design: claude/whatsapp-marketing-design.md)
+builder.Services.AddSingleton<CMSAPI.Data.WhatsApp.WaSecretBox>();
+builder.Services.AddSingleton<IWaConnectionStore, CMSAPI.Data.WhatsApp.WaConnectionStore>();
 builder.Services.AddHttpClient<IWaMeta, CMSAPI.Data.WhatsApp.GraphWaMeta>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<IWaSetupService, CMSAPI.Data.WhatsApp.WaSetupService>();
 builder.Services.AddScoped<IWaWebhookService, CMSAPI.Data.WhatsApp.WaWebhookService>();
 builder.Services.AddScoped<IWaInboxService, CMSAPI.Data.WhatsApp.WaInboxService>();
 builder.Services.AddScoped<IWaContactService, CMSAPI.Data.WhatsApp.WaContactService>();

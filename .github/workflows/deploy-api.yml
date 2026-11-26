@@ -70,15 +70,11 @@
 #   buckets: the CMS keeps its files in the folder cms-docs/ inside them; nothing to create).
 #   Optional: DEV_CMS_DOCS_BUCKET / PROD_CMS_DOCS_BUCKET for a bucket of the CMS's own, and
 #   CMS_DOCS_FOLDER for another folder name.
-#   WhatsApp marketing (CMS → WhatsApp; its own number, not the Doctor Dekho bot's). Per environment,
-#   PROD_ or DEV_ (leave DEV_ unset unless a second test number exists: Meta sends one number's
-#   messages to one address only):
+#   WhatsApp marketing (CMS → WhatsApp; its own number, not the Doctor Dekho bot's). Nothing is needed
+#   here: an administrator enters the Meta keys in CMS → WhatsApp → Setup, where they are stored encrypted.
+#   Optional fallbacks, used only for a value left empty in Setup (PROD_ or DEV_):
 #     Variables <ENV>_WA_MARKETING_PHONE_NUMBER_ID, <ENV>_WA_MARKETING_WABA_ID, META_APP_ID
-#     Secrets   <ENV>_WA_MARKETING_ACCESS_TOKEN (system-user token with whatsapp_business_messaging
-#               and whatsapp_business_management), META_APP_SECRET (the Meta app's secret: checks the
-#               webhook's signature), <ENV>_WA_MARKETING_VERIFY_TOKEN (any long random text; the same
-#               text goes in the number's webhook override).
-#   Unset: the WhatsApp section opens and says the number is not connected.
+#     Secrets   <ENV>_WA_MARKETING_ACCESS_TOKEN, <ENV>_WA_MARKETING_VERIFY_TOKEN, META_APP_SECRET
 # ═══════════════════════════════════════════════════════════════════════════════
 
 name: CMS API — CI/CD
@@ -408,11 +404,6 @@ jobs:
           } > "$ENVFILE"
           if [ -z "${STORAGE_ENDPOINT:-}" ] || [ -z "${STORAGE_ACCESS_KEY:-}" ] || [ -z "${STORAGE_SECRET_KEY:-}" ]; then
             echo "::warning title=Docs file storage is off::Set PROD_STORAGE_ENDPOINT and PROD_STORAGE_BUCKET (variables), PROD_STORAGE_ACCESS_KEY and PROD_STORAGE_SECRET_KEY (secrets) in this repo, as in 1RADAPI; until then uploading documents in the CMS answers 503."
-          fi
-          if [ -z "${WA_MKT_PHONE_ID:-}" ] || [ -z "${WA_MKT_TOKEN:-}" ]; then
-            echo "::notice title=WhatsApp marketing is not connected::Set PROD_WA_MARKETING_PHONE_NUMBER_ID, PROD_WA_MARKETING_WABA_ID, META_APP_ID (variables) and PROD_WA_MARKETING_ACCESS_TOKEN, PROD_WA_MARKETING_VERIFY_TOKEN, META_APP_SECRET (secrets)."
-          elif [ -z "${META_APP_SECRET:-}" ]; then
-            echo "::warning title=WhatsApp webhook will refuse messages::META_APP_SECRET is not set, so the webhook cannot check Meta's signature and answers 503."
           fi
 
       - name: Copy prod.env to Prod VM

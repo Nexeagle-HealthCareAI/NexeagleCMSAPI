@@ -28,11 +28,15 @@ public class WhatsAppController : ControllerBase
     private readonly IWaTemplateService _templates;
     private readonly IWaBroadcastService _broadcasts;
     private readonly IWaAccountService _account;
+    private readonly IWaSetupService _setup;
+    private readonly IConfiguration _config;
     private readonly CmsDbContext _db;
 
     public WhatsAppController(IWaInboxService inbox, IWaContactService contacts, IWaTemplateService templates,
-        IWaBroadcastService broadcasts, IWaAccountService account, CmsDbContext db)
+        IWaBroadcastService broadcasts, IWaAccountService account, IWaSetupService setup, IConfiguration config, CmsDbContext db)
     {
+        _setup = setup;
+        _config = config;
         _inbox = inbox;
         _contacts = contacts;
         _templates = templates;
@@ -52,6 +56,7 @@ public class WhatsAppController : ControllerBase
         CanApprove = Has("whatsapp.approve"),
         CanSettings = Has("whatsapp.settings"),
         CanPatientContacts = Has("insights.contacts"),
+        CanConnect = Has("whatsapp.connect"),
     };
 
     private bool Has(string permission) =>
@@ -248,4 +253,47 @@ public class WhatsAppController : ControllerBase
 
     [HttpGet("spend/meta")]
     public async Task<IActionResult> MetaSpend([FromQuery] DateOnly from, [FromQuery] DateOnly to) => Reply(await _account.MetaSpendAsync(Actor, from, to));
+
+    // ── Setup (the Meta connection) ─────────────────────────────────────────
+
+    /// <summary>
+    /// This API's webhook address as Meta should call it: WhatsAppMarketing__PublicApiUrl when set, else the
+    /// address this request came to (https unless it is an IP address or localhost).
+    /// </summary>
+    private string WebhookUrl()
+    {
+        var configured = _config["WhatsAppMarketing:PublicApiUrl"];
+        if (!string.IsNullOrWhiteSpace(configured)) return configured.Trim().TrimEnd('/') + "/api/v1/whatsapp/webhook";
+        var host = Request.Host.Host;
+        var plain = host == "localhost" || System.Net.IPAddress.TryParse(host, out _);
+        var scheme = plain ? Request.Scheme : "https";
+        var port = Request.Host.Port is { } p && !(p == 80 || p == 443) && plain ? $":{p}" : string.Empty;
+        return $"{scheme}://{host}{port}/api/v1/whatsapp/webhook";
+    }
+
+    [HttpGet("setup")]
+    public async Task<IActionResult> Setup() => Reply(await _setup.GetAsync(Actor, WebhookUrl()));
+
+    [HttpPut("setup")]
+    [HasPermission("whatsapp.connect")]
+    public async Task<IActionResult> SaveSetup([FromBody] WaSetupSaveRequest request) => Reply(await _setup.SaveAsync(Actor, request, WebhookUrl()));
+
+    [HttpPost("setup/verify-token")]
+    [HasPermission("whatsapp.connect")]
+    public async Task<IActionResult> NewVerifyToken() => Reply(await _setup.NewVerifyTokenAsync(Actor, WebhookUrl()));
+
+    [HttpGet("setup/checks")]
+    public async Task<IActionResult> SetupChecks() => Reply(await _setup.CheckAsync(Actor, WebhookUrl()));
+
+    [HttpPost("setup/subscribe-app")]
+    [HasPermission("whatsapp.connect")]
+    public async Task<IActionResult> SubscribeApp() => Reply(await _setup.SubscribeAppAsync(Actor, WebhookUrl()));
+
+    [HttpPost("setup/connect-webhook")]
+    [HasPermission("whatsapp.connect")]
+    public async Task<IActionResult> ConnectWebhook([FromBody] WaConnectWebhookRequest request) => Reply(await _setup.ConnectWebhookAsync(Actor, request, WebhookUrl()));
+
+    [HttpPost("setup/test")]
+    [HasPermission("whatsapp.connect")]
+    public async Task<IActionResult> TestMessage([FromBody] WaTestMessageRequest request) => Reply(await _setup.TestAsync(Actor, request));
 }

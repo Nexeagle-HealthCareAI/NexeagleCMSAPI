@@ -8,12 +8,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace CMSAPI.Controllers;
 
-// Meta's webhook for the WhatsApp marketing number. Meta reaches it through the number's webhook override:
-//   POST graph.facebook.com/<version>/<WhatsAppMarketing__PhoneNumberId>
-//   { "webhook_configuration": { "override_callback_uri": "https://cms-api.nexeagle.com/api/v1/whatsapp/webhook",
-//                                "verify_token": "<WhatsAppMarketing__VerifyToken>" } }
-// so the Doctor Dekho bot's number keeps going to the bot. No sign-in: every POST must carry Meta's
-// X-Hub-Signature-256 made with WhatsAppMarketing__AppSecret (the Meta app's secret), or it is refused.
+// Meta's webhook for the WhatsApp marketing number. Meta reaches it through the number's webhook override,
+// which WhatsApp → Setup sets ("Connect webhook"), so the Doctor Dekho bot's number keeps going to the bot.
+// No sign-in: every POST must carry Meta's X-Hub-Signature-256 made with the Meta app's secret (entered in
+// Setup), or it is refused. The verify token is the one Setup made.
 [AllowAnonymous]
 [ApiController]
 [ApiVersion("1.0")]
@@ -21,14 +19,14 @@ namespace CMSAPI.Controllers;
 public class WhatsAppWebhookController : ControllerBase
 {
     private readonly IWaWebhookService _webhook;
-    private readonly IConfiguration _config;
+    private readonly IWaConnectionStore _connection;
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
-    public WhatsAppWebhookController(IWaWebhookService webhook, IConfiguration config, IWebHostEnvironment env, ILogger<WhatsAppWebhookController> logger)
+    public WhatsAppWebhookController(IWaWebhookService webhook, IWaConnectionStore connection, IWebHostEnvironment env, ILogger<WhatsAppWebhookController> logger)
     {
         _webhook = webhook;
-        _config = config;
+        _connection = connection;
         _env = env;
         _logger = logger;
     }
@@ -40,8 +38,8 @@ public class WhatsAppWebhookController : ControllerBase
         [FromQuery(Name = "hub.verify_token")] string? token,
         [FromQuery(Name = "hub.challenge")] string? challenge)
     {
-        var expected = _config["WhatsAppMarketing:VerifyToken"];
-        if (string.IsNullOrEmpty(expected)) return StatusCode(503, "WhatsAppMarketing__VerifyToken is not set.");
+        var expected = _connection.Current.VerifyToken;
+        if (string.IsNullOrEmpty(expected)) return StatusCode(503, "The verify token is not set: make one in WhatsApp → Setup.");
         if (mode == "subscribe" && token != null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes(expected)))
             return Content(challenge ?? string.Empty, "text/plain");
         return StatusCode(403);
@@ -55,12 +53,12 @@ public class WhatsAppWebhookController : ControllerBase
         await Request.Body.CopyToAsync(memory);
         var raw = memory.ToArray();
 
-        var secret = _config["WhatsAppMarketing:AppSecret"];
+        var secret = _connection.Current.AppSecret;
         if (string.IsNullOrEmpty(secret))
         {
             if (!_env.IsDevelopment())
             {
-                _logger.LogError("WhatsApp marketing webhook refused: WhatsAppMarketing__AppSecret is not set.");
+                _logger.LogError("WhatsApp marketing webhook refused: the Meta app secret is not set (WhatsApp → Setup).");
                 return StatusCode(503, new { error = "Webhook signature check is not set up." });
             }
         }
@@ -77,6 +75,7 @@ public class WhatsAppWebhookController : ControllerBase
         try
         {
             await _webhook.HandleAsync(payload);
+            await _connection.MarkWebhookAsync();
         }
         catch (Exception ex)
         {
