@@ -4,8 +4,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CMSAPI.Application.Models;
 using CMSAPI.Application.Services;
 using CMSAPI.Data;
+using CMSAPI.Data.Entities;
 using CMSAPI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -44,35 +46,13 @@ public class SubscriptionApprovalService : ISubscriptionApprovalService
         if (easyHmsPlan == null && legacyPlan == null)
             return new ApprovalResult { ErrorMessage = "Invalid plan selected by hospital." };
 
-        if (easyHmsPlan != null && (easyHmsPlan.MaxDoctors.HasValue || easyHmsPlan.MaxBeds.HasValue))
+        var overLimitIssues = await GetOverLimitIssuesAsync(hospitalId, easyHmsPlan);
+        if (overLimitIssues.Count > 0)
         {
-            var overLimitIssues = new List<string>();
-
-            if (easyHmsPlan.MaxDoctors.HasValue)
+            return new ApprovalResult
             {
-                var currentDoctorCount = await _appDb.Doctors
-                    .Where(d => d.HospitalID == hospitalId)
-                    .Join(_appDb.Users, d => d.UserID, u => u.UserID, (d, u) => u)
-                    .CountAsync(u => u.UserStatusId != 3); // 3 = UserStatusEnum.Revoked
-
-                if (currentDoctorCount > easyHmsPlan.MaxDoctors.Value)
-                    overLimitIssues.Add($"{currentDoctorCount} doctors (this plan allows {easyHmsPlan.MaxDoctors.Value})");
-            }
-
-            if (easyHmsPlan.MaxBeds.HasValue)
-            {
-                var currentBedCount = await _appDb.BedMaster.CountAsync(b => b.HospitalId == hospitalId && b.IsActive);
-                if (currentBedCount > easyHmsPlan.MaxBeds.Value)
-                    overLimitIssues.Add($"{currentBedCount} beds (this plan allows {easyHmsPlan.MaxBeds.Value})");
-            }
-
-            if (overLimitIssues.Count > 0)
-            {
-                return new ApprovalResult
-                {
-                    ErrorMessage = $"Cannot activate this plan — the hospital currently has {string.Join(" and ", overLimitIssues)}. Ask them to reduce their count first, or choose a higher tier."
-                };
-            }
+                ErrorMessage = $"Cannot activate this plan — the hospital currently has {string.Join(" and ", overLimitIssues)}. Ask them to reduce their count first, or choose a higher tier."
+            };
         }
 
         var billingCycle = easyHmsPlan?.BillingCycle ?? legacyPlan!.BillingCycle;
@@ -195,5 +175,136 @@ public class SubscriptionApprovalService : ISubscriptionApprovalService
         await _appDb.SaveChangesAsync();
 
         return new ApprovalResult { Success = true };
+    }
+
+    // CMS-initiated renewal: works regardless of the subscription's current status (Active,
+    // Expired, Blocked, Trial, or even PendingApproval), unlike ApprovePaymentAsync which only
+    // ever acts on a hospital-submitted PendingApproval payment. Used for offline payments and
+    // manual corrections — see RenewSubscriptionRequest for the exact fields.
+    public async Task<ApprovalResult> RenewSubscriptionAsync(Guid hospitalId, RenewSubscriptionRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reference))
+            return new ApprovalResult { ErrorMessage = "A reference/reason is required to renew a subscription." };
+
+        var sub = await _appDb.HospitalSubscriptions.FirstOrDefaultAsync(hs => hs.HospitalId == hospitalId);
+        if (sub == null) return new ApprovalResult { ErrorMessage = "Hospital subscription not found." };
+
+        if (!sub.PlanId.HasValue)
+            return new ApprovalResult { ErrorMessage = "Hospital has not selected a plan yet — there is nothing to renew." };
+
+        var easyHmsPlan = await _cmsDb.EasyHmsSubscriptionPlans.FirstOrDefaultAsync(p => p.PlanId == sub.PlanId.Value);
+        var legacyPlan = easyHmsPlan == null
+            ? await _cmsDb.SubscriptionPlans.FirstOrDefaultAsync(p => p.PlanId == sub.PlanId.Value)
+            : null;
+
+        if (easyHmsPlan == null && legacyPlan == null)
+            return new ApprovalResult { ErrorMessage = "Invalid plan on this subscription." };
+
+        if (!request.AllowOverLimit)
+        {
+            var overLimitIssues = await GetOverLimitIssuesAsync(hospitalId, easyHmsPlan);
+            if (overLimitIssues.Count > 0)
+            {
+                return new ApprovalResult
+                {
+                    RequiresOverrideConfirmation = true,
+                    OverLimitDetails = overLimitIssues,
+                    ErrorMessage = $"This hospital currently has {string.Join(" and ", overLimitIssues)}. Renew anyway?"
+                };
+            }
+        }
+
+        var billingCycle = easyHmsPlan?.BillingCycle ?? legacyPlan!.BillingCycle;
+        var now = DateTime.UtcNow;
+
+        // Extend from the later of today or the current end date, so renewing before expiry
+        // never forfeits already-paid time; reactivating a lapsed/blocked subscription starts
+        // fresh from today.
+        var newStart = sub.SubscriptionEndDate.HasValue && sub.SubscriptionEndDate.Value > now
+            ? sub.SubscriptionEndDate.Value
+            : now;
+
+        var newEnd = request.SubscriptionEndDate ?? billingCycle.ToLowerInvariant() switch
+        {
+            "yearly" => newStart.AddYears(1),
+            "half-yearly" => newStart.AddMonths(6),
+            "quarterly" => newStart.AddMonths(3),
+            _ => newStart.AddMonths(1)
+        };
+
+        if (newEnd <= newStart)
+            return new ApprovalResult { ErrorMessage = "The new end date must be after the renewal's start date." };
+
+        sub.Status = "Active";
+        sub.SubscriptionStartDate = newStart;
+        sub.SubscriptionEndDate = newEnd;
+        sub.NextBillingDate = newEnd;
+        sub.MaxDoctors = easyHmsPlan?.MaxDoctors;
+        sub.MaxBeds = easyHmsPlan?.MaxBeds;
+        sub.RejectionReason = null;
+        sub.RejectedAt = null;
+        sub.UpdatedAt = now;
+
+        // Close out any payment still awaiting review so it doesn't linger in the Approvals
+        // queue alongside this manual renewal.
+        var latestPending = await _appDb.HospitalSubscriptionPayments
+            .Where(p => p.HospitalId == hospitalId && p.Status == "PendingApproval")
+            .OrderByDescending(p => p.SubmittedAt)
+            .FirstOrDefaultAsync();
+        if (latestPending != null)
+        {
+            latestPending.Status = "Approved";
+            latestPending.ReviewedAt = now;
+        }
+
+        var planName = easyHmsPlan?.Name ?? legacyPlan?.Name;
+        _appDb.HospitalSubscriptionPayments.Add(new HospitalSubscriptionPayment
+        {
+            PaymentId = Guid.NewGuid(),
+            HospitalId = hospitalId,
+            HospitalSubscriptionId = sub.HospitalSubscriptionId,
+            PlanId = sub.PlanId,
+            PlanName = planName,
+            Amount = request.Amount ?? 0m,
+            Reference = request.Reference.Trim(),
+            PaymentMode = string.IsNullOrWhiteSpace(request.PaymentMode) ? "Manual" : request.PaymentMode.Trim(),
+            Status = "Approved",
+            SubmittedAt = now,
+            ReviewedAt = now,
+        });
+
+        await _appDb.SaveChangesAsync();
+
+        return new ApprovalResult { Success = true, SubscriptionEndDate = sub.SubscriptionEndDate };
+    }
+
+    // Shared by ApprovePaymentAsync (hard block) and RenewSubscriptionAsync (soft warning,
+    // overridable) — returns a human-readable issue per over-limit resource, empty if within limits
+    // or the plan has no caps (null MaxDoctors/MaxBeds = unlimited, e.g. Enterprise or a legacy plan).
+    private async Task<List<string>> GetOverLimitIssuesAsync(Guid hospitalId, EasyHmsSubscriptionPlan? easyHmsPlan)
+    {
+        var issues = new List<string>();
+        if (easyHmsPlan == null || (!easyHmsPlan.MaxDoctors.HasValue && !easyHmsPlan.MaxBeds.HasValue))
+            return issues;
+
+        if (easyHmsPlan.MaxDoctors.HasValue)
+        {
+            var currentDoctorCount = await _appDb.Doctors
+                .Where(d => d.HospitalID == hospitalId)
+                .Join(_appDb.Users, d => d.UserID, u => u.UserID, (d, u) => u)
+                .CountAsync(u => u.UserStatusId != 3); // 3 = UserStatusEnum.Revoked
+
+            if (currentDoctorCount > easyHmsPlan.MaxDoctors.Value)
+                issues.Add($"{currentDoctorCount} doctors (this plan allows {easyHmsPlan.MaxDoctors.Value})");
+        }
+
+        if (easyHmsPlan.MaxBeds.HasValue)
+        {
+            var currentBedCount = await _appDb.BedMaster.CountAsync(b => b.HospitalId == hospitalId && b.IsActive);
+            if (currentBedCount > easyHmsPlan.MaxBeds.Value)
+                issues.Add($"{currentBedCount} beds (this plan allows {easyHmsPlan.MaxBeds.Value})");
+        }
+
+        return issues;
     }
 }
