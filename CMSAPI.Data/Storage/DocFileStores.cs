@@ -146,8 +146,10 @@ public class MinioDocFileStore : IDocFileStore
     }
 
     /// <summary>The store's refusal in words an administrator can act on.</summary>
-    private DocStorageException Explain(AmazonS3Exception ex) => ex.ErrorCode switch
+    private DocStorageException Explain(AmazonS3Exception ex, bool reading = false) => ex.ErrorCode switch
     {
+        "AccessDenied" when reading =>
+            new DocStorageException($"The storage keys may not read from the bucket '{_bucket}' on {_host}. Give them read access to it (as well as write).", ex),
         "InvalidAccessKeyId" or "SignatureDoesNotMatch" =>
             new DocStorageException($"The file store at {_host} did not accept the storage keys. Check Storage__Minio__AccessKey and Storage__Minio__SecretKey.", ex),
         "AccessDenied" =>
@@ -170,7 +172,7 @@ public class MinioDocFileStore : IDocFileStore
         }
         catch (AmazonS3Exception ex)
         {
-            throw Explain(ex);
+            throw Explain(ex, reading: true);
         }
         catch (Exception ex) when (ex is AmazonClientException or HttpRequestException)
         {
