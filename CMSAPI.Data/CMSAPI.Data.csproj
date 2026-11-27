@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="CMSAPI.Tests" />
     <ProjectReference Include="..\CMSAPI.Domain\CMSAPI.Domain.csproj" />
     <ProjectReference Include="..\CMSAPI.Application\CMSAPI.Application.csproj" />
   </ItemGroup>

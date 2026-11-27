@@ -25,6 +25,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHostedService<CMSAPI.Services.ScheduledHealthCheck>();
 builder.Services.AddHostedService<CMSAPI.Services.DripCampaignWorker>();
 builder.Services.AddHostedService<CMSAPI.Services.MetaAdSpendWorker>();
+builder.Services.AddHostedService<CMSAPI.Services.WhatsAppSendWorker>();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -119,6 +120,17 @@ builder.Services.AddHttpClient<IDataMigrationService, DataMigrationService>(c =>
 });
 builder.Services.AddHttpClient<IGroqSalesAiService, GroqSalesAiService>();
 builder.Services.AddHttpClient<IWhatsAppService, WhatsAppService>();
+// WhatsApp marketing on the CMS's own number (WhatsAppMarketing__* settings; design: claude/whatsapp-marketing-design.md)
+builder.Services.AddSingleton<CMSAPI.Data.WhatsApp.WaSecretBox>();
+builder.Services.AddSingleton<IWaConnectionStore, CMSAPI.Data.WhatsApp.WaConnectionStore>();
+builder.Services.AddHttpClient<IWaMeta, CMSAPI.Data.WhatsApp.GraphWaMeta>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<IWaSetupService, CMSAPI.Data.WhatsApp.WaSetupService>();
+builder.Services.AddScoped<IWaWebhookService, CMSAPI.Data.WhatsApp.WaWebhookService>();
+builder.Services.AddScoped<IWaInboxService, CMSAPI.Data.WhatsApp.WaInboxService>();
+builder.Services.AddScoped<IWaContactService, CMSAPI.Data.WhatsApp.WaContactService>();
+builder.Services.AddScoped<IWaTemplateService, CMSAPI.Data.WhatsApp.WaTemplateService>();
+builder.Services.AddScoped<IWaBroadcastService, CMSAPI.Data.WhatsApp.WaBroadcastService>();
+builder.Services.AddScoped<IWaAccountService, CMSAPI.Data.WhatsApp.WaAccountService>();
 builder.Services.AddHttpClient<IRadHospitalsService, RadHospitalsService>();
 builder.Services.AddHttpClient<IRadSubscriptionsService, RadSubscriptionsService>();
 // The Health Wiki's data is in 1HMSAPI's database; this reaches it over HTTP with a shared key (see HealthWikiService). A longer timeout

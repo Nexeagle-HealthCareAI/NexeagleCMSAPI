@@ -46,6 +46,16 @@ public class CmsDbContext : DbContext
     public DbSet<CmsCampaign> CmsCampaigns => Set<CmsCampaign>();
     public DbSet<CmsSocialPost> CmsSocialPosts => Set<CmsSocialPost>();
     public DbSet<CmsWhatsappTemplate> CmsWhatsappTemplates => Set<CmsWhatsappTemplate>();
+    // WhatsApp marketing (35_CMSDatabase_WhatsApp_Marketing.sql)
+    public DbSet<WaContact> WaContacts => Set<WaContact>();
+    public DbSet<WaMessage> WaMessages => Set<WaMessage>();
+    public DbSet<WaNote> WaNotes => Set<WaNote>();
+    public DbSet<WaTemplate> WaTemplates => Set<WaTemplate>();
+    public DbSet<WaBroadcast> WaBroadcasts => Set<WaBroadcast>();
+    public DbSet<WaBroadcastRecipient> WaBroadcastRecipients => Set<WaBroadcastRecipient>();
+    public DbSet<WaRate> WaRates => Set<WaRate>();
+    public DbSet<WaSettings> WaSettings => Set<WaSettings>();
+    public DbSet<WaConnection> WaConnections => Set<WaConnection>();
     public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
     public DbSet<WorkStatus> WorkStatuses => Set<WorkStatus>();
     public DbSet<WorkProjectMember> WorkProjectMembers => Set<WorkProjectMember>();
@@ -549,6 +559,121 @@ public class CmsDbContext : DbContext
             e.ToTable("CmsSocialPosts");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        // WhatsApp marketing (35_CMSDatabase_WhatsApp_Marketing.sql)
+        b.Entity<WaContact>(e =>
+        {
+            e.ToTable("WaContacts");
+            e.HasKey(x => x.ContactId);
+            e.Property(x => x.ContactId).ValueGeneratedNever();
+            e.Property(x => x.Phone).HasMaxLength(20).IsRequired();
+            e.HasIndex(x => x.Phone).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(150);
+            e.Property(x => x.ProfileName).HasMaxLength(150);
+            e.Property(x => x.Source).HasMaxLength(20).IsRequired();
+            e.Property(x => x.OptIn).HasMaxLength(10).IsRequired();
+            e.Property(x => x.OptInSource).HasMaxLength(200);
+            e.Property(x => x.OptOutReason).HasMaxLength(200);
+            e.Property(x => x.Tags).HasMaxLength(400);
+            e.Property(x => x.LastMessagePreview).HasMaxLength(200);
+            e.Property(x => x.ChatStatus).HasMaxLength(10).IsRequired();
+        });
+        b.Entity<WaMessage>(e =>
+        {
+            e.ToTable("WaMessages");
+            e.HasKey(x => x.MessageId);
+            e.Property(x => x.MessageId).ValueGeneratedNever();
+            e.Property(x => x.Direction).HasMaxLength(3).IsRequired();
+            e.Property(x => x.WamId).HasMaxLength(200);
+            e.HasIndex(x => x.WamId).IsUnique().HasFilter("[WamId] IS NOT NULL");
+            e.Property(x => x.Type).HasMaxLength(20).IsRequired();
+            e.Property(x => x.MediaId).HasMaxLength(100);
+            e.Property(x => x.MediaMime).HasMaxLength(100);
+            e.Property(x => x.MediaName).HasMaxLength(260);
+            e.Property(x => x.TemplateName).HasMaxLength(512);
+            e.Property(x => x.TemplateLanguage).HasMaxLength(15);
+            e.Property(x => x.ReplyToWamId).HasMaxLength(200);
+            e.Property(x => x.Status).HasMaxLength(12).IsRequired();
+            e.Property(x => x.ErrorText).HasMaxLength(400);
+            e.Property(x => x.PricingCategory).HasMaxLength(30);
+            e.Property(x => x.Cost).HasPrecision(12, 4);
+            e.Property(x => x.Currency).HasMaxLength(3);
+        });
+        b.Entity<WaNote>(e =>
+        {
+            e.ToTable("WaNotes");
+            e.HasKey(x => x.NoteId);
+            e.Property(x => x.NoteId).ValueGeneratedNever();
+            e.Property(x => x.Text).HasMaxLength(2000).IsRequired();
+        });
+        b.Entity<WaTemplate>(e =>
+        {
+            e.ToTable("WaTemplates");
+            e.HasKey(x => x.TemplateId);
+            e.Property(x => x.TemplateId).ValueGeneratedNever();
+            e.Property(x => x.MetaTemplateId).HasMaxLength(40);
+            e.Property(x => x.Name).HasMaxLength(512).IsRequired();
+            e.Property(x => x.Language).HasMaxLength(15).IsRequired();
+            e.HasIndex(x => new { x.Name, x.Language }).IsUnique();
+            e.Property(x => x.Category).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            e.Property(x => x.RejectedReason).HasMaxLength(400);
+            e.Property(x => x.QualityScore).HasMaxLength(20);
+            e.Property(x => x.ParameterFormat).HasMaxLength(12).IsRequired();
+            e.Property(x => x.Components).IsRequired();
+            e.Property(x => x.HeaderMediaKey).HasMaxLength(300);
+        });
+        b.Entity<WaBroadcast>(e =>
+        {
+            e.ToTable("WaBroadcasts");
+            e.HasKey(x => x.BroadcastId);
+            e.Property(x => x.BroadcastId).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            e.Property(x => x.HeaderMediaUrl).HasMaxLength(1000);
+            e.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            e.Property(x => x.PausedReason).HasMaxLength(200);
+            e.Property(x => x.EstimatedCost).HasPrecision(12, 4);
+            e.Property(x => x.ActualCost).HasPrecision(12, 4);
+            e.Property(x => x.Currency).HasMaxLength(3);
+        });
+        b.Entity<WaBroadcastRecipient>(e =>
+        {
+            e.ToTable("WaBroadcastRecipients");
+            e.HasKey(x => new { x.BroadcastId, x.ContactId });
+            e.Property(x => x.Status).HasMaxLength(12).IsRequired();
+            e.Property(x => x.Error).HasMaxLength(400);
+            e.Property(x => x.EstimatedCost).HasPrecision(12, 4);
+        });
+        b.Entity<WaRate>(e =>
+        {
+            e.ToTable("WaRates");
+            e.HasKey(x => new { x.Country, x.Category });
+            e.Property(x => x.Country).HasMaxLength(2);
+            e.Property(x => x.Category).HasMaxLength(30);
+            e.Property(x => x.Rate).HasPrecision(12, 4);
+            e.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+        });
+        b.Entity<WaConnection>(e =>
+        {
+            e.ToTable("WaConnection");
+            e.HasKey(x => x.ConnectionId);
+            e.Property(x => x.ConnectionId).ValueGeneratedNever();
+            e.Property(x => x.PhoneNumberId).HasMaxLength(40);
+            e.Property(x => x.WabaId).HasMaxLength(40);
+            e.Property(x => x.AppId).HasMaxLength(40);
+            e.Property(x => x.AppSecretEnc).HasMaxLength(400);
+            e.Property(x => x.VerifyTokenEnc).HasMaxLength(400);
+            e.Property(x => x.AccessTokenHint).HasMaxLength(8);
+            e.Property(x => x.WebhookUrl).HasMaxLength(400);
+        });
+        b.Entity<WaSettings>(e =>
+        {
+            e.ToTable("WaSettings");
+            e.HasKey(x => x.SettingsId);
+            e.Property(x => x.SettingsId).ValueGeneratedNever();
+            e.Property(x => x.MonthlyBudget).HasPrecision(12, 2);
+            e.Property(x => x.Currency).HasMaxLength(3).IsRequired();
         });
 
         b.Entity<CmsWhatsappTemplate>(e =>
