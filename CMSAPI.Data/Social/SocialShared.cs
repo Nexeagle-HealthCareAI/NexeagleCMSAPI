@@ -104,7 +104,7 @@ public class SocialMediaLinks
     }
 }
 
-internal static class SocialShared
+public static class SocialShared
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
