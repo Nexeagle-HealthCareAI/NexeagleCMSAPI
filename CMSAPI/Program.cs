@@ -27,6 +27,7 @@ builder.Services.AddHostedService<CMSAPI.Services.DripCampaignWorker>();
 builder.Services.AddHostedService<CMSAPI.Services.MetaAdSpendWorker>();
 builder.Services.AddHostedService<CMSAPI.Services.WhatsAppSendWorker>();
 builder.Services.AddHostedService<CMSAPI.Services.SocialWorker>();
+builder.Services.AddHostedService<CMSAPI.Services.GoogleWorker>();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -139,6 +140,14 @@ builder.Services.AddScoped<ISocialLeadsService, CMSAPI.Data.Social.SocialLeadsSe
 builder.Services.AddScoped<ISocialAdsService, CMSAPI.Data.Social.SocialAdsService>();
 builder.Services.AddScoped<ISocialWebhookService, CMSAPI.Data.Social.SocialWebhookService>();
 builder.Services.AddScoped<ISocialSyncService, CMSAPI.Data.Social.SocialSyncService>();
+// Google: Analytics, Google Ads, Search Console, lead forms (plan: claude/google-analytics-ads-plan.md)
+builder.Services.AddHttpClient<IGoogleApi, CMSAPI.Data.Google.GoogleApi>(c => c.Timeout = TimeSpan.FromSeconds(60));
+builder.Services.AddSingleton<CMSAPI.Data.Google.GoogleSignInState>();
+builder.Services.AddScoped<CMSAPI.Data.Google.GoogleKeys>();
+builder.Services.AddScoped<IGoogleSetupService, CMSAPI.Data.Google.GoogleSetupService>();
+builder.Services.AddScoped<IGoogleReportsService, CMSAPI.Data.Google.GoogleReportsService>();
+builder.Services.AddScoped<IGoogleLeadsService, CMSAPI.Data.Google.GoogleLeadsService>();
+builder.Services.AddScoped<IGoogleOutcomesService, CMSAPI.Data.Google.GoogleOutcomesService>();
 builder.Services.AddScoped<IWaWebhookService, CMSAPI.Data.WhatsApp.WaWebhookService>();
 builder.Services.AddScoped<IWaInboxService, CMSAPI.Data.WhatsApp.WaInboxService>();
 builder.Services.AddScoped<IWaContactService, CMSAPI.Data.WhatsApp.WaContactService>();
@@ -277,6 +286,8 @@ if (!string.IsNullOrWhiteSpace(extraOrigins))
 
 builder.Services.AddCors(options =>
 {
+    // The websites read their Google tag IDs (public, nothing secret) from any of their domains.
+    options.AddPolicy("GoogleSiteTag", policy => policy.AllowAnyOrigin().WithMethods("GET").AllowAnyHeader());
     options.AddPolicy("FrontendCors", policy =>
     {
         policy.WithOrigins(corsOrigins.ToArray())
