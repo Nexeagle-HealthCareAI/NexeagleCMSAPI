@@ -164,6 +164,18 @@ public class WaSetupService : IWaSetupService
         {
             var n = await meta.GetNumberAsync();
             Add("token", "Token works", "ok", $"{n["display_phone_number"]?.ToString()} · {n["verified_name"]?.ToString()}".Trim(' ', '·'));
+            // The name people see above the chat. Meta reviews it; until then messages may show the number only.
+            var nameStatus = n["name_status"]?.ToString();
+            Add("display-name", "Display name approved by Meta",
+                nameStatus is "APPROVED" or "AVAILABLE_WITHOUT_REVIEW" ? "ok" : nameStatus is "DECLINED" or "NON_EXISTS" ? "fail" : "warn",
+                nameStatus switch
+                {
+                    "APPROVED" or "AVAILABLE_WITHOUT_REVIEW" => n["verified_name"]?.ToString(),
+                    "DECLINED" => "Meta declined the display name. Change it in WhatsApp Manager, in the phone number's settings.",
+                    "NON_EXISTS" => "No display name yet. Set it in WhatsApp Manager, in the phone number's settings.",
+                    null => null,
+                    _ => $"Meta's review: {nameStatus.ToLowerInvariant().Replace('_', ' ')}. Messages can go out meanwhile.",
+                });
         }
         catch (WaMetaException ex)
         {
@@ -215,6 +227,21 @@ public class WaSetupService : IWaSetupService
         // 5. Something has actually arrived.
         if (row?.LastWebhookAt is { } last) Add("arriving", "Messages arriving", "ok", $"Last from Meta: {last:dd MMM yyyy HH:mm} UTC.");
         else Add("arriving", "Messages arriving", "todo", "Nothing yet. Send any message from a phone to the number.");
+
+        // 6. The business profile people open in WhatsApp. Not needed to send, but a bare profile looks untrustworthy.
+        try
+        {
+            var p = await meta.GetProfileAsync();
+            var gaps = new List<string>();
+            if (string.IsNullOrWhiteSpace(p["profile_picture_url"]?.ToString())) gaps.Add("photo");
+            if (string.IsNullOrWhiteSpace(p["about"]?.ToString())) gaps.Add("about");
+            if (string.IsNullOrWhiteSpace(p["description"]?.ToString())) gaps.Add("description");
+            if (string.IsNullOrWhiteSpace(p["email"]?.ToString())) gaps.Add("email");
+            if (p["websites"] is not JsonArray { Count: > 0 }) gaps.Add("website");
+            Add("profile", "Business profile filled in", gaps.Count == 0 ? "ok" : "warn",
+                gaps.Count == 0 ? null : "Missing: " + string.Join(", ", gaps) + ". Fill it in below.");
+        }
+        catch (WaMetaException ex) { Add("profile", "Business profile filled in", "warn", ex.Message); }
 
         return new WaSetupChecks { Items = list, Ready = ready };
     }
