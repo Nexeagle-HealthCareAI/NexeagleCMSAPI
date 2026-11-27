@@ -56,6 +56,19 @@ public class CmsDbContext : DbContext
     public DbSet<WaRate> WaRates => Set<WaRate>();
     public DbSet<WaSettings> WaSettings => Set<WaSettings>();
     public DbSet<WaConnection> WaConnections => Set<WaConnection>();
+    public DbSet<SocialAccount> SocialAccounts => Set<SocialAccount>();
+    public DbSet<SocialAccountDaily> SocialAccountDaily => Set<SocialAccountDaily>();
+    public DbSet<SocialPost> SocialPosts => Set<SocialPost>();
+    public DbSet<SocialPostStat> SocialPostStats => Set<SocialPostStat>();
+    public DbSet<SocialDraft> SocialDrafts => Set<SocialDraft>();
+    public DbSet<SocialQueueSlot> SocialQueueSlots => Set<SocialQueueSlot>();
+    public DbSet<SocialComment> SocialComments => Set<SocialComment>();
+    public DbSet<SocialContact> SocialContacts => Set<SocialContact>();
+    public DbSet<SocialMessage> SocialMessages => Set<SocialMessage>();
+    public DbSet<SocialNote> SocialNotes => Set<SocialNote>();
+    public DbSet<SocialLead> SocialLeads => Set<SocialLead>();
+    public DbSet<SocialLeadForm> SocialLeadForms => Set<SocialLeadForm>();
+    public DbSet<SocialAdStat> SocialAdStats => Set<SocialAdStat>();
     public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
     public DbSet<WorkStatus> WorkStatuses => Set<WorkStatus>();
     public DbSet<WorkProjectMember> WorkProjectMembers => Set<WorkProjectMember>();
@@ -654,6 +667,149 @@ public class CmsDbContext : DbContext
             e.Property(x => x.Rate).HasPrecision(12, 4);
             e.Property(x => x.Currency).HasMaxLength(3).IsRequired();
         });
+        // ── Social (script 36) ──
+        b.Entity<SocialAccount>(e =>
+        {
+            e.ToTable("SocialAccounts");
+            e.HasKey(x => x.AccountId);
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.AppId).HasMaxLength(40);
+            e.Property(x => x.AppSecretEnc).HasMaxLength(400);
+            e.Property(x => x.TokenHint).HasMaxLength(8);
+            e.Property(x => x.VerifyTokenEnc).HasMaxLength(400);
+            e.Property(x => x.PageId).HasMaxLength(40);
+            e.Property(x => x.PageName).HasMaxLength(200);
+            e.Property(x => x.IgUserId).HasMaxLength(40);
+            e.Property(x => x.IgUsername).HasMaxLength(100);
+            e.Property(x => x.AdAccountId).HasMaxLength(40);
+            e.Property(x => x.AdAccountName).HasMaxLength(200);
+            e.Property(x => x.Currency).HasMaxLength(3);
+            e.Property(x => x.WebhookUrl).HasMaxLength(400);
+            e.Property(x => x.SyncError).HasMaxLength(400);
+            e.HasIndex(x => x.Name).IsUnique();
+        });
+        b.Entity<SocialAccountDaily>(e =>
+        {
+            e.ToTable("SocialAccountDaily");
+            e.HasKey(x => new { x.AccountId, x.Day });
+            e.Property(x => x.Day).HasColumnType("date");
+        });
+        b.Entity<SocialPost>(e =>
+        {
+            e.ToTable("SocialPosts");
+            e.HasKey(x => x.PostId);
+            e.Property(x => x.Channel).HasMaxLength(12);
+            e.Property(x => x.MetaId).HasMaxLength(80);
+            e.Property(x => x.Type).HasMaxLength(20);
+            e.Property(x => x.ThumbnailUrl).HasMaxLength(1000);
+            e.Property(x => x.Permalink).HasMaxLength(500);
+            e.HasIndex(x => new { x.Channel, x.MetaId }).IsUnique();
+        });
+        b.Entity<SocialPostStat>(e =>
+        {
+            e.ToTable("SocialPostStats");
+            e.HasKey(x => new { x.PostId, x.Day });
+            e.Property(x => x.Day).HasColumnType("date");
+        });
+        b.Entity<SocialDraft>(e =>
+        {
+            e.ToTable("SocialDrafts");
+            e.HasKey(x => x.DraftId);
+            e.Property(x => x.Title).HasMaxLength(150);
+            e.Property(x => x.Kind).HasMaxLength(20);
+            e.Property(x => x.Link).HasMaxLength(1000);
+            e.Property(x => x.WhenMode).HasMaxLength(12);
+            e.Property(x => x.Status).HasMaxLength(20);
+            e.Property(x => x.ChecklistJson).HasMaxLength(1000);
+            e.Property(x => x.ApprovedHash).HasMaxLength(64);
+            e.Property(x => x.SentBackNote).HasMaxLength(1000);
+            e.Property(x => x.FacebookPostId).HasMaxLength(80);
+            e.Property(x => x.InstagramMediaId).HasMaxLength(80);
+            e.Property(x => x.Error).HasMaxLength(1000);
+        });
+        b.Entity<SocialQueueSlot>(e =>
+        {
+            e.ToTable("SocialQueueSlots");
+            e.HasKey(x => x.SlotId);
+            e.Property(x => x.TimeOfDay).HasColumnType("time(0)");
+        });
+        b.Entity<SocialComment>(e =>
+        {
+            e.ToTable("SocialComments");
+            e.HasKey(x => x.CommentId);
+            e.Property(x => x.Channel).HasMaxLength(12);
+            e.Property(x => x.MetaId).HasMaxLength(80);
+            e.Property(x => x.PostMetaId).HasMaxLength(80);
+            e.Property(x => x.ParentMetaId).HasMaxLength(80);
+            e.Property(x => x.AuthorId).HasMaxLength(80);
+            e.Property(x => x.AuthorName).HasMaxLength(200);
+            e.Property(x => x.Status).HasMaxLength(10);
+            e.HasIndex(x => new { x.Channel, x.MetaId }).IsUnique();
+        });
+        b.Entity<SocialContact>(e =>
+        {
+            e.ToTable("SocialContacts");
+            e.HasKey(x => x.ContactId);
+            e.Property(x => x.Channel).HasMaxLength(12);
+            e.Property(x => x.ExternalId).HasMaxLength(80);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Username).HasMaxLength(100);
+            e.Property(x => x.LastMessagePreview).HasMaxLength(200);
+            e.Property(x => x.ChatStatus).HasMaxLength(10);
+            e.HasIndex(x => new { x.AccountId, x.Channel, x.ExternalId }).IsUnique();
+        });
+        b.Entity<SocialMessage>(e =>
+        {
+            e.ToTable("SocialMessages");
+            e.HasKey(x => x.MessageId);
+            e.Property(x => x.Direction).HasMaxLength(3);
+            e.Property(x => x.MetaId).HasMaxLength(200);
+            e.Property(x => x.Status).HasMaxLength(12);
+            e.Property(x => x.Error).HasMaxLength(500);
+            e.HasIndex(x => x.MetaId).IsUnique().HasFilter("[MetaId] IS NOT NULL");
+        });
+        b.Entity<SocialNote>(e =>
+        {
+            e.ToTable("SocialNotes");
+            e.HasKey(x => x.NoteId);
+            e.Property(x => x.Text).HasMaxLength(2000);
+        });
+        b.Entity<SocialLead>(e =>
+        {
+            e.ToTable("SocialLeads");
+            e.HasKey(x => x.SocialLeadId);
+            e.Property(x => x.Source).HasMaxLength(20);
+            e.Property(x => x.MetaLeadId).HasMaxLength(80);
+            e.Property(x => x.FormId).HasMaxLength(80);
+            e.Property(x => x.FormName).HasMaxLength(200);
+            e.Property(x => x.AdId).HasMaxLength(80);
+            e.Property(x => x.AdName).HasMaxLength(300);
+            e.Property(x => x.CampaignId).HasMaxLength(80);
+            e.Property(x => x.CampaignName).HasMaxLength(300);
+            e.Property(x => x.Platform).HasMaxLength(20);
+            e.HasIndex(x => x.MetaLeadId).IsUnique().HasFilter("[MetaLeadId] IS NOT NULL");
+        });
+        b.Entity<SocialLeadForm>(e =>
+        {
+            e.ToTable("SocialLeadForms");
+            e.HasKey(x => x.FormId);
+            e.Property(x => x.FormId).HasMaxLength(80);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Status).HasMaxLength(20);
+        });
+        b.Entity<SocialAdStat>(e =>
+        {
+            e.ToTable("SocialAdStats");
+            e.HasKey(x => new { x.AccountId, x.Day, x.Level, x.ObjectId });
+            e.Property(x => x.Day).HasColumnType("date");
+            e.Property(x => x.Level).HasMaxLength(10);
+            e.Property(x => x.ObjectId).HasMaxLength(80);
+            e.Property(x => x.Name).HasMaxLength(300);
+            e.Property(x => x.ParentName).HasMaxLength(300);
+            e.Property(x => x.Status).HasMaxLength(30);
+            e.Property(x => x.Spend).HasPrecision(14, 2);
+        });
+
         b.Entity<WaConnection>(e =>
         {
             e.ToTable("WaConnection");

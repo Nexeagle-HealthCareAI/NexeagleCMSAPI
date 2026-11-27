@@ -26,6 +26,7 @@ builder.Services.AddHostedService<CMSAPI.Services.ScheduledHealthCheck>();
 builder.Services.AddHostedService<CMSAPI.Services.DripCampaignWorker>();
 builder.Services.AddHostedService<CMSAPI.Services.MetaAdSpendWorker>();
 builder.Services.AddHostedService<CMSAPI.Services.WhatsAppSendWorker>();
+builder.Services.AddHostedService<CMSAPI.Services.SocialWorker>();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -125,6 +126,18 @@ builder.Services.AddSingleton<CMSAPI.Data.WhatsApp.WaSecretBox>();
 builder.Services.AddSingleton<IWaConnectionStore, CMSAPI.Data.WhatsApp.WaConnectionStore>();
 builder.Services.AddHttpClient<IWaMeta, CMSAPI.Data.WhatsApp.GraphWaMeta>(c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddScoped<IWaSetupService, CMSAPI.Data.WhatsApp.WaSetupService>();
+// Social: Facebook Page, Instagram, ads (design: claude/social-facebook-instagram-design.md)
+builder.Services.AddHttpClient<IMetaSocial, CMSAPI.Data.Social.GraphMetaSocial>(c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddSingleton<CMSAPI.Data.Social.SocialMediaLinks>();
+builder.Services.AddScoped<CMSAPI.Data.Social.SocialKeys>();
+builder.Services.AddScoped<ISocialSetupService, CMSAPI.Data.Social.SocialSetupService>();
+builder.Services.AddScoped<ISocialPostsService, CMSAPI.Data.Social.SocialPostsService>();
+builder.Services.AddScoped<ISocialComposeService, CMSAPI.Data.Social.SocialComposeService>();
+builder.Services.AddScoped<ISocialInboxService, CMSAPI.Data.Social.SocialInboxService>();
+builder.Services.AddScoped<ISocialLeadsService, CMSAPI.Data.Social.SocialLeadsService>();
+builder.Services.AddScoped<ISocialAdsService, CMSAPI.Data.Social.SocialAdsService>();
+builder.Services.AddScoped<ISocialWebhookService, CMSAPI.Data.Social.SocialWebhookService>();
+builder.Services.AddScoped<ISocialSyncService, CMSAPI.Data.Social.SocialSyncService>();
 builder.Services.AddScoped<IWaWebhookService, CMSAPI.Data.WhatsApp.WaWebhookService>();
 builder.Services.AddScoped<IWaInboxService, CMSAPI.Data.WhatsApp.WaInboxService>();
 builder.Services.AddScoped<IWaContactService, CMSAPI.Data.WhatsApp.WaContactService>();
