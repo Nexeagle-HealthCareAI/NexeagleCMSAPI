@@ -17,6 +17,11 @@ namespace CMSAPI.Hubs;
 ///  * Only signed-in CMS users holding the live-support.view permission are agents: they join the
 ///    "Agents" group, see every active session and may reply to or close any of them.
 ///
+/// When agents hear about a chat (2026-11-21): a session row is made as soon as a visitor opens the
+/// widget, but agents are told ("NewSession") only when the visitor sends a first message, and their
+/// list shows only chats that have messages. Before that every opened widget rang as a new chat and
+/// the list filled with empty ones. Sessions that never got a message are closed after a day.
+///
 /// Server -> guest events:  SessionJoined, LoadHistory, ReceiveMessage, SessionClosed, AgentStatus(bool online), AgentTyping
 /// Server -> agent events:  ActiveSessions, NewSession, SessionUpdate, SessionRemoved, GuestPresence(sessionId, online), GuestTyping(sessionId)
 ///
@@ -30,6 +35,8 @@ public class ChatHub : Hub
     private const int HistoryLimit = 200;
     private const string AgentsGroup = "Agents";
     private const string JoinedSessionKey = "SessionId";
+    private const int ActiveListLimit = 50;
+    private static readonly TimeSpan EmptySessionLifetime = TimeSpan.FromHours(24);
 
     // connectionId -> 0 for agents; sessionId -> live guest connection count.
     private static readonly ConcurrentDictionary<string, byte> AgentConnections = new();
@@ -102,9 +109,7 @@ public class ChatHub : Hub
         if (firstJoinOnThisConnection && GuestConnections.AddOrUpdate(session.SessionId, 1, (_, n) => n + 1) == 1 && !isNew)
             await Clients.Group(AgentsGroup).SendAsync("GuestPresence", session.SessionId, true);
 
-        // Only announce genuinely new sessions; a reconnecting guest shouldn't re-alert agents.
-        if (isNew)
-            await Clients.Group(AgentsGroup).SendAsync("NewSession", ToSummary(session, null, guestOnline: true));
+        // Agents are not told yet: a chat is announced with its first message (see SendMessage).
 
         var history = await _context.SupportMessages.AsNoTracking()
             .Where(m => m.SessionId == session.SessionId)
@@ -128,10 +133,14 @@ public class ChatHub : Hub
         AgentConnections[Context.ConnectionId] = 0;
         if (wasEmpty) await Clients.All.SendAsync("AgentStatus", true);
 
+        await CloseEmptySessionsAsync();
+
+        // Only chats someone has written in, the most recently active first, so a visitor still
+        // waiting for an answer is never pushed off the list by newer chats.
         var sessions = await _context.SupportSessions.AsNoTracking()
-            .Where(s => s.Status == "Active")
-            .OrderByDescending(s => s.StartedAt)
-            .Take(50) // cap initial payload; agents can paginate via REST if needed
+            .Where(s => s.Status == "Active" && s.Messages.Any())
+            .OrderByDescending(s => s.Messages.Max(m => m.SentAt))
+            .Take(ActiveListLimit) // cap initial payload; older ones are in Chat history
             .Select(s => new
             {
                 Session = s,
@@ -173,7 +182,10 @@ public class ChatHub : Hub
         if (message.Length > MaxMessageLength) throw new HubException($"Messages are limited to {MaxMessageLength} characters.");
 
         var isAgent = IsAgent;
-        if (!isAgent && JoinedSessionId != sessionId) return;   // guests: only the session joined on this connection
+        // Guests: only the session joined on this connection. Say so instead of dropping the message
+        // silently: after a reconnect the widget can send before it has joined again, and it then
+        // shows the message as not sent with a retry.
+        if (!isAgent && JoinedSessionId != sessionId) throw new HubException("This chat is reconnecting. Please try again.");
 
         var session = await _context.SupportSessions.FindAsync(sessionId);
         if (session == null || session.Status != "Active") throw new HubException("This chat has ended.");
@@ -191,12 +203,23 @@ public class ChatHub : Hub
             SentAt = DateTime.UtcNow
         };
 
+        // A visitor's first message is what makes the chat appear for agents.
+        var firstFromGuest = !isAgent && !await _context.SupportMessages.AnyAsync(m => m.SessionId == sessionId);
+
         _context.SupportMessages.Add(msg);
         await _context.SaveChangesAsync();
 
         // To the session group (the guest) and to all agents (console + previews).
         await Clients.Group(sessionId.ToString()).SendAsync("ReceiveMessage", msg);
-        await Clients.Group(AgentsGroup).SendAsync("SessionUpdate", sessionId, msg);
+        if (firstFromGuest)
+        {
+            var online = GuestConnections.TryGetValue(sessionId, out var n) && n > 0;
+            await Clients.Group(AgentsGroup).SendAsync("NewSession", ToSummary(session, (msg.MessageText, msg.SentAt, msg.SenderType), online));
+        }
+        else
+        {
+            await Clients.Group(AgentsGroup).SendAsync("SessionUpdate", sessionId, msg);
+        }
     }
 
     // "Is typing" signal. Clients throttle it (about one call every 2-3 seconds while typing).
@@ -220,6 +243,33 @@ public class ChatHub : Hub
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────────────────────
+
+    // Sessions opened a day or more ago in which nobody ever wrote: close them, so they do not
+    // collect for ever. Runs when an agent connects; a failure here must not stop that.
+    private async Task CloseEmptySessionsAsync()
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow - EmptySessionLifetime;
+            var empty = await _context.SupportSessions
+                .Where(s => s.Status == "Active" && s.StartedAt < cutoff && !s.Messages.Any())
+                .Take(500)
+                .ToListAsync();
+            if (empty.Count == 0) return;
+
+            var now = DateTime.UtcNow;
+            foreach (var session in empty)
+            {
+                session.Status = "Closed";
+                session.ClosedAt = now;
+            }
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception)
+        {
+            // Housekeeping only: the next agent connection tries again.
+        }
+    }
 
     private async Task MarkGuestOfflineAsync(Guid sessionId)
     {
