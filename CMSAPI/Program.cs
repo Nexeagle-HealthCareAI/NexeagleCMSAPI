@@ -48,7 +48,8 @@ builder.Services.AddMemoryCache(); // DashboardRepository caches the landing-pag
 // Same key as EasyHMS Tracking:MobileHashKey: lets Insights find a full mobile number by its hash.
 builder.Services.AddSingleton(new CMSAPI.Application.Models.TrackingHashSettings(builder.Configuration["Tracking:MobileHashKey"]));
 builder.Services.AddHttpClient();
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddApplicationPart(typeof(CMSAPI.Controllers.PlanCalculatorController).Assembly);
 
 builder.Services.AddApiVersioning(options =>
 {
@@ -392,6 +393,12 @@ builder.Services.AddDbContext<CmsDbContext>(options =>
     })
 );
 
+// Per-platform product databases (EasyHMS / 1Rad). The factory reuses AppDbContext
+// with a connection resolved from ApplicationName; the validator reports each
+// product DB's readiness at startup. See ProductDbContextFactory for details.
+builder.Services.AddSingleton<IProductDbContextFactory, ProductDbContextFactory>();
+builder.Services.AddSingleton<ProductDatabaseValidator>();
+
 // =============================
 // HEALTH CHECKS
 // =============================
@@ -441,6 +448,11 @@ try
     {
         await scope.ServiceProvider.GetRequiredService<CmsAdminSeeder>().SeedAsync();
     }
+
+    // =============================
+    // VALIDATE PRODUCT DATABASES (per-platform readiness; logs, never crashes)
+    // =============================
+    await app.Services.GetRequiredService<ProductDatabaseValidator>().ValidateAsync();
 
     // =============================
     // CRITICAL FIX FOR AZURE
