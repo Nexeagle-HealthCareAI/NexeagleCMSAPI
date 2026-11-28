@@ -28,6 +28,8 @@ public class KeywordCollector : IKeywordCollector
     private const string EventSearch = "search_performed";
 
     private readonly CmsDbContext _db;
+    /// <summary>The HMS tracking database, where Doctor Dekho's search_performed events are (read-only, as in Search Insights).</summary>
+    private readonly AppDbContext _events;
     private readonly IGoogleApi _google;
     private readonly GoogleKeys _keys;
     private readonly ILogger<KeywordCollector> _logger;
@@ -35,12 +37,13 @@ public class KeywordCollector : IKeywordCollector
     /// <summary>Pause between Keyword Planner calls (Google allows 1 a second per account). Tests set 0.</summary>
     internal int PlannerDelayMs { get; set; } = 1100;
 
-    public KeywordCollector(CmsDbContext db, IGoogleApi google, GoogleKeys keys, ILogger<KeywordCollector> logger)
-        : this(db, google, keys, logger, () => DateTime.UtcNow) { }
+    public KeywordCollector(CmsDbContext db, AppDbContext events, IGoogleApi google, GoogleKeys keys, ILogger<KeywordCollector> logger)
+        : this(db, events, google, keys, logger, () => DateTime.UtcNow) { }
 
-    internal KeywordCollector(CmsDbContext db, IGoogleApi google, GoogleKeys keys, ILogger<KeywordCollector> logger, Func<DateTime> now)
+    internal KeywordCollector(CmsDbContext db, AppDbContext events, IGoogleApi google, GoogleKeys keys, ILogger<KeywordCollector> logger, Func<DateTime> now)
     {
         _db = db;
+        _events = events;
         _google = google;
         _keys = keys;
         _logger = logger;
@@ -166,7 +169,7 @@ public class KeywordCollector : IKeywordCollector
     {
         var end = TrackingTime.IstDate(_now()).AddDays(-1);
         var start = end.AddDays(-27);
-        var rows = await _db.AnalyticsEvents.AsNoTracking()
+        var rows = await _events.AnalyticsEvents.AsNoTracking()
             .Where(e => !e.IsAutomated && e.EventType == EventSearch && e.OccurredAt >= TrackingTime.StartUtc(start) && e.OccurredAt < TrackingTime.EndUtcExclusive(end))
             .Select(e => new { e.EventId, e.SessionId, e.OccurredAt, e.MetadataJson })
             .ToListAsync(ct);

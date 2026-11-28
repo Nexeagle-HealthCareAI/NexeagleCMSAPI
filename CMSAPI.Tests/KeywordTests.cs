@@ -68,8 +68,11 @@ public class KeywordTests
         db.SaveChanges();
     }
 
-    private static KeywordCollector Collector(CmsDbContext db, FakeGoogle g, DateTime? now = null) =>
-        new(db, g, new GoogleKeys(Box), NullLogger<KeywordCollector>.Instance, () => now ?? Now) { PlannerDelayMs = 0 };
+    private static AppDbContext NewEvents() =>
+        new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+    private static KeywordCollector Collector(CmsDbContext db, FakeGoogle g, DateTime? now = null, AppDbContext? events = null) =>
+        new(db, events ?? NewEvents(), g, new GoogleKeys(Box), NullLogger<KeywordCollector>.Instance, () => now ?? Now) { PlannerDelayMs = 0 };
 
     private static KeywordsService Service(CmsDbContext db, DateTime? now = null) => new(db, () => now ?? Now);
 
@@ -214,7 +217,8 @@ public class KeywordTests
     public async Task Site_searches_are_kept_only_when_enough_visitors_typed_them_and_never_doctor_names()
     {
         using var db = NewDb();
-        void Search(string query, string session, string kind = "condition", int daysAgo = 3) => db.AnalyticsEvents.Add(new AnalyticsEvent
+        using var events = NewEvents();
+        void Search(string query, string session, string kind = "condition", int daysAgo = 3) => events.AnalyticsEvents.Add(new AnalyticsEvent
         {
             EventId = Guid.NewGuid(), EventType = "search_performed", SessionId = session, OccurredAt = Now.AddDays(-daysAgo),
             MetadataJson = JsonSerializer.Serialize(new { query, searchKind = kind }),
@@ -225,9 +229,9 @@ public class KeywordTests
         for (var i = 0; i < 9; i++) Search("Dr Example Name", $"d{i}", kind: "doctor_name");
         for (var i = 0; i < 7; i++) Search("9876543210", $"p{i}");
         for (var i = 0; i < 7; i++) Search("old search", $"o{i}", daysAgo: 40);
-        db.SaveChanges();
+        events.SaveChanges();
 
-        var result = await Collector(db, new FakeGoogle()).RunAsync("site");
+        var result = await Collector(db, new FakeGoogle(), events: events).RunAsync("site");
 
         Assert.Equal(1, result["site"]);
         var k = Assert.Single(db.Keywords.ToList());
