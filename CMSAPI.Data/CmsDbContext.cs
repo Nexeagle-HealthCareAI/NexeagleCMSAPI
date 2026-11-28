@@ -71,6 +71,9 @@ public class CmsDbContext : DbContext
     public DbSet<SocialLead> SocialLeads => Set<SocialLead>();
     public DbSet<SocialLeadForm> SocialLeadForms => Set<SocialLeadForm>();
     public DbSet<SocialAdStat> SocialAdStats => Set<SocialAdStat>();
+    public DbSet<GoogleAccount> GoogleAccounts => Set<GoogleAccount>();
+    public DbSet<GoogleLead> GoogleLeads => Set<GoogleLead>();
+    public DbSet<GoogleConversionUpload> GoogleConversionUploads => Set<GoogleConversionUpload>();
     public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
     public DbSet<WorkStatus> WorkStatuses => Set<WorkStatus>();
     public DbSet<WorkProjectMember> WorkProjectMembers => Set<WorkProjectMember>();
@@ -833,6 +836,62 @@ public class CmsDbContext : DbContext
             e.Property(x => x.ParentName).HasMaxLength(300);
             e.Property(x => x.Status).HasMaxLength(30);
             e.Property(x => x.Spend).HasPrecision(14, 2);
+        });
+
+        // Google → script 37
+        b.Entity<GoogleAccount>(e =>
+        {
+            e.ToTable("GoogleAccounts");
+            e.HasKey(x => x.AccountId);
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.Site).HasMaxLength(40);
+            e.Property(x => x.ClientId).HasMaxLength(200);
+            e.Property(x => x.ClientSecretEnc).HasMaxLength(1000);
+            e.Property(x => x.RefreshTokenEnc).HasMaxLength(2000);
+            e.Property(x => x.SignedInEmail).HasMaxLength(200);
+            e.Property(x => x.Ga4PropertyId).HasMaxLength(40);
+            e.Property(x => x.Ga4PropertyName).HasMaxLength(200);
+            e.Property(x => x.AdsCustomerId).HasMaxLength(20);
+            e.Property(x => x.AdsLoginCustomerId).HasMaxLength(20);
+            e.Property(x => x.AdsAccountName).HasMaxLength(200);
+            e.Property(x => x.Currency).HasMaxLength(3);
+            e.Property(x => x.TimeZone).HasMaxLength(60);
+            e.Property(x => x.SearchConsoleSite).HasMaxLength(300);
+            e.Property(x => x.MeasurementId).HasMaxLength(30);
+            e.Property(x => x.AdsConversionId).HasMaxLength(30);
+            e.Property(x => x.LeadKeyEnc).HasMaxLength(500);
+            e.Property(x => x.LastOutcomeError).HasMaxLength(1000);
+            e.Property(x => x.LastReadError).HasMaxLength(1000);
+        });
+        b.Entity<GoogleLead>(e =>
+        {
+            e.ToTable("GoogleLeads");
+            e.HasKey(x => x.GoogleLeadId);
+            e.Property(x => x.Source).HasMaxLength(10);
+            e.Property(x => x.ExternalLeadId).HasMaxLength(100);
+            e.Property(x => x.FormId).HasMaxLength(40);
+            e.Property(x => x.FormName).HasMaxLength(200);
+            e.Property(x => x.CampaignId).HasMaxLength(40);
+            e.Property(x => x.CampaignName).HasMaxLength(300);
+            e.Property(x => x.AdGroupId).HasMaxLength(40);
+            e.Property(x => x.Keyword).HasMaxLength(300);
+            e.Property(x => x.Gclid).HasMaxLength(300);
+            e.Property(x => x.Gbraid).HasMaxLength(300);
+            e.Property(x => x.Wbraid).HasMaxLength(300);
+            e.Property(x => x.UtmSource).HasMaxLength(100);
+            e.Property(x => x.UtmMedium).HasMaxLength(100);
+            e.Property(x => x.UtmCampaign).HasMaxLength(200);
+            e.Property(x => x.LandingPage).HasMaxLength(500);
+        });
+        b.Entity<GoogleConversionUpload>(e =>
+        {
+            e.ToTable("GoogleConversionUploads");
+            e.HasKey(x => x.UploadId);
+            e.Property(x => x.Stage).HasMaxLength(50);
+            e.Property(x => x.ConversionActionId).HasMaxLength(40);
+            e.Property(x => x.Status).HasMaxLength(10);
+            e.Property(x => x.RequestId).HasMaxLength(100);
+            e.Property(x => x.Error).HasMaxLength(1000);
         });
 
         b.Entity<WaConnection>(e =>
