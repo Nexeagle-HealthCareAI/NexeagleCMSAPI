@@ -74,6 +74,12 @@ public class CmsDbContext : DbContext
     public DbSet<GoogleAccount> GoogleAccounts => Set<GoogleAccount>();
     public DbSet<GoogleLead> GoogleLeads => Set<GoogleLead>();
     public DbSet<GoogleConversionUpload> GoogleConversionUploads => Set<GoogleConversionUpload>();
+    public DbSet<KeywordSettings> KeywordSettings => Set<KeywordSettings>();
+    public DbSet<KeywordTopic> KeywordTopics => Set<KeywordTopic>();
+    public DbSet<Keyword> Keywords => Set<Keyword>();
+    public DbSet<KeywordObservation> KeywordObservations => Set<KeywordObservation>();
+    public DbSet<KeywordContent> KeywordContent => Set<KeywordContent>();
+    public DbSet<KeywordSourceRun> KeywordSourceRuns => Set<KeywordSourceRun>();
     public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
     public DbSet<WorkStatus> WorkStatuses => Set<WorkStatus>();
     public DbSet<WorkProjectMember> WorkProjectMembers => Set<WorkProjectMember>();
@@ -892,6 +898,71 @@ public class CmsDbContext : DbContext
             e.Property(x => x.Status).HasMaxLength(10);
             e.Property(x => x.RequestId).HasMaxLength(100);
             e.Property(x => x.Error).HasMaxLength(1000);
+        });
+
+        // Keywords (script 38)
+        b.Entity<KeywordSettings>(e =>
+        {
+            e.ToTable("KeywordSettings");
+            e.HasKey(x => x.SettingsId);
+            e.Property(x => x.SettingsId).ValueGeneratedNever();
+        });
+        b.Entity<KeywordTopic>(e =>
+        {
+            e.ToTable("KeywordTopics");
+            e.HasKey(x => x.TopicId);
+            e.Property(x => x.Site).HasMaxLength(20);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.TargetPage).HasMaxLength(500);
+            e.Property(x => x.Notes).HasMaxLength(2000);
+        });
+        b.Entity<Keyword>(e =>
+        {
+            e.ToTable("Keywords");
+            e.HasKey(x => x.KeywordId);
+            e.Property(x => x.Site).HasMaxLength(20);
+            e.Property(x => x.Text).HasMaxLength(300);
+            e.Property(x => x.Normalized).HasMaxLength(300);
+            e.Property(x => x.Language).HasMaxLength(10);
+            e.Property(x => x.Intent).HasMaxLength(20);
+            e.Property(x => x.City).HasMaxLength(80);
+            e.Property(x => x.Status).HasMaxLength(10);
+            e.Property(x => x.Sources).HasMaxLength(100);
+            e.Property(x => x.Competition).HasMaxLength(10);
+            e.Property(x => x.LowBid).HasPrecision(12, 2);
+            e.Property(x => x.HighBid).HasPrecision(12, 2);
+            e.Property(x => x.MonthlyJson).HasMaxLength(2000);
+            e.HasIndex(x => new { x.Site, x.Normalized }).IsUnique();
+        });
+        b.Entity<KeywordObservation>(e =>
+        {
+            e.ToTable("KeywordObservations");
+            e.HasKey(x => x.ObservationId);
+            e.Property(x => x.Source).HasMaxLength(10);
+            e.Property(x => x.Position).HasPrecision(6, 2);
+            e.Property(x => x.Cost).HasPrecision(12, 2);
+            e.Property(x => x.Conversions).HasPrecision(10, 2);
+            e.Property(x => x.Page).HasMaxLength(500);
+            e.HasIndex(x => new { x.KeywordId, x.Day, x.Source }).IsUnique();
+        });
+        b.Entity<KeywordContent>(e =>
+        {
+            e.ToTable("KeywordContent");
+            e.HasKey(x => x.ContentId);
+            e.Property(x => x.Site).HasMaxLength(20);
+            e.Property(x => x.Kind).HasMaxLength(20);
+            e.Property(x => x.Title).HasMaxLength(300);
+            e.Property(x => x.Stage).HasMaxLength(20);
+            e.Property(x => x.Languages).HasMaxLength(40);
+            e.Property(x => x.Url).HasMaxLength(500);
+        });
+        b.Entity<KeywordSourceRun>(e =>
+        {
+            e.ToTable("KeywordSourceRuns");
+            e.HasKey(x => x.SourceKey);
+            e.Property(x => x.SourceKey).HasMaxLength(30);
+            e.Property(x => x.LastDetail).HasMaxLength(300);
+            e.Property(x => x.LastError).HasMaxLength(1000);
         });
 
         b.Entity<WaConnection>(e =>

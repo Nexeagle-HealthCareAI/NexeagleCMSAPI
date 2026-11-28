@@ -298,6 +298,70 @@ public class GoogleApi : IGoogleApi
         }).ToList();
     }
 
+    public async Task<List<GscQueryPageRow>> SearchConsoleDayAsync(GoogleClient c, string site, DateOnly day, int max, CancellationToken ct = default)
+    {
+        var rows = new List<GscQueryPageRow>();
+        var url = $"https://www.googleapis.com/webmasters/v3/sites/{Uri.EscapeDataString(site)}/searchAnalytics/query";
+        // Google returns at most 25,000 rows a call and 50,000 a day per site and search type.
+        for (var start = 0; start < max; start += 25_000)
+        {
+            var body = new Dictionary<string, object>
+            {
+                ["startDate"] = day.ToString("yyyy-MM-dd"), ["endDate"] = day.ToString("yyyy-MM-dd"), ["dimensions"] = new[] { "query", "page" },
+                ["rowLimit"] = Math.Min(25_000, max - start), ["startRow"] = start, ["type"] = "web",
+                ["dimensionFilterGroups"] = new[] { new { filters = new[] { new { dimension = "country", @operator = "equals", expression = "ind" } } } },
+            };
+            var doc = await CallAsync(c, HttpMethod.Post, url, body, ct);
+            var page = Arr(doc, "rows").Select(r =>
+            {
+                var keys = Arr(r, "keys").Select(k => k.GetString() ?? string.Empty).ToList();
+                return new GscQueryPageRow
+                {
+                    Query = keys.ElementAtOrDefault(0) ?? string.Empty, Page = keys.ElementAtOrDefault(1) ?? string.Empty,
+                    Clicks = Num(r, "clicks") ?? 0, Impressions = Num(r, "impressions") ?? 0, Position = Num(r, "position") ?? 0,
+                };
+            }).ToList();
+            rows.AddRange(page);
+            if (page.Count < 25_000) break;
+        }
+        return rows;
+    }
+
+    public async Task<List<KeywordIdea>> KeywordIdeasAsync(GoogleClient c, string customerId, string? loginCustomerId, KeywordIdeaRequest request, CancellationToken ct = default)
+    {
+        var body = new Dictionary<string, object>
+        {
+            ["language"] = $"languageConstants/{request.LanguageId}",
+            ["geoTargetConstants"] = new[] { $"geoTargetConstants/{request.GeoId}" },
+            ["keywordPlanNetwork"] = "GOOGLE_SEARCH",
+            ["includeAdultKeywords"] = false,
+            ["pageSize"] = Math.Clamp(request.PageSize, 1, 1000),
+        };
+        if (!string.IsNullOrWhiteSpace(request.SiteSeed)) body["siteSeed"] = new { site = request.SiteSeed.Trim() };
+        else body["keywordSeed"] = new { keywords = request.Seeds.Where(x => !string.IsNullOrWhiteSpace(x)).Take(20).ToArray() };
+        var doc = await CallAsync(c, HttpMethod.Post, AdsUrl($"customers/{Uri.EscapeDataString(customerId)}:generateKeywordIdeas"), body, ct, r => AdsHeaders(r, loginCustomerId));
+        return Arr(doc, "results").Select(r =>
+        {
+            var m = Obj(r, "keywordIdeaMetrics");
+            long? L(string name) => long.TryParse(Str(m, name), out var n) ? n : null;
+            return new KeywordIdea
+            {
+                Text = Str(r, "text") ?? string.Empty,
+                AvgMonthlySearches = L("avgMonthlySearches"),
+                Competition = Str(m, "competition"),
+                CompetitionIndex = (int?)L("competitionIndex"),
+                LowBidMicros = L("lowTopOfPageBidMicros"),
+                HighBidMicros = L("highTopOfPageBidMicros"),
+                Months = Arr(m, "monthlySearchVolumes")
+                    .Select(x => new KeywordMonth(Int(x, "year") ?? 0, MonthNumber(Str(x, "month")), long.TryParse(Str(x, "monthlySearches"), out var v) ? v : 0))
+                    .Where(x => x.Y > 0 && x.M > 0).ToList(),
+            };
+        }).Where(i => i.Text.Length > 0).ToList();
+    }
+
+    private static int MonthNumber(string? month) => month == null ? 0
+        : Array.IndexOf(new[] { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" }, month.ToUpperInvariant()) + 1;
+
     // ── Data Manager ─────────────────────────────────────────────────────────
 
     public async Task<string?> IngestConversionsAsync(GoogleClient c, ConversionBatch batch, CancellationToken ct = default)

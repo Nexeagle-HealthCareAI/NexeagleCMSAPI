@@ -26,6 +26,12 @@ public interface IGoogleApi
 
     /// <summary>Sends click conversions; returns Google's request id.</summary>
     Task<string?> IngestConversionsAsync(GoogleClient c, ConversionBatch batch, CancellationToken ct = default);
+
+    // Keywords section (script 38)
+    /// <summary>Search Console rows for one day by search and page, India only, up to <paramref name="max"/> rows (paged by 25,000).</summary>
+    Task<List<GscQueryPageRow>> SearchConsoleDayAsync(GoogleClient c, string site, DateOnly day, int max, CancellationToken ct = default);
+    /// <summary>Keyword Planner ideas (GenerateKeywordIdeas): from seed words or from a website.</summary>
+    Task<List<KeywordIdea>> KeywordIdeasAsync(GoogleClient c, string customerId, string? loginCustomerId, KeywordIdeaRequest request, CancellationToken ct = default);
 }
 
 /// <summary>What signs a call in: the account's OAuth client and the refresh token from its sign-in.</summary>
@@ -119,3 +125,38 @@ public class ConversionEvent
     public decimal? Value { get; set; }
     public string? Currency { get; set; }
 }
+
+public class GscQueryPageRow
+{
+    public string Query { get; set; } = string.Empty;
+    public string Page { get; set; } = string.Empty;
+    public double Clicks { get; set; }
+    public double Impressions { get; set; }
+    public double Position { get; set; }
+}
+
+public class KeywordIdeaRequest
+{
+    /// <summary>1 to 20 seed words; or none when <see cref="SiteSeed"/> is set.</summary>
+    public List<string> Seeds { get; set; } = new();
+    /// <summary>A domain such as example.com: ideas from that site's pages.</summary>
+    public string? SiteSeed { get; set; }
+    /// <summary>Google Ads language constant: 1000 English, 1023 Hindi, 1056 Bengali.</summary>
+    public string LanguageId { get; set; } = "1000";
+    /// <summary>Google Ads geo target constant: 2356 India.</summary>
+    public string GeoId { get; set; } = "2356";
+    public int PageSize { get; set; } = 100;
+}
+
+public class KeywordIdea
+{
+    public string Text { get; set; } = string.Empty;
+    public long? AvgMonthlySearches { get; set; }
+    public string? Competition { get; set; }
+    public int? CompetitionIndex { get; set; }
+    public long? LowBidMicros { get; set; }
+    public long? HighBidMicros { get; set; }
+    public List<KeywordMonth> Months { get; set; } = new();
+}
+
+public record KeywordMonth(int Y, int M, long V);

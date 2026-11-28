@@ -54,6 +54,10 @@ public class GoogleTests
         public Task<List<string>> SearchConsoleSitesAsync(GoogleClient c, CancellationToken ct = default) => Task.FromResult(new List<string> { "sc-domain:nexeagle.com" });
         public Task<List<GscRow>> SearchConsoleQueriesAsync(GoogleClient c, string site, DateOnly from, DateOnly to, string? pageUrl, int limit, CancellationToken ct = default) =>
             Task.FromResult(new List<GscRow> { new() { Key = "hospital software", Clicks = 12, Impressions = 300, Position = 6.2 } });
+        public Task<List<GscQueryPageRow>> SearchConsoleDayAsync(GoogleClient c, string site, DateOnly day, int max, CancellationToken ct = default) =>
+            Task.FromResult(new List<GscQueryPageRow>());
+        public Task<List<KeywordIdea>> KeywordIdeasAsync(GoogleClient c, string customerId, string? loginCustomerId, KeywordIdeaRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new List<KeywordIdea>());
         public Task<string?> IngestConversionsAsync(GoogleClient c, ConversionBatch batch, CancellationToken ct = default)
         {
             if (FailIngestWith != null) throw new GoogleApiException(FailIngestWith, 400, "INVALID_ARGUMENT");

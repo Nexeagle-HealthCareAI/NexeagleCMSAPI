@@ -28,6 +28,7 @@ builder.Services.AddHostedService<CMSAPI.Services.MetaAdSpendWorker>();
 builder.Services.AddHostedService<CMSAPI.Services.WhatsAppSendWorker>();
 builder.Services.AddHostedService<CMSAPI.Services.SocialWorker>();
 builder.Services.AddHostedService<CMSAPI.Services.GoogleWorker>();
+builder.Services.AddHostedService<CMSAPI.Services.KeywordWorker>();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -148,6 +149,10 @@ builder.Services.AddScoped<IGoogleSetupService, CMSAPI.Data.Google.GoogleSetupSe
 builder.Services.AddScoped<IGoogleReportsService, CMSAPI.Data.Google.GoogleReportsService>();
 builder.Services.AddScoped<IGoogleLeadsService, CMSAPI.Data.Google.GoogleLeadsService>();
 builder.Services.AddScoped<IGoogleOutcomesService, CMSAPI.Data.Google.GoogleOutcomesService>();
+
+// Keywords: daily collection from Search Console, Ads, Keyword Planner, site search (plan: claude/keyword-content-engine-plan.md)
+builder.Services.AddScoped<IKeywordCollector, CMSAPI.Data.Keywords.KeywordCollector>();
+builder.Services.AddScoped<IKeywordsService, CMSAPI.Data.Keywords.KeywordsService>();
 builder.Services.AddScoped<IWaWebhookService, CMSAPI.Data.WhatsApp.WaWebhookService>();
 builder.Services.AddScoped<IWaInboxService, CMSAPI.Data.WhatsApp.WaInboxService>();
 builder.Services.AddScoped<IWaContactService, CMSAPI.Data.WhatsApp.WaContactService>();
